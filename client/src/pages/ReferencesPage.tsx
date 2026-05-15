@@ -394,7 +394,7 @@ function DocUploadTab({
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M8 11V3M5 6l3-3 3 3M2 13h12" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          {loading ? "Yükleniyor..." : "Dosya seç (.docx, .md, .txt)"}
+          {loading ? "Yükleniyor..." : "Dosya seç (.docx, .pdf, .md, .txt)"}
         </button>
       </div>
 

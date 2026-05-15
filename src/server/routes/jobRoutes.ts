@@ -3,6 +3,7 @@ import { v4 as uuid } from "uuid";
 
 import { jobStore } from "../store/jobStore";
 import { eventBus } from "../store/eventBus";
+import { jobCancellation } from "../store/jobCancellation";
 import { runDocumentationJob } from "../jobs/documentationJob";
 
 const router = Router();
@@ -53,6 +54,18 @@ router.get("/:jobId", (req: Request, res: Response) => {
     return;
   }
   res.json(job);
+});
+
+// POST /api/jobs/:jobId/cancel — request cancellation
+router.post("/:jobId/cancel", (req: Request, res: Response) => {
+  const jobId = req.params["jobId"] as string;
+  const job = jobStore.getById(jobId);
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  jobCancellation.cancel(jobId);
+  res.json({ ok: true });
 });
 
 // GET /api/jobs/:jobId/stream — SSE
