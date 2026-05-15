@@ -13,7 +13,12 @@ function parseEnv(content: string): Record<string, string> {
     const eq = trimmed.indexOf("=");
     if (eq === -1) continue;
     const key = trimmed.slice(0, eq).trim();
-    const val = trimmed.slice(eq + 1).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    // Strip inline comments unless the value is quoted
+    if (!val.startsWith('"') && !val.startsWith("'")) {
+      const hashIdx = val.indexOf("#");
+      if (hashIdx > 0) val = val.slice(0, hashIdx).trim();
+    }
     result[key] = val;
   }
   return result;
@@ -53,32 +58,54 @@ function buildEnv(values: Record<string, string>): string {
   ];
 
   const lines: string[] = [];
+  const known = new Set<string>();
   for (const section of sections) {
     lines.push(section.comment);
     for (const key of section.keys) {
       lines.push(`${key}=${values[key] ?? ""}`);
+      known.add(key);
     }
     lines.push("");
   }
+
+  // Preserve any keys not in our schema (e.g. ATLASSIAN_ACCESS_TOKEN,
+  // ATLASSIAN_REFRESH_TOKEN, etc. written by other modules).
+  const extras = Object.keys(values).filter((k) => !known.has(k) && values[k]);
+  if (extras.length > 0) {
+    lines.push("# Diğer (otomatik üretilen)");
+    for (const k of extras) lines.push(`${k}=${values[k]}`);
+    lines.push("");
+  }
+
   return lines.join("\n");
 }
 
-// GET /api/settings
+const SECRET_KEYS = [
+  "ANTHROPIC_API_KEY",
+  "APP_PASSWORD",
+  "CONFLUENCE_API_TOKEN",
+  "ATLASSIAN_OAUTH_CLIENT_SECRET",
+  "ATLASSIAN_ACCESS_TOKEN",
+  "ATLASSIAN_REFRESH_TOKEN",
+];
+
+// GET /api/settings — secrets are NEVER returned (return empty string).
+// The `configured` list tells the UI which secrets are already saved.
 router.get("/", (_req: Request, res: Response) => {
   let values: Record<string, string> = {};
   if (fs.existsSync(ENV_PATH)) {
     values = parseEnv(fs.readFileSync(ENV_PATH, "utf-8"));
   }
 
-  // Mask secrets for display
-  const masked = { ...values };
-  for (const key of ["ANTHROPIC_API_KEY", "APP_PASSWORD", "CONFLUENCE_API_TOKEN", "ATLASSIAN_OAUTH_CLIENT_SECRET", "ATLASSIAN_ACCESS_TOKEN", "ATLASSIAN_REFRESH_TOKEN"]) {
-    if (masked[key] && masked[key].length > 4) {
-      masked[key] = masked[key].slice(0, 4) + "••••••••••••";
-    }
+  const safe = { ...values };
+  for (const key of SECRET_KEYS) {
+    if (safe[key]) safe[key] = "";
   }
 
-  res.json({ values: masked, configured: Object.keys(values).filter(k => !!values[k]) });
+  res.json({
+    values: safe,
+    configured: Object.keys(values).filter((k) => !!values[k]),
+  });
 });
 
 // POST /api/settings
@@ -90,9 +117,12 @@ router.post("/", (req: Request, res: Response) => {
     existing = parseEnv(fs.readFileSync(ENV_PATH, "utf-8"));
   }
 
-  // Don't overwrite secrets if placeholder mask is sent
-  for (const key of ["ANTHROPIC_API_KEY", "APP_PASSWORD", "CONFLUENCE_API_TOKEN", "ATLASSIAN_OAUTH_CLIENT_SECRET", "ATLASSIAN_ACCESS_TOKEN", "ATLASSIAN_REFRESH_TOKEN"]) {
-    if (incoming[key]?.includes("••••")) {
+  // For secrets: if the user left the field empty AND there's already a saved
+  // value, keep the existing one. (Also still strip legacy '••••' placeholders.)
+  for (const key of SECRET_KEYS) {
+    const v = incoming[key];
+    if (v === undefined) continue;
+    if (v === "" || v.includes("••••")) {
       incoming[key] = existing[key] ?? "";
     }
   }
