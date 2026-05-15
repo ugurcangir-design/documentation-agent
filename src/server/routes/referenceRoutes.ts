@@ -142,29 +142,51 @@ router.delete("/confluence/:id", (req: Request, res: Response) => {
 // ── Swagger: fetch spec from URL ─────────────────────────────────
 function fetchWithRedirects(
   url: string,
-  authorization?: string,
+  authorization: string | undefined,
+  options: { insecure?: boolean; timeoutMs?: number } = {},
   maxRedirects = 3
 ): Promise<{ status: number; body: string; contentType: string }> {
+  const timeoutMs = options.timeoutMs ?? 20_000;
+
   return new Promise((resolve, reject) => {
-    const parsed = new URL(url);
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      reject(new Error(`Geçersiz URL: ${url}`));
+      return;
+    }
+
     const headers: Record<string, string> = { Accept: "application/json,text/plain,*/*" };
     if (authorization) headers["Authorization"] = authorization;
 
-    const options = {
+    const reqOptions: Record<string, unknown> = {
       hostname: parsed.hostname,
       port: parsed.port || undefined,
       path: parsed.pathname + parsed.search,
       headers,
+      timeout: timeoutMs,
     };
-    const client = parsed.protocol === "https:" ? https : http;
-    client.get(options, (response) => {
+
+    const isHttps = parsed.protocol === "https:";
+    if (isHttps && options.insecure) {
+      reqOptions["rejectUnauthorized"] = false;
+    }
+
+    const client = isHttps ? https : http;
+    console.log(`[swagger-fetch] GET ${url}${options.insecure ? " (TLS verify off)" : ""}`);
+
+    const req = client.get(reqOptions, (response) => {
       const status = response.statusCode ?? 0;
       const ct = (response.headers["content-type"] as string) ?? "";
 
       if (status >= 300 && status < 400 && response.headers.location && maxRedirects > 0) {
-        const next = new URL(response.headers.location as string, url).toString();
+        const loc = response.headers.location as string;
+        let nextUrl: string;
+        try { nextUrl = new URL(loc, url).toString(); }
+        catch { reject(new Error(`Geçersiz redirect: ${loc}`)); return; }
         response.resume();
-        fetchWithRedirects(next, authorization, maxRedirects - 1)
+        fetchWithRedirects(nextUrl, authorization, options, maxRedirects - 1)
           .then(resolve)
           .catch(reject);
         return;
@@ -174,15 +196,35 @@ function fetchWithRedirects(
       response.on("data", (chunk: Buffer) => { d += chunk.toString(); });
       response.on("end", () => resolve({ status, body: d, contentType: ct }));
       response.on("error", reject);
-    }).on("error", reject);
+    });
+
+    req.on("timeout", () => {
+      req.destroy(new Error(`İstek zaman aşımı (${timeoutMs / 1000}s): ${parsed.hostname}`));
+    });
+
+    req.on("error", (err) => {
+      const code = (err as NodeJS.ErrnoException).code;
+      const messages: Record<string, string> = {
+        ENOTFOUND: `Sunucu adresi çözülemedi (DNS): ${parsed.hostname}`,
+        ECONNREFUSED: `Bağlantı reddedildi: ${parsed.hostname}:${parsed.port || (isHttps ? 443 : 80)}`,
+        ETIMEDOUT: `Bağlantı zaman aşımına uğradı: ${parsed.hostname}`,
+        EHOSTUNREACH: `Sunucuya ulaşılamadı: ${parsed.hostname}`,
+        CERT_HAS_EXPIRED: "SSL sertifikası süresi dolmuş",
+        DEPTH_ZERO_SELF_SIGNED_CERT: "Self-signed SSL sertifikası — 'SSL doğrulamasını atla' seçeneğini işaretleyin",
+        UNABLE_TO_VERIFY_LEAF_SIGNATURE: "SSL sertifikası doğrulanamadı — 'SSL doğrulamasını atla' seçeneğini işaretleyin",
+        SELF_SIGNED_CERT_IN_CHAIN: "Sertifika zincirinde self-signed sertifika — 'SSL doğrulamasını atla' seçeneğini işaretleyin",
+      };
+      reject(new Error(code && messages[code] ? messages[code] : err.message));
+    });
   });
 }
 
 router.post("/swagger/fetch", async (req: Request, res: Response) => {
-  const { url, name, authorization } = req.body as {
+  const { url, name, authorization, insecure } = req.body as {
     url?: string;
     name?: string;
     authorization?: string;
+    insecure?: boolean;
   };
 
   if (!url) {
@@ -193,7 +235,8 @@ router.post("/swagger/fetch", async (req: Request, res: Response) => {
   try {
     const { status, body, contentType } = await fetchWithRedirects(
       url,
-      authorization?.trim() || undefined
+      authorization?.trim() || undefined,
+      { insecure: !!insecure }
     );
 
     if (status === 401 || status === 403) {
@@ -247,7 +290,9 @@ router.post("/swagger/fetch", async (req: Request, res: Response) => {
 
     res.json(ref);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    const msg = (err as Error).message || "Bilinmeyen hata";
+    console.error("[swagger-fetch] ERROR:", msg);
+    res.status(400).json({ error: msg });
   }
 });
 
