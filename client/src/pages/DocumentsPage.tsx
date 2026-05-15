@@ -126,7 +126,7 @@ export default function DocumentsPage() {
   ).length;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-[calc(100vh-2.75rem)] overflow-hidden">
       {/* Left panel: document list */}
       <div className="w-80 border-r border-gray-200 bg-white flex flex-col">
         <div className="px-4 py-4 border-b border-gray-100">
