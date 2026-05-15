@@ -29,9 +29,10 @@ const MODAL_SELECTORS = [
 ];
 
 const MAX = {
-  tabs: 6, dropdowns: 5, modals: 10, dates: 3,
-  checkboxes: 3, toggles: 3, inputs: 3, hovers: 3,
+  tabs: 6, dropdowns: 5, modals: 10, dates: 4,
+  checkboxes: 4, toggles: 3, inputs: 4, hovers: 5,
   accordions: 3, fallback: 6,
+  columns: 4, rowActions: 3,
 };
 
 const RENDER_WAIT = 700;
@@ -167,6 +168,37 @@ export async function exploreInteractiveStates(
     });
   };
 
+  // ── 0. PRE-PASS: open a Filters/Search panel first (more inputs visible) ──
+  let filtersBtnLabel: string | null = null;
+  for (const sel of [
+    'button:has-text("Filtreler")',
+    'button:has-text("Filtre")',
+    'button:has-text("Filters")',
+    'button:has-text("Filter")',
+    'button:has-text("Ara")',
+    'button:has-text("Search")',
+    'button[aria-label*="filter" i]',
+    'button[aria-label*="filtre" i]',
+  ]) {
+    try {
+      const btn = page.locator(sel).first();
+      if (!(await btn.isVisible({ timeout: 400 }))) continue;
+      if (await isInNavOrSidebar(btn)) continue;
+      filtersBtnLabel = (await safeText(btn)) || "Filter";
+      log(`Pre-pass: Filtre paneli açılıyor (${filtersBtnLabel})`);
+      await btn.click({ timeout: ACTION_TIMEOUT });
+      await page.waitForTimeout(900);
+      await pushState(
+        `Filtre paneli açık`,
+        `pre-pass: ${filtersBtnLabel} açıldı`,
+        `${basePath}_filters_open`
+      );
+      log(`  ✓ Filtre paneli yakalandı`);
+      clickedLabels.add(filtersBtnLabel);
+      break;
+    } catch { /* try next */ }
+  }
+
   // ── 1. TABS ──────────────────────────────────────────────────────
   await forEachVisible(
     page,
@@ -175,6 +207,10 @@ export async function exploreInteractiveStates(
       '.nav-tabs > li > a', '.nav-tabs > li > button',
       'ul[class*="tabs" i] > li', 'ul[class*="Tabs"] > li',
       '[class*="tab-button"]', '[class*="TabButton"]',
+      '[class*="segment" i][role="button"]',
+      '[class*="SegmentedControl"] button',
+      '[class*="ButtonGroup"] button[aria-pressed]',
+      '.btn-group > button',
       '[data-testid*="tab" i]',
     ].join(", "),
     MAX.tabs, log, "Tab", false,
@@ -271,6 +307,80 @@ export async function exploreInteractiveStates(
         await page.keyboard.press("Escape").catch(() => {});
         await page.waitForTimeout(200);
       }
+      return true;
+    }
+  );
+
+  // ── 3.5. TABLE COLUMN HEADERS (click to sort) ─────────────────────
+  await forEachVisible(
+    page,
+    [
+      'thead th[role="button"]',
+      'thead th[aria-sort]',
+      'thead th[tabindex]:not([tabindex="-1"])',
+      'thead [role="button"]',
+      '[role="columnheader"][role="button"]',
+      '[class*="HeaderCell"][role="button"]',
+      '[class*="ColumnHeader"][role="button"]',
+      '[data-testid*="column-header" i]',
+    ].join(", "),
+    MAX.columns, log, "Kolon header", true,
+    async (loc, label, i) => {
+      if (!label || label.length < 2 || label.length > 40) return false;
+      if (clickedLabels.has(`col:${label}`)) return false;
+      clickedLabels.add(`col:${label}`);
+
+      try {
+        await loc.click({ timeout: ACTION_TIMEOUT });
+      } catch {
+        try { await loc.click({ timeout: ACTION_TIMEOUT, force: true }); }
+        catch { await loc.evaluate((el: HTMLElement) => el.click()).catch(() => {}); }
+      }
+      await page.waitForTimeout(RENDER_WAIT);
+      await pushState(
+        `Sıralama: "${label}"`,
+        `kolon header tıklandı: ${label}`,
+        `${basePath}_sort_${i}`
+      );
+      log(`  ✓ Kolon sıralama yakalandı: ${label}`);
+      return true;
+    }
+  );
+
+  // ── 3.6. ROW ACTION MENUS (kebab/3-dots) ──────────────────────────
+  await forEachVisible(
+    page,
+    [
+      'tbody button[aria-label*="action" i]',
+      'tbody button[aria-label*="more" i]',
+      'tbody button[aria-label*="işlem" i]',
+      'tbody [aria-haspopup="menu"]',
+      'tbody [aria-haspopup="true"]',
+      'tbody [class*="kebab" i]',
+      'tbody [class*="MoreVert"]',
+      'tbody [class*="MoreOptions"]',
+      'tbody [class*="ellipsis" i]',
+      '[role="row"] button[aria-haspopup]',
+      '[role="row"] [class*="MoreVert"]',
+      'tr button:has(svg):not([disabled])',
+    ].join(", "),
+    MAX.rowActions, log, "Satır aksiyon", true,
+    async (loc, _label, i) => {
+      try {
+        await loc.click({ timeout: ACTION_TIMEOUT });
+      } catch {
+        try { await loc.click({ timeout: ACTION_TIMEOUT, force: true }); }
+        catch { await loc.evaluate((el: HTMLElement) => el.click()).catch(() => {}); }
+      }
+      await page.waitForTimeout(RENDER_WAIT);
+      await pushState(
+        `Satır aksiyon menüsü`,
+        `tablo satırında aksiyon butonu tıklandı`,
+        `${basePath}_rowaction_${i}`
+      );
+      log(`  ✓ Satır aksiyon menüsü yakalandı`);
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(200);
       return true;
     }
   );
@@ -389,7 +499,7 @@ export async function exploreInteractiveStates(
       '[class*="question" i]', '[data-tooltip]',
       '[title]:not(a):not(button):not(html):not(body)',
     ].join(", "),
-    MAX.hovers, log, "Yardım icon", true,
+    MAX.hovers, log, "Yardım icon", false,
     async (_loc, _label, i) => {
       await _loc.hover({ timeout: ACTION_TIMEOUT });
       await page.waitForTimeout(900);
