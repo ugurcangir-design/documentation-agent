@@ -1,14 +1,24 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "./components/Layout";
 import DiscoveryPage from "./pages/DiscoveryPage";
 import JobProgressPage from "./pages/JobProgressPage";
 import DocumentsPage from "./pages/DocumentsPage";
+import SettingsPage from "./pages/SettingsPage";
 
-type Page = "discovery" | "documents";
+type Page = "discovery" | "documents" | "settings";
 
 export default function App() {
   const [page, setPage] = useState<Page>("discovery");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const page = (e as CustomEvent<Page>).detail;
+      setPage(page);
+    };
+    window.addEventListener("navigate", handler);
+    return () => window.removeEventListener("navigate", handler);
+  }, []);
 
   function handleJobStarted(jobId: string) {
     setActiveJobId(jobId);
@@ -35,6 +45,7 @@ export default function App() {
         <DiscoveryPage onJobStarted={handleJobStarted} />
       )}
       {page === "documents" && <DocumentsPage />}
+      {page === "settings" && <SettingsPage />}
     </Layout>
   );
 }
