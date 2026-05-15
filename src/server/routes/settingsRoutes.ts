@@ -22,8 +22,8 @@ function parseEnv(content: string): Record<string, string> {
 function buildEnv(values: Record<string, string>): string {
   const sections = [
     {
-      comment: "# Claude / Anthropic",
-      keys: ["ANTHROPIC_API_KEY"],
+      comment: "# Claude backend",
+      keys: ["CLAUDE_BACKEND", "CLAUDE_CLI_BIN", "ANTHROPIC_API_KEY"],
     },
     {
       comment: "# Hedef uygulama",

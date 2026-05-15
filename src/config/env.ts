@@ -15,4 +15,9 @@ export const env = {
 
   docLanguage: process.env.DOC_LANGUAGE || "tr",
   maxDiscoveryDepth: parseInt(process.env.MAX_DISCOVERY_DEPTH || "2", 10),
+
+  // 'cli'  → shell out to `claude` (Claude Code CLI), uses local Claude Code auth
+  // 'api'  → Anthropic SDK with ANTHROPIC_API_KEY
+  claudeBackend: ((process.env.CLAUDE_BACKEND as "cli" | "api") || "cli"),
+  claudeCliBin: process.env.CLAUDE_CLI_BIN || "claude",
 };

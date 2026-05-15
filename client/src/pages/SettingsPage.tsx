@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 
 interface SettingsValues {
+  CLAUDE_BACKEND: string;
+  CLAUDE_CLI_BIN: string;
   ANTHROPIC_API_KEY: string;
   APP_BASE_URL: string;
   APP_USERNAME: string;
@@ -14,6 +16,8 @@ interface SettingsValues {
 }
 
 const DEFAULTS: SettingsValues = {
+  CLAUDE_BACKEND: "cli",
+  CLAUDE_CLI_BIN: "claude",
   ANTHROPIC_API_KEY: "",
   APP_BASE_URL: "",
   APP_USERNAME: "",
@@ -87,16 +91,73 @@ export default function SettingsPage() {
 
       <div className="space-y-6">
         {/* Claude */}
-        <Section title="Claude API" icon="🤖">
-          <Field
-            label="Anthropic API Key"
-            value={values.ANTHROPIC_API_KEY}
-            onChange={(v) => set("ANTHROPIC_API_KEY", v)}
-            type="password"
-            placeholder="sk-ant-..."
-            configured={isConfigured("ANTHROPIC_API_KEY")}
-            required
-          />
+        <Section title="Claude Backend" icon="🤖">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Çalışma Şekli</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                {
+                  v: "cli",
+                  label: "Claude CLI",
+                  hint: "Claude Code'un yerel auth'unu kullanır. Subscription ile çalışır. (Önerilen)",
+                },
+                {
+                  v: "api",
+                  label: "Anthropic API",
+                  hint: "ANTHROPIC_API_KEY ile direkt API. Pay-per-token.",
+                },
+              ].map((opt) => (
+                <label
+                  key={opt.v}
+                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    values.CLAUDE_BACKEND === opt.v
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="claude_backend"
+                    value={opt.v}
+                    checked={values.CLAUDE_BACKEND === opt.v}
+                    onChange={() => set("CLAUDE_BACKEND", opt.v)}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{opt.label}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">{opt.hint}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {values.CLAUDE_BACKEND === "cli" ? (
+            <>
+              <Field
+                label="Claude CLI Yolu"
+                value={values.CLAUDE_CLI_BIN}
+                onChange={(v) => set("CLAUDE_CLI_BIN", v)}
+                placeholder="claude"
+                configured={isConfigured("CLAUDE_CLI_BIN")}
+              />
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[11px] px-3 py-2 rounded-lg">
+                Claude Code kurulu değilse:{" "}
+                <code className="bg-amber-100 px-1 rounded">npm install -g @anthropic-ai/claude-code</code>
+                . Komutun PATH'te olduğundan emin olun veya tam yolu girin (örn: <code className="bg-amber-100 px-1 rounded">/usr/local/bin/claude</code>).
+              </div>
+            </>
+          ) : (
+            <Field
+              label="Anthropic API Key"
+              value={values.ANTHROPIC_API_KEY}
+              onChange={(v) => set("ANTHROPIC_API_KEY", v)}
+              type="password"
+              placeholder="sk-ant-..."
+              configured={isConfigured("ANTHROPIC_API_KEY")}
+              required
+            />
+          )}
         </Section>
 
         {/* Target App */}
