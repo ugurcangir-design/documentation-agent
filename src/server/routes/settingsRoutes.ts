@@ -130,9 +130,11 @@ router.post("/", (req: Request, res: Response) => {
   const merged = { ...existing, ...incoming };
   fs.writeFileSync(ENV_PATH, buildEnv(merged), "utf-8");
 
-  // Reload into process.env
+  // Reflect every change (including deletes) into process.env so the
+  // running server picks them up immediately via the lazy env getters.
   for (const [k, v] of Object.entries(merged)) {
     if (v) process.env[k] = v;
+    else delete process.env[k];
   }
 
   res.json({ ok: true });
