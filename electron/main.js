@@ -214,6 +214,18 @@ async function startProd() {
 // App lifecycle
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Tray-style menu: keep app alive in dock, no window. Default browser shows UI.
+function buildDockMenu(url) {
+  return Menu.buildFromTemplate([
+    { label: `DocAgent çalışıyor`, enabled: false },
+    { label: url, enabled: false },
+    { type: 'separator' },
+    { label: 'Tarayıcıda Aç', click: () => shell.openExternal(url) },
+    { type: 'separator' },
+    { label: 'Kapat', click: () => app.quit() },
+  ]);
+}
+
 app.whenReady().then(async () => {
   console.log('\x1b[35m[DocAgent]\x1b[0m DocAgent — Analysis Studio');
 
@@ -221,17 +233,35 @@ app.whenReady().then(async () => {
     const url = IS_PACKAGED ? await startProd() : await startDev();
 
     console.log(`\x1b[35m[DocAgent]\x1b[0m Ready → ${url}`);
-    createWindow(url);
+
+    // Open in default browser (Chrome/Safari/…), no Electron window
+    shell.openExternal(url);
+
+    // Dock right-click menu to re-open browser or quit
+    if (process.platform === 'darwin' && app.dock) {
+      app.dock.setMenu(buildDockMenu(url));
+    }
+
+    // System tray menu (cross-platform reachable control)
+    Menu.setApplicationMenu(Menu.buildFromTemplate([
+      {
+        label: app.name,
+        submenu: [
+          { label: 'Tarayıcıda Aç', click: () => shell.openExternal(url) },
+          { type: 'separator' },
+          { role: 'quit', label: 'Kapat' },
+        ],
+      },
+    ]));
   } catch (err) {
     console.error('\x1b[31m[DocAgent]\x1b[0m Startup failed:', err.message);
     app.quit();
   }
 
+  // On macOS, clicking the dock icon re-opens the browser
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      // On macOS re-open after all windows closed
-      createWindow(`http://localhost:${IS_PACKAGED ? SERVER_PORT : CLIENT_PORT}`);
-    }
+    const url = `http://localhost:${IS_PACKAGED ? SERVER_PORT : CLIENT_PORT}`;
+    shell.openExternal(url);
   });
 });
 
@@ -240,9 +270,10 @@ function killChildren() {
   clientProc?.kill('SIGTERM');
 }
 
+// Don't quit when "all windows closed" — there are no windows by design.
+// User quits via Dock menu, Cmd+Q, or "Kapat" menu item.
 app.on('window-all-closed', () => {
-  killChildren();
-  if (process.platform !== 'darwin') app.quit();
+  // intentionally empty
 });
 
 app.on('before-quit', killChildren);
