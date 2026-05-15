@@ -1,11 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
-
-import { env } from "../config/env";
 import { DiscoveredScreen, ScreenAnalysis } from "../types/screen";
 import { loadPromptConfig } from "../config/promptConfig";
 import { analysisCache, hashScreenshot } from "../server/store/analysisCache";
-
-const client = new Anthropic({ apiKey: env.anthropicApiKey });
+import { callClaude } from "../llm/claudeClient";
 
 const JSON_SCHEMA_HINT = `JSON şeması:
 {
@@ -37,24 +33,16 @@ export async function analyzeScreen(screen: DiscoveredScreen): Promise<ScreenAna
 
 ${JSON_SCHEMA_HINT}`;
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: cfg.maxTokens ?? 2048,
-    messages: [{
-      role: "user",
-      content: [
-        { type: "image", source: { type: "base64", media_type: "image/png", data: screen.screenshotBase64 } },
-        { type: "text", text: prompt },
-      ],
-    }],
+  const result = await callClaude({
+    prompt,
+    imageBase64: screen.screenshotBase64,
+    imagePath: screen.screenshotPath,
+    maxTokens: cfg.maxTokens ?? 2048,
   });
 
-  const firstBlock = response.content[0];
-  const text = firstBlock?.type === "text" ? firstBlock.text : "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-
+  const jsonMatch = result.text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error(`Screen analysis returned no JSON for: ${screen.path}\nResponse: ${text.slice(0, 200)}`);
+    throw new Error(`Screen analysis returned no JSON for: ${screen.path}\nResponse: ${result.text.slice(0, 200)}`);
   }
 
   const analysis = JSON.parse(jsonMatch[0]) as ScreenAnalysis;

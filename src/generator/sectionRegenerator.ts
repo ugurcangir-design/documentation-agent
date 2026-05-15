@@ -1,8 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { env } from "../config/env";
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
-
-const client = new Anthropic({ apiKey: env.anthropicApiKey });
+import { callClaude } from "../llm/claudeClient";
 
 export interface SectionRegenerateResult {
   newContent: string;
@@ -18,9 +15,6 @@ export interface ParsedSection {
   text: string;
 }
 
-/**
- * Parse markdown sections by ## or ### headings.
- */
 export function parseSections(markdown: string): ParsedSection[] {
   const lines = markdown.split("\n");
   const sections: ParsedSection[] = [];
@@ -52,9 +46,6 @@ export function parseSections(markdown: string): ParsedSection[] {
   return sections;
 }
 
-/**
- * Regenerate a single section of a document, given user feedback.
- */
 export async function regenerateSection(params: {
   fullDocument: string;
   sectionHeading: string;
@@ -65,10 +56,7 @@ export async function regenerateSection(params: {
 
   const sections = parseSections(fullDocument);
   const target = sections.find((s) => s.heading === sectionHeading);
-
-  if (!target) {
-    throw new Error(`Bölüm bulunamadı: ${sectionHeading}`);
-  }
+  if (!target) throw new Error(`Bölüm bulunamadı: ${sectionHeading}`);
 
   const roleLabel = docType === "userManual"
     ? "deneyimli bir teknik yazar"
@@ -96,25 +84,17 @@ ${instruction}
 
 Sadece "${sectionHeading}" bölümünün yeni halini yaz. Başlığı da dahil et (\`${"#".repeat(target.level)} ${sectionHeading}\` ile başla). Başka bölüm yazma, açıklama ekleme — sadece bölümün yeni hali.`;
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 2000,
-    messages: [{ role: "user", content: prompt }],
-  });
+  const result = await callClaude({ prompt, maxTokens: 2000 });
 
-  const firstBlock = response.content[0];
-  const text = firstBlock?.type === "text" ? firstBlock.text : "";
-
-  // Build the new document by replacing the target section
   const lines = fullDocument.split("\n");
   const before = lines.slice(0, target.startLine);
   const after = lines.slice(target.endLine + 1);
-  const newSection = cleanGeneratedMarkdown(text).trim();
+  const newSection = cleanGeneratedMarkdown(result.text).trim();
   const newContent = [...before, newSection, ...after].join("\n");
 
   return {
     newContent,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
   };
 }

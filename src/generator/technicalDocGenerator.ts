@@ -1,12 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
-
-import { env } from "../config/env";
 import { ScreenContext } from "../types/documentation";
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
 import { loadPromptConfig, buildPromptHeader, buildPromptFooter } from "../config/promptConfig";
+import { callClaude } from "../llm/claudeClient";
 import type { GenerationResult } from "./userManualGenerator";
-
-const client = new Anthropic({ apiKey: env.anthropicApiKey });
 
 function buildPrompt(ctx: ScreenContext, templates: string[]): string {
   const cfg = loadPromptConfig("technicalDoc");
@@ -56,24 +52,16 @@ export async function generateTechnicalDocSection(
   templates: string[] = []
 ): Promise<GenerationResult> {
   const cfg = loadPromptConfig("technicalDoc");
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: cfg.maxTokens ?? 3000,
-    messages: [{
-      role: "user",
-      content: [
-        { type: "image", source: { type: "base64", media_type: "image/png", data: ctx.screen.screenshotBase64 } },
-        { type: "text", text: buildPrompt(ctx, templates) },
-      ],
-    }],
+  const result = await callClaude({
+    prompt: buildPrompt(ctx, templates),
+    imageBase64: ctx.screen.screenshotBase64,
+    imagePath: ctx.screen.screenshotPath,
+    maxTokens: cfg.maxTokens ?? 3000,
   });
 
-  const firstBlock = response.content[0];
-  const text = firstBlock?.type === "text" ? firstBlock.text : "";
-
   return {
-    content: cleanGeneratedMarkdown(text),
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
+    content: cleanGeneratedMarkdown(result.text),
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
   };
 }
