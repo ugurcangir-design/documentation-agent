@@ -1,36 +1,31 @@
-# Dependencies
-node_modules/
-client/node_modules/
-
-# Environment — never commit secrets
-.env
-.env.local
-
-# Generated data (large / ephemeral)
-data/screenshots/
-data/db/
-data/ai-output/
-data/output/
-data/cache/
 
 # BRD source files (may contain sensitive business docs)
-data/brd/*.docx
-
 # Build outputs
-dist/
-dist-electron/
-client/dist/
-*.js.map
-*.tsbuildinfo
-
-# macOS
-.DS_Store
-**/.DS_Store
-
-# Logs
-*.log
-npm-debug.log*
-
+# Dependencies
 # Editor
-.vscode/
+# Environment — never commit secrets
+# Generated data (large / ephemeral)
+# Logs
+# macOS
+**/.DS_Store
+*.js.map
+*.log
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
 .idea/
+.vscode/
+client/dist/
+client/node_modules/
+data/ai-output/
+data/brd/*.docx
+data/cache/
+data/db/
+data/logs/
+data/output/
+data/screenshots/
+dist-electron/
+dist/
+node_modules/
+npm-debug.log*
