@@ -70,12 +70,12 @@ export default function ReferencesPage() {
     finally { setLoading(false); }
   }
 
-  async function uploadDoc(file: File) {
+  async function uploadDoc(file: File, type: string) {
     setLoading(true); setError(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
-      fd.append("type", docType);
+      fd.append("type", type);
       fd.append("company", docCompany);
       fd.append("description", docDesc);
       const r = await fetch("/api/references/documents/upload", { method: "POST", body: fd });
@@ -286,7 +286,7 @@ export default function ReferencesPage() {
           docDesc={docDesc}
           setDocDesc={setDocDesc}
           fileRef={fileRef}
-          onUpload={uploadDoc}
+          onUpload={(f, t) => uploadDoc(f, t)}
           onRemove={(id) => remove("documents", id)}
           loading={loading}
           isTemplate={false}
@@ -304,7 +304,7 @@ export default function ReferencesPage() {
           docDesc={docDesc}
           setDocDesc={setDocDesc}
           fileRef={fileRef}
-          onUpload={uploadDoc}
+          onUpload={(f, t) => uploadDoc(f, t)}
           onRemove={(id) => remove("documents", id)}
           loading={loading}
           isTemplate={true}
@@ -324,7 +324,7 @@ function DocUploadTab({
   docCompany: string; setDocCompany: (v: string) => void;
   docDesc: string; setDocDesc: (v: string) => void;
   fileRef: React.RefObject<HTMLInputElement | null>;
-  onUpload: (f: File) => void;
+  onUpload: (f: File, type: string) => void;
   onRemove: (id: string) => void;
   loading: boolean;
   isTemplate: boolean;
@@ -384,7 +384,7 @@ function DocUploadTab({
           type="file"
           accept=".docx,.md,.txt,.pdf"
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ""; }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f, docType); e.target.value = ""; }}
         />
         <button
           onClick={() => fileRef.current?.click()}
