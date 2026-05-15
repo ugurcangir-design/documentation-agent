@@ -25,6 +25,7 @@ export default function ReferencesPage() {
   const [swagUrl, setSwagUrl] = useState("");
   const [swagName, setSwagName] = useState("");
   const [swagAuth, setSwagAuth] = useState("");
+  const [swagInsecure, setSwagInsecure] = useState(false);
 
   // Upload
   const fileRef = useRef<HTMLInputElement>(null);
@@ -62,7 +63,7 @@ export default function ReferencesPage() {
       const r = await fetch("/api/references/swagger/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: swagUrl, name: swagName, authorization: swagAuth }),
+        body: JSON.stringify({ url: swagUrl, name: swagName, authorization: swagAuth, insecure: swagInsecure }),
       });
       if (!r.ok) throw new Error((await r.json() as { error: string }).error);
       setSwagUrl(""); setSwagName(""); setSwagAuth("");
@@ -247,6 +248,19 @@ export default function ReferencesPage() {
                   Korumalı swagger için "Bearer …" veya "Basic …" şeklinde tam header değeri.
                 </p>
               </div>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={swagInsecure}
+                  onChange={(e) => setSwagInsecure(e.target.checked)}
+                  className="accent-blue-600"
+                />
+                <span className="text-[12px] text-gray-600">
+                  SSL doğrulamasını atla
+                  <span className="text-gray-400 ml-1">(self-signed / iç sertifikalı sunucular için)</span>
+                </span>
+              </label>
 
               <button
                 onClick={fetchSwagger}
