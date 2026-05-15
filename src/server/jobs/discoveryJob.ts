@@ -11,6 +11,7 @@ import {
 import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
 import { env } from "../../config/env";
+import { exploreInteractiveStates } from "../../browser/interactiveExplorer";
 
 export async function runDiscoveryJob(
   jobId: string,
@@ -45,7 +46,10 @@ export async function runDiscoveryJob(
       : `${env.maxDiscoveryDepth} seviye derinliğinde tarama yapılıyor`;
     emitJobEvent(jobId, { type: "progress", message: depthMsg });
 
-    const discoveredScreens = await discoverScreens(page);
+    const discoveredScreens = await discoverScreens(page, {
+      interactive: env.maxDiscoveryDepth === 0,
+      onProgress: (msg) => emitJobEvent(jobId, { type: "progress", message: msg }),
+    });
 
     emitJobEvent(jobId, {
       type: "progress",
@@ -86,6 +90,18 @@ export async function runDiscoveryJob(
           const { screenshotPath, screenshotBase64 } =
             await captureScreenshot(page, parsed.pathname);
 
+          // Test user simulation for this manual URL
+          let states;
+          try {
+            states = await exploreInteractiveStates(
+              page,
+              parsed.pathname,
+              (m) => emitJobEvent(jobId, { type: "progress", message: m })
+            );
+          } catch (err) {
+            console.warn("exploreInteractiveStates manual URL error:", (err as Error).message);
+          }
+
           discoveredScreens.push({
             url,
             path: parsed.pathname,
@@ -93,6 +109,7 @@ export async function runDiscoveryJob(
             screenshotPath,
             screenshotBase64,
             depth: 0,
+            ...(states && states.length > 0 ? { states } : {}),
           });
         } catch (err) {
           emitJobEvent(jobId, {
@@ -109,8 +126,15 @@ export async function runDiscoveryJob(
       title: s.title,
       screenshotPath: s.screenshotPath,
       depth: s.depth,
-      ...(s.parentPath !== undefined
-        ? { parentPath: s.parentPath }
+      ...(s.parentPath !== undefined ? { parentPath: s.parentPath } : {}),
+      ...(s.states && s.states.length > 0
+        ? {
+            states: s.states.map((st) => ({
+              label: st.label,
+              triggeredBy: st.triggeredBy,
+              screenshotPath: st.screenshotPath,
+            })),
+          }
         : {}),
       discoveredAt: new Date().toISOString(),
     }));

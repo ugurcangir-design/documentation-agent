@@ -11,10 +11,19 @@ import fs from "fs";
 import path from "path";
 import { env } from "../config/env";
 
+export interface ClaudeImage {
+  base64?: string;
+  path?: string;
+  label?: string;
+}
+
 export interface ClaudeCallOptions {
   prompt: string;
   imageBase64?: string;
   imagePath?: string;
+  /** Multiple images (state captures). Each is shown to the model
+   *  with its label as a preceding text block. */
+  images?: ClaudeImage[];
   maxTokens?: number;
 }
 
@@ -37,16 +46,35 @@ async function callApi(opts: ClaudeCallOptions): Promise<ClaudeResult> {
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
   const content: Anthropic.Messages.ContentBlockParam[] = [];
 
+  // Primary image (backwards-compat single-image API)
   let b64 = opts.imageBase64;
   if (!b64 && opts.imagePath && fs.existsSync(opts.imagePath)) {
     b64 = fs.readFileSync(opts.imagePath).toString("base64");
   }
   if (b64) {
+    content.push({ type: "text", text: "[Ana ekran görüntüsü]" });
     content.push({
       type: "image",
       source: { type: "base64", media_type: "image/png", data: b64 },
     });
   }
+
+  // Additional state images
+  for (const img of opts.images ?? []) {
+    let data = img.base64;
+    if (!data && img.path && fs.existsSync(img.path)) {
+      data = fs.readFileSync(img.path).toString("base64");
+    }
+    if (!data) continue;
+    if (img.label) {
+      content.push({ type: "text", text: `[${img.label}]` });
+    }
+    content.push({
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data },
+    });
+  }
+
   content.push({ type: "text", text: opts.prompt });
 
   const response = await client.messages.create({
@@ -67,24 +95,39 @@ async function callApi(opts: ClaudeCallOptions): Promise<ClaudeResult> {
 
 // ── CLI backend ─────────────────────────────────────────────────
 async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
-  let imagePath = opts.imagePath ? path.resolve(opts.imagePath) : undefined;
-  let tempImage = false;
+  const tempFiles: string[] = [];
+  const imagePaths: Array<{ label: string; path: string }> = [];
 
-  // If we got base64 but no path, persist it temporarily so the CLI can Read it.
-  if (!imagePath && opts.imageBase64) {
-    imagePath = path.join("/tmp", `docagent-${Date.now()}.png`);
-    fs.writeFileSync(imagePath, Buffer.from(opts.imageBase64, "base64"));
-    tempImage = true;
+  // Primary image
+  let primary = opts.imagePath ? path.resolve(opts.imagePath) : undefined;
+  if (!primary && opts.imageBase64) {
+    primary = path.join("/tmp", `docagent-${Date.now()}-main.png`);
+    fs.writeFileSync(primary, Buffer.from(opts.imageBase64, "base64"));
+    tempFiles.push(primary);
+  }
+  if (primary) imagePaths.push({ label: "Ana ekran", path: primary });
+
+  // State images
+  for (const img of opts.images ?? []) {
+    let p = img.path ? path.resolve(img.path) : undefined;
+    if (!p && img.base64) {
+      p = path.join("/tmp", `docagent-${Date.now()}-${imagePaths.length}.png`);
+      fs.writeFileSync(p, Buffer.from(img.base64, "base64"));
+      tempFiles.push(p);
+    }
+    if (p) imagePaths.push({ label: img.label ?? "State", path: p });
   }
 
   let prompt = opts.prompt;
-  if (imagePath) {
-    prompt = `Aşağıdaki dosya yolundaki görüntüyü Read tool ile oku ve analiz et: ${imagePath}\n\n${prompt}`;
+  if (imagePaths.length > 0) {
+    const list = imagePaths.map((i, idx) => `${idx + 1}. [${i.label}] ${i.path}`).join("\n");
+    prompt =
+      `Aşağıdaki görüntüleri sırayla Read tool ile oku ve hepsini birlikte analiz et:\n${list}\n\n${prompt}`;
   }
 
   return new Promise<ClaudeResult>((resolve, reject) => {
     const args = ["--print", "--output-format", "json"];
-    if (imagePath) args.push("--allowed-tools", "Read");
+    if (imagePaths.length > 0) args.push("--allowed-tools", "Read");
     args.push(prompt);
 
     const proc = spawn(env.claudeCliBin, args, {
@@ -98,7 +141,7 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     proc.stderr.on("data", (d: Buffer) => { err += d.toString(); });
 
     proc.on("error", (e) => {
-      if (tempImage && imagePath) fs.unlink(imagePath, () => {});
+      for (const f of tempFiles) fs.unlink(f, () => {});
       const code = (e as NodeJS.ErrnoException).code;
       if (code === "ENOENT") {
         reject(new Error(
@@ -111,7 +154,7 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     });
 
     proc.on("exit", (code) => {
-      if (tempImage && imagePath) fs.unlink(imagePath, () => {});
+      for (const f of tempFiles) fs.unlink(f, () => {});
 
       if (code !== 0) {
         reject(new Error(err.trim() || `claude CLI exit ${code}`));

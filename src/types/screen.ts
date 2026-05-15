@@ -1,3 +1,10 @@
+export interface ScreenState {
+  label: string;
+  triggeredBy: string;
+  screenshotPath: string;
+  screenshotBase64: string;
+}
+
 export interface DiscoveredScreen {
   url: string;
   path: string;
@@ -6,6 +13,7 @@ export interface DiscoveredScreen {
   screenshotBase64: string;
   depth: number;
   parentPath?: string;
+  states?: ScreenState[];
 }
 
 export type UIElementType =

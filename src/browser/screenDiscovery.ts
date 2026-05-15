@@ -3,6 +3,7 @@ import { Page } from "playwright";
 import { env } from "../config/env";
 import { DiscoveredScreen } from "../types/screen";
 import { captureScreenshot } from "./screenshotCapture";
+import { exploreInteractiveStates } from "./interactiveExplorer";
 
 const NAV_SELECTORS = [
   "nav a",
@@ -31,23 +32,24 @@ const NAV_SELECTORS = [
 // Fallback: any same-origin <a> when nav selectors return nothing
 const FALLBACK_SELECTOR = "a[href]";
 
+export interface DiscoverOptions {
+  onProgress?: (msg: string) => void;
+  interactive?: boolean; // simulate test user: click tabs/buttons/dropdowns
+}
+
 export async function discoverScreens(
-  page: Page
+  page: Page,
+  options: DiscoverOptions = {}
 ): Promise<DiscoveredScreen[]> {
   const baseUrl = env.appBaseUrl;
   const discovered = new Map<string, DiscoveredScreen>();
   const maxDepth = env.maxDiscoveryDepth;
 
   console.log(`\n  Starting discovery from: ${baseUrl}`);
-  console.log(`  Max depth: ${maxDepth}`);
+  console.log(`  Max depth: ${maxDepth}  Interactive: ${options.interactive ?? false}`);
 
   await discoverAtDepth(
-    page,
-    baseUrl,
-    0,
-    discovered,
-    baseUrl,
-    maxDepth
+    page, baseUrl, 0, discovered, baseUrl, maxDepth, undefined, options
   );
 
   const screens = Array.from(discovered.values());
@@ -63,7 +65,8 @@ async function discoverAtDepth(
   discovered: Map<string, DiscoveredScreen>,
   baseUrl: string,
   maxDepth: number,
-  parentPath?: string
+  parentPath?: string,
+  options: DiscoverOptions = {}
 ): Promise<void> {
   if (depth > maxDepth) return;
 
@@ -113,9 +116,23 @@ async function discoverAtDepth(
       ...(parentPath !== undefined ? { parentPath } : {}),
     };
 
-    discovered.set(path, screen);
-
     console.log(`    Captured: "${title}" → ${screenshotPath}`);
+
+    // Interactive exploration — only for single-screen mode (depth=0, no recursion)
+    if (options.interactive && depth === 0) {
+      try {
+        options.onProgress?.(`"${title}" üzerinde test user simülasyonu başlıyor…`);
+        const states = await exploreInteractiveStates(page, path, options.onProgress);
+        if (states.length > 0) {
+          screen.states = states;
+          options.onProgress?.(`✓ ${states.length} ek state yakalandı`);
+        }
+      } catch (err) {
+        console.warn(`    Interactive exploration error: ${(err as Error).message}`);
+      }
+    }
+
+    discovered.set(path, screen);
 
     if (depth < maxDepth) {
       const links = await extractNavLinks(page, baseUrl);
@@ -139,7 +156,8 @@ async function discoverAtDepth(
             discovered,
             baseUrl,
             maxDepth,
-            path
+            path,
+            options
           );
         }
       }

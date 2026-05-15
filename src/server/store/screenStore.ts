@@ -1,6 +1,12 @@
 import fs from "fs";
 import path from "path";
 
+export interface StoredScreenState {
+  label: string;
+  triggeredBy: string;
+  screenshotPath: string;
+}
+
 export interface StoredScreen {
   url: string;
   path: string;
@@ -9,6 +15,7 @@ export interface StoredScreen {
   depth: number;
   parentPath?: string;
   discoveredAt: string;
+  states?: StoredScreenState[];
 }
 
 const DB_PATH = path.join(
@@ -61,6 +68,15 @@ export const screenStore = {
       ? fs.readFileSync(s.screenshotPath).toString("base64")
       : "";
 
+    const states = s.states?.map((st) => ({
+      label: st.label,
+      triggeredBy: st.triggeredBy,
+      screenshotPath: st.screenshotPath,
+      screenshotBase64: fs.existsSync(st.screenshotPath)
+        ? fs.readFileSync(st.screenshotPath).toString("base64")
+        : "",
+    }));
+
     return {
       url: s.url,
       path: s.path,
@@ -68,9 +84,8 @@ export const screenStore = {
       screenshotPath: s.screenshotPath,
       screenshotBase64,
       depth: s.depth,
-      ...(s.parentPath !== undefined
-        ? { parentPath: s.parentPath }
-        : {}),
+      ...(s.parentPath !== undefined ? { parentPath: s.parentPath } : {}),
+      ...(states && states.length > 0 ? { states } : {}),
     };
   },
 };

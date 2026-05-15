@@ -23,6 +23,10 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     ? `\n\n### Şablon Referansı (Anlatım dilini, başlık yapısını ve detay seviyesini taklit et — içeriği kopyalama)\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 4000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n`
     : "";
 
+  const stateBlock = (ctx.screen.states ?? []).length > 0
+    ? `\n\nTest user simülasyonu sırasında yakalanan ek state'ler de görsellerde mevcuttur:\n${(ctx.screen.states ?? []).map((s, i) => `${i + 2}. ${s.label} — ${s.triggeredBy}`).join("\n")}\n\nBu state'lerden hangi UI bileşeninin hangi etkileşimle değiştiğini, hangi modal/form'un hangi butonla açıldığını teknik açıdan çıkar.\n`
+    : "";
+
   return `${buildPromptHeader(cfg)}
 
 Aşağıdaki veriler verilmiştir:
@@ -39,7 +43,7 @@ ${brdContext || "(Yok)"}
 
 İlgili API Endpoint'leri:
 ${apiContext || "(Yok)"}
-${templateBlock}
+${stateBlock}${templateBlock}
 ---
 
 Bu ekran için TEKNİK DÖKÜMAN bölümü yaz. Geliştirici ve sistem analisti hedef kitlesi.
@@ -52,10 +56,16 @@ export async function generateTechnicalDocSection(
   templates: string[] = []
 ): Promise<GenerationResult> {
   const cfg = loadPromptConfig("technicalDoc");
+  const stateImages = (ctx.screen.states ?? []).map((s) => ({
+    base64: s.screenshotBase64,
+    path: s.screenshotPath,
+    label: s.label,
+  }));
   const result = await callClaude({
     prompt: buildPrompt(ctx, templates),
     imageBase64: ctx.screen.screenshotBase64,
     imagePath: ctx.screen.screenshotPath,
+    images: stateImages,
     maxTokens: cfg.maxTokens ?? 3000,
   });
 
