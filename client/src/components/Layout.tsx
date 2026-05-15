@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 
 export type Page =
+  | "dashboard"
   | "discovery"
   | "documents"
   | "history"
@@ -36,6 +37,12 @@ const icons = {
 };
 
 const SIDEBAR_GROUPS = [
+  {
+    label: "GENEL",
+    items: [
+      { id: "dashboard" as Page, label: "Dashboard", icon: "M2 9h5v5H2zM9 2h5v5H9zM9 9h5v5H9zM2 2h5v5H2z" },
+    ],
+  },
   {
     label: "PİPELİNE",
     items: [

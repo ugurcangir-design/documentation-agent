@@ -10,6 +10,14 @@ export interface StoredScreen {
 
 export type DocumentStatus = "draft" | "approved" | "published";
 
+export interface DocumentVersion {
+  id: string;
+  savedAt: string;
+  reason: "edit" | "regenerate" | "publish";
+  userManualContent: string;
+  technicalDocContent: string;
+}
+
 export interface StoredDocument {
   id: string;
   jobId: string;
@@ -23,6 +31,9 @@ export interface StoredDocument {
   updatedAt: string;
   publishedAt?: string;
   confluenceUrl?: string;
+  versions?: DocumentVersion[];
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 export type JobStatus = "pending" | "running" | "completed" | "failed";
