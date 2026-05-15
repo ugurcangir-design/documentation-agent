@@ -1,17 +1,23 @@
 import { useState, useEffect } from "react";
 import type { Page } from "./components/Layout";
 import Layout from "./components/Layout";
+import { ToastProvider } from "./components/Toast";
+import { useHeartbeat } from "./hooks/useHeartbeat";
+import DashboardPage from "./pages/DashboardPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
 import JobProgressPage from "./pages/JobProgressPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import SettingsPage from "./pages/SettingsPage";
 import ReferencesPage from "./pages/ReferencesPage";
 import PromptsPage from "./pages/PromptsPage";
+import HistoryPage from "./pages/HistoryPage";
 
-export default function App() {
-  const [page, setPage] = useState<Page>("discovery");
+function AppInner() {
+  const [page, setPage] = useState<Page>("dashboard");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [deepAnalysis, setDeepAnalysis] = useState(false);
+
+  useHeartbeat();
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -39,16 +45,21 @@ export default function App() {
       deepAnalysis={deepAnalysis}
       onToggleDeepAnalysis={() => setDeepAnalysis((v) => !v)}
     >
-      {page === "discovery" && (
-        <DiscoveryPage
-          onJobStarted={setActiveJobId}
-          deepAnalysis={deepAnalysis}
-        />
-      )}
+      {page === "dashboard" && <DashboardPage />}
+      {page === "discovery" && <DiscoveryPage onJobStarted={setActiveJobId} deepAnalysis={deepAnalysis} />}
       {page === "documents" && <DocumentsPage />}
+      {page === "history" && <HistoryPage />}
       {page === "references" && <ReferencesPage />}
       {page === "settings" && <SettingsPage />}
       {page === "prompts" && <PromptsPage />}
     </Layout>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppInner />
+    </ToastProvider>
   );
 }

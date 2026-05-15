@@ -82,9 +82,32 @@ router.patch("/:id/status", (req: Request, res: Response) => {
   res.json(updated);
 });
 
+// GET /api/documents/:id/versions
+router.get("/:id/versions", (req: Request, res: Response) => {
+  const doc = documentStore.getById(req.params["id"] as string);
+  if (!doc) {
+    res.status(404).json({ error: "Document not found" });
+    return;
+  }
+  res.json(doc.versions ?? []);
+});
+
+// POST /api/documents/:id/restore/:versionId
+router.post("/:id/restore/:versionId", (req: Request, res: Response) => {
+  const restored = documentStore.restoreVersion(
+    req.params["id"] as string,
+    req.params["versionId"] as string
+  );
+  if (!restored) {
+    res.status(404).json({ error: "Document or version not found" });
+    return;
+  }
+  res.json(restored);
+});
+
 // DELETE /api/documents/:id
 router.delete("/:id", (req: Request, res: Response) => {
-  documentStore.delete(req.params.id as string);
+  documentStore.delete(req.params["id"] as string);
   res.json({ ok: true });
 });
 

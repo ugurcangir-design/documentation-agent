@@ -11,6 +11,7 @@ import exportRoutes from "./routes/exportRoutes";
 import settingsRoutes from "./routes/settingsRoutes";
 import promptRoutes from "./routes/promptRoutes";
 import referenceRoutes from "./routes/referenceRoutes";
+import statsRoutes from "./routes/statsRoutes";
 
 const app = express();
 const PORT = process.env["PORT"] || 3000;
@@ -33,11 +34,37 @@ app.use("/api/export", exportRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/prompts", promptRoutes);
 app.use("/api/references", referenceRoutes);
+app.use("/api/stats", statsRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });
+
+// ── Heartbeat / auto-shutdown ──────────────────────────────────────
+// Browser sends a heartbeat every 10s. If no heartbeat for 30s,
+// process exits → supervisor kills Vite → all gone.
+let lastHeartbeat: number | null = null;
+const HEARTBEAT_TIMEOUT = 30_000;
+const CHECK_INTERVAL = 10_000;
+
+app.post("/api/heartbeat", (_req, res) => {
+  lastHeartbeat = Date.now();
+  res.json({ ok: true });
+});
+
+app.post("/api/shutdown", (_req, res) => {
+  res.json({ ok: true });
+  console.log("[server] shutdown requested by client");
+  setTimeout(() => process.exit(0), 300);
+});
+
+setInterval(() => {
+  if (lastHeartbeat && Date.now() - lastHeartbeat > HEARTBEAT_TIMEOUT) {
+    console.log("[server] no heartbeat for 30s, exiting");
+    process.exit(0);
+  }
+}, CHECK_INTERVAL);
 
 // Serve React build in production
 const clientBuild = path.join(

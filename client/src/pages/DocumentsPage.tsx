@@ -4,6 +4,8 @@ import type { StoredDocument } from "../types";
 import StatusBadge from "../components/StatusBadge";
 import MarkdownEditor from "../components/MarkdownEditor";
 import PublishModal from "../components/PublishModal";
+import VersionHistoryPanel from "../components/VersionHistoryPanel";
+import { useToast } from "../components/Toast";
 
 type DocTab = "userManual" | "technicalDoc";
 
@@ -24,6 +26,8 @@ export default function DocumentsPage() {
   >(null);
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [versionPanelDocId, setVersionPanelDocId] = useState<string | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     const g = await docsApi.getGrouped();
@@ -69,6 +73,9 @@ export default function DocumentsPage() {
       await docsApi.update(activeDocId, editContent);
       setDirty(false);
       await load();
+      toast.show("Döküman kaydedildi", "success");
+    } catch (e) {
+      toast.show(`Kaydetme hatası: ${(e as Error).message}`, "error");
     } finally {
       setSaving(false);
     }
@@ -77,11 +84,13 @@ export default function DocumentsPage() {
   async function approve(id: string) {
     await docsApi.setStatus(id, "approved");
     await load();
+    toast.show("Döküman onaylandı", "success");
   }
 
   async function setDraft(id: string) {
     await docsApi.setStatus(id, "draft");
     await load();
+    toast.show("Taslağa alındı", "info");
   }
 
   async function deleteDoc(id: string) {
@@ -89,6 +98,7 @@ export default function DocumentsPage() {
     await docsApi.delete(id);
     if (activeDocId === id) setActiveDocId(null);
     await load();
+    toast.show("Döküman silindi", "info");
   }
 
   function toggleSelect(id: string) {
@@ -331,6 +341,15 @@ export default function DocumentsPage() {
                   </>
                 )}
 
+                {(activeDoc.versions?.length ?? 0) > 0 && (
+                  <button
+                    onClick={() => setVersionPanelDocId(activeDoc.id)}
+                    className="px-3 py-1.5 text-gray-600 text-xs border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    Geçmiş ({activeDoc.versions?.length})
+                  </button>
+                )}
+
                 <button
                   onClick={() => deleteDoc(activeDoc.id)}
                   className="px-3 py-1.5 text-red-500 text-xs hover:text-red-700"
@@ -405,6 +424,20 @@ export default function DocumentsPage() {
           onPublished={() => {
             setPublishModalIds(null);
             load();
+            toast.show("Confluence'a yayınlandı", "success");
+          }}
+        />
+      )}
+
+      {/* Version history panel */}
+      {versionPanelDocId && (
+        <VersionHistoryPanel
+          documentId={versionPanelDocId}
+          onClose={() => setVersionPanelDocId(null)}
+          onRestored={() => {
+            setVersionPanelDocId(null);
+            load();
+            toast.show("Önceki versiyon geri yüklendi", "success");
           }}
         />
       )}
