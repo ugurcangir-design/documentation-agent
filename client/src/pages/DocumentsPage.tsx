@@ -5,6 +5,7 @@ import StatusBadge from "../components/StatusBadge";
 import MarkdownEditor from "../components/MarkdownEditor";
 import PublishModal from "../components/PublishModal";
 import VersionHistoryPanel from "../components/VersionHistoryPanel";
+import SectionRegenerateModal from "../components/SectionRegenerateModal";
 import { useToast } from "../components/Toast";
 
 type DocTab = "userManual" | "technicalDoc";
@@ -27,6 +28,8 @@ export default function DocumentsPage() {
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [versionPanelDocId, setVersionPanelDocId] = useState<string | null>(null);
+  const [regenModal, setRegenModal] = useState<{ docId: string; target: DocTab } | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -162,16 +165,17 @@ export default function DocumentsPage() {
               Yayınla →
             </button>
             <button
-              onClick={() =>
-                exportApi.downloadDocx(
-                  Array.from(selectedIds),
-                  "Seçili Dökümanlar"
-                )
-              }
+              onClick={() => exportApi.downloadDocx(Array.from(selectedIds), "Seçili Dökümanlar")}
               className="text-xs text-blue-600 hover:text-blue-800"
-            >
-              Word →
-            </button>
+            >Word</button>
+            <button
+              onClick={() => exportApi.downloadPdf(Array.from(selectedIds), "Seçili Dökümanlar")}
+              className="text-xs text-blue-600 hover:text-blue-800"
+            >PDF</button>
+            <button
+              onClick={() => exportApi.downloadZip(Array.from(selectedIds), "Seçili Dökümanlar")}
+              className="text-xs text-blue-600 hover:text-blue-800"
+            >ZIP</button>
             <button
               onClick={() => setSelectedIds(new Set())}
               className="text-xs text-gray-400 hover:text-gray-600"
@@ -327,19 +331,42 @@ export default function DocumentsPage() {
                     >
                       Confluence'a Yayınla
                     </button>
-                    <button
-                      onClick={() =>
-                        exportApi.downloadDocx(
-                          [activeDoc.id],
-                          activeDoc.screenTitle
-                        )
-                      }
-                      className="px-3 py-1.5 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700"
-                    >
-                      Word İndir
-                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => setExportMenuOpen((v) => !v)}
+                        className="px-3 py-1.5 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700 flex items-center gap-1"
+                      >
+                        İndir ▾
+                      </button>
+                      {exportMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[160px]">
+                          {[
+                            { label: "Word (.docx)", fn: () => exportApi.downloadDocx([activeDoc.id], activeDoc.screenTitle) },
+                            { label: "PDF", fn: () => exportApi.downloadPdf([activeDoc.id], activeDoc.screenTitle) },
+                            { label: "Markdown", fn: () => exportApi.downloadMarkdown([activeDoc.id], activeDoc.screenTitle) },
+                            { label: "ZIP (tüm dosyalar)", fn: () => exportApi.downloadZip([activeDoc.id], activeDoc.screenTitle) },
+                          ].map((opt) => (
+                            <button
+                              key={opt.label}
+                              onClick={() => { setExportMenuOpen(false); opt.fn().catch((e: Error) => toast.show(e.message, "error")); }}
+                              className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
+
+                <button
+                  onClick={() => setRegenModal({ docId: activeDoc.id, target: activeTab })}
+                  className="px-3 py-1.5 bg-violet-100 text-violet-700 text-xs rounded-lg hover:bg-violet-200"
+                  title="Bir bölümü yeniden üret"
+                >
+                  ✨ Bölüm Üret
+                </button>
 
                 {(activeDoc.versions?.length ?? 0) > 0 && (
                   <button
@@ -438,6 +465,22 @@ export default function DocumentsPage() {
             setVersionPanelDocId(null);
             load();
             toast.show("Önceki versiyon geri yüklendi", "success");
+          }}
+        />
+      )}
+
+      {/* Section regenerate modal */}
+      {regenModal && (
+        <SectionRegenerateModal
+          documentId={regenModal.docId}
+          target={regenModal.target}
+          onClose={() => setRegenModal(null)}
+          onDone={() => {
+            setRegenModal(null);
+            load().then(() => {
+              if (activeDoc) openDoc(activeDoc);
+            });
+            toast.show("Bölüm yeniden üretildi", "success");
           }}
         />
       )}

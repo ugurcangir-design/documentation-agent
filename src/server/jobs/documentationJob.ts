@@ -17,6 +17,7 @@ import { documentStore } from "../store/documentStore";
 import { jobStore } from "../store/jobStore";
 import { referenceStore } from "../store/referenceStore";
 import { emitJobEvent } from "../store/eventBus";
+import { jobCancellation } from "../store/jobCancellation";
 
 import type { Endpoint } from "../../types/endpoint";
 import type { DocumentSection } from "../../types/documentSource";
@@ -142,6 +143,8 @@ export async function runDocumentationJob(
   let completed = 0;
 
   await processInParallel(selectedScreenPaths, CONCURRENCY, async (screenPath, _idx) => {
+    if (jobCancellation.isCancelled(jobId)) return;
+
     const storedScreen = screenStore.getByPath(screenPath);
     if (!storedScreen) {
       emitJobEvent(jobId, {
@@ -217,16 +220,24 @@ export async function runDocumentationJob(
     }
   });
 
+  const wasCancelled = jobCancellation.isCancelled(jobId);
+  jobCancellation.clear(jobId);
+
   jobStore.update(jobId, {
-    status: "completed",
+    status: wasCancelled ? "failed" : "completed",
     completedAt: new Date().toISOString(),
-    progress: { current: total, total, message: "Tüm dökümanlar oluşturuldu" },
+    progress: {
+      current: completed,
+      total,
+      message: wasCancelled ? "Kullanıcı tarafından iptal edildi" : "Tüm dökümanlar oluşturuldu",
+    },
+    ...(wasCancelled ? { error: "Cancelled by user" } : {}),
   });
 
   emitJobEvent(jobId, {
-    type: "complete",
-    message: "Tüm dökümanlar oluşturuldu",
-    current: total,
+    type: wasCancelled ? "error" : "complete",
+    message: wasCancelled ? "İptal edildi" : "Tüm dökümanlar oluşturuldu",
+    current: completed,
     total,
   });
 }

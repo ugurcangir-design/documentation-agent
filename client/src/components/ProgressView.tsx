@@ -5,12 +5,14 @@ interface ProgressViewProps {
   streamUrl: string;
   total?: number;
   onComplete?: () => void;
+  onCancel?: () => void;
 }
 
 export default function ProgressView({
   streamUrl,
   total = 0,
   onComplete,
+  onCancel,
 }: ProgressViewProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [current, setCurrent] = useState(0);
@@ -63,6 +65,14 @@ export default function ProgressView({
         <span className="text-sm text-gray-500 w-12 text-right">
           {Math.round(pct)}%
         </span>
+        {!done && onCancel && (
+          <button
+            onClick={onCancel}
+            className="px-3 py-1 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+          >
+            Durdur
+          </button>
+        )}
       </div>
 
       {/* Log window */}

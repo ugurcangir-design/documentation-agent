@@ -212,13 +212,19 @@ router.post(
         const mammoth = await import("mammoth");
         const result = await mammoth.extractRawText({ path: req.file.path });
         plainText = result.value;
+      } else if (ext === ".pdf") {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
+        const buf = fs.readFileSync(req.file.path);
+        const data = await pdfParse(buf);
+        plainText = data.text;
       } else if (ext === ".txt" || ext === ".md") {
         plainText = fs.readFileSync(req.file.path, "utf-8");
       } else {
         plainText = fs.readFileSync(req.file.path, "utf-8");
       }
-    } catch {
-      plainText = `[${originalName} içeriği okunamadı]`;
+    } catch (err) {
+      plainText = `[${originalName} içeriği okunamadı: ${(err as Error).message}]`;
     }
 
     // Save extracted text

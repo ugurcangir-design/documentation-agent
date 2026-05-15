@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
 import { documentStore, type DocumentStatus } from "../store/documentStore";
+import { parseSections, regenerateSection } from "../../generator/sectionRegenerator";
 
 const router = Router();
 
@@ -80,6 +81,69 @@ router.patch("/:id/status", (req: Request, res: Response) => {
   }
 
   res.json(updated);
+});
+
+// GET /api/documents/:id/sections?target=userManual|technicalDoc
+router.get("/:id/sections", (req: Request, res: Response) => {
+  const doc = documentStore.getById(req.params["id"] as string);
+  if (!doc) {
+    res.status(404).json({ error: "Document not found" });
+    return;
+  }
+  const target = (req.query["target"] as string) ?? "userManual";
+  const content = target === "technicalDoc" ? doc.technicalDocContent : doc.userManualContent;
+  const sections = parseSections(content).map((s) => ({ heading: s.heading, level: s.level }));
+  res.json(sections);
+});
+
+// POST /api/documents/:id/regenerate-section
+router.post("/:id/regenerate-section", async (req: Request, res: Response) => {
+  const id = req.params["id"] as string;
+  const { sectionHeading, instruction, target } = req.body as {
+    sectionHeading: string;
+    instruction: string;
+    target: "userManual" | "technicalDoc";
+  };
+
+  if (!sectionHeading || !instruction || !target) {
+    res.status(400).json({ error: "sectionHeading, instruction, target required" });
+    return;
+  }
+
+  const doc = documentStore.getById(id);
+  if (!doc) {
+    res.status(404).json({ error: "Document not found" });
+    return;
+  }
+
+  const fullDocument = target === "technicalDoc" ? doc.technicalDocContent : doc.userManualContent;
+
+  try {
+    const result = await regenerateSection({
+      fullDocument,
+      sectionHeading,
+      instruction,
+      docType: target,
+    });
+
+    const patch = target === "technicalDoc"
+      ? { technicalDocContent: result.newContent }
+      : { userManualContent: result.newContent };
+
+    const updated = documentStore.update(
+      id,
+      {
+        ...patch,
+        inputTokens: (doc.inputTokens ?? 0) + result.inputTokens,
+        outputTokens: (doc.outputTokens ?? 0) + result.outputTokens,
+      },
+      "regenerate"
+    );
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 // GET /api/documents/:id/versions

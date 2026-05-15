@@ -9,6 +9,7 @@ import {
   jobStore,
 } from "../store/jobStore";
 import { emitJobEvent } from "../store/eventBus";
+import { jobCancellation } from "../store/jobCancellation";
 import { env } from "../../config/env";
 
 export async function runDiscoveryJob(
@@ -48,6 +49,7 @@ export async function runDiscoveryJob(
 
     // Add manually provided extra URLs
     for (const url of extraUrls) {
+      if (jobCancellation.isCancelled(jobId)) break;
       const alreadyFound = discoveredScreens.some(
         (s) => s.url === url
       );

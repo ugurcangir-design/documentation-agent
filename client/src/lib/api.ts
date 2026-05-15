@@ -102,22 +102,51 @@ export const confluence = {
 };
 
 // ── Export ───────────────────────────────────────────────────────
+async function downloadAs(endpoint: string, body: unknown, filename: string): Promise<void> {
+  const res = await fetch(`${BASE}/export/${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Export failed: ${endpoint}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export const exportApi = {
-  downloadDocx: async (documentIds: string[], title?: string) => {
-    const res = await fetch(`${BASE}/export/docx`, {
+  downloadDocx: (documentIds: string[], title?: string) =>
+    downloadAs("docx", { documentIds, title }, `${title ?? "dokuman"}.docx`),
+  downloadPdf: (documentIds: string[], title?: string) =>
+    downloadAs("pdf", { documentIds, title }, `${title ?? "dokuman"}.pdf`),
+  downloadMarkdown: (documentIds: string[], title?: string) =>
+    downloadAs("markdown", { documentIds, title }, `${title ?? "dokuman"}.md`),
+  downloadZip: (documentIds: string[], title?: string) =>
+    downloadAs("zip", { documentIds, title }, `${title ?? "dokuman"}.zip`),
+};
+
+// ── Job control ──────────────────────────────────────────────────
+export const jobControl = {
+  cancel: (jobId: string) =>
+    fetch(`${BASE}/jobs/${jobId}/cancel`, { method: "POST" }).then((r) => r.json()) as Promise<{ ok: boolean }>,
+};
+
+// ── Section regeneration ─────────────────────────────────────────
+export const sections = {
+  list: (documentId: string, target: "userManual" | "technicalDoc") =>
+    request<Array<{ heading: string; level: number }>>(
+      `/documents/${documentId}/sections?target=${target}`
+    ),
+  regenerate: (
+    documentId: string,
+    body: { sectionHeading: string; instruction: string; target: "userManual" | "technicalDoc" }
+  ) =>
+    request<StoredDocument>(`/documents/${documentId}/regenerate-section`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ documentIds, title }),
-    });
-
-    if (!res.ok) throw new Error("Export failed");
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title ?? "dokuman"}.docx`;
-    a.click();
-    URL.revokeObjectURL(url);
-  },
+      body: JSON.stringify(body),
+    }),
 };
