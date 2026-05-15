@@ -30,13 +30,20 @@ function buildEnv(values: Record<string, string>): string {
       keys: ["APP_BASE_URL", "APP_USERNAME", "APP_PASSWORD"],
     },
     {
-      comment: "# Confluence",
+      comment: "# Atlassian OAuth 2.0 (Confluence + Jira)",
+      keys: [
+        "ATLASSIAN_OAUTH_CLIENT_ID",
+        "ATLASSIAN_OAUTH_CLIENT_SECRET",
+        "CONFLUENCE_SPACE_KEY",
+        "CONFLUENCE_PARENT_PAGE_ID",
+      ],
+    },
+    {
+      comment: "# Confluence — legacy API token (OAuth yoksa fallback)",
       keys: [
         "CONFLUENCE_BASE_URL",
         "CONFLUENCE_EMAIL",
         "CONFLUENCE_API_TOKEN",
-        "CONFLUENCE_SPACE_KEY",
-        "CONFLUENCE_PARENT_PAGE_ID",
       ],
     },
     {
@@ -65,7 +72,7 @@ router.get("/", (_req: Request, res: Response) => {
 
   // Mask secrets for display
   const masked = { ...values };
-  for (const key of ["ANTHROPIC_API_KEY", "APP_PASSWORD", "CONFLUENCE_API_TOKEN"]) {
+  for (const key of ["ANTHROPIC_API_KEY", "APP_PASSWORD", "CONFLUENCE_API_TOKEN", "ATLASSIAN_OAUTH_CLIENT_SECRET", "ATLASSIAN_ACCESS_TOKEN", "ATLASSIAN_REFRESH_TOKEN"]) {
     if (masked[key] && masked[key].length > 4) {
       masked[key] = masked[key].slice(0, 4) + "••••••••••••";
     }
@@ -84,7 +91,7 @@ router.post("/", (req: Request, res: Response) => {
   }
 
   // Don't overwrite secrets if placeholder mask is sent
-  for (const key of ["ANTHROPIC_API_KEY", "APP_PASSWORD", "CONFLUENCE_API_TOKEN"]) {
+  for (const key of ["ANTHROPIC_API_KEY", "APP_PASSWORD", "CONFLUENCE_API_TOKEN", "ATLASSIAN_OAUTH_CLIENT_SECRET", "ATLASSIAN_ACCESS_TOKEN", "ATLASSIAN_REFRESH_TOKEN"]) {
     if (incoming[key]?.includes("••••")) {
       incoming[key] = existing[key] ?? "";
     }

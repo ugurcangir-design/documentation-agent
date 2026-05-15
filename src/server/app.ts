@@ -12,6 +12,7 @@ import settingsRoutes from "./routes/settingsRoutes";
 import promptRoutes from "./routes/promptRoutes";
 import referenceRoutes from "./routes/referenceRoutes";
 import statsRoutes from "./routes/statsRoutes";
+import authRoutes from "./routes/authRoutes";
 
 const app = express();
 const PORT = process.env["PORT"] || 3000;
@@ -35,6 +36,7 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/prompts", promptRoutes);
 app.use("/api/references", referenceRoutes);
 app.use("/api/stats", statsRoutes);
+app.use("/api/auth", authRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
