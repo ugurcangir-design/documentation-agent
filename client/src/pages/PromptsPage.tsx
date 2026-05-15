@@ -96,9 +96,9 @@ export default function PromptsPage() {
   const PROMPT_KEYS = Object.keys(prompts);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-[calc(100vh-2.75rem)] overflow-hidden">
       {/* Left: prompt selector */}
-      <div className="w-64 border-r border-gray-200 bg-white flex-shrink-0 p-4 space-y-1">
+      <div className="w-64 border-r border-gray-200 bg-white flex-shrink-0 p-4 space-y-1 overflow-y-auto">
         <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-3">
           Agent Promptları
         </p>
