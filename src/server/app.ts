@@ -43,7 +43,7 @@ const clientBuild = path.join(
 if (fs.existsSync(clientBuild)) {
   app.use(express.static(clientBuild));
 
-  app.get("*", (_req, res) => {
+  app.get("/{*path}", (_req, res) => {
     res.sendFile(path.join(clientBuild, "index.html"));
   });
 } else {
