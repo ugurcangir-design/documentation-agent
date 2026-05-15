@@ -40,10 +40,10 @@ export async function runDiscoveryJob(
 
     const page = session.getPage();
 
-    emitJobEvent(jobId, {
-      type: "progress",
-      message: "Ekranlar keşfediliyor...",
-    });
+    const depthMsg = env.maxDiscoveryDepth === 0
+      ? `Tek ekran modu — sadece ${env.appBaseUrl} ziyaret edilecek`
+      : `${env.maxDiscoveryDepth} seviye derinliğinde tarama yapılıyor`;
+    emitJobEvent(jobId, { type: "progress", message: depthMsg });
 
     const discoveredScreens = await discoverScreens(page);
 

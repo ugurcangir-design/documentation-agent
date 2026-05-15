@@ -31,7 +31,7 @@ const DEFAULTS: SettingsValues = {
   CONFLUENCE_API_TOKEN: "",
   CONFLUENCE_SPACE_KEY: "DOCS",
   CONFLUENCE_PARENT_PAGE_ID: "",
-  MAX_DISCOVERY_DEPTH: "2",
+  MAX_DISCOVERY_DEPTH: "0",
 };
 
 interface OAuthStatus {
@@ -245,17 +245,21 @@ export default function SettingsPage() {
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Keşif Derinliği
+              Keşif Modu
             </label>
             <select
               value={values.MAX_DISCOVERY_DEPTH}
               onChange={(e) => set("MAX_DISCOVERY_DEPTH", e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="1">1 — Sadece ana sayfa linkleri</option>
-              <option value="2">2 — 2 seviye derinlik (önerilen)</option>
-              <option value="3">3 — 3 seviye derinlik</option>
+              <option value="0">Tek ekran — sadece verilen URL (önerilen)</option>
+              <option value="1">1 seviye — verilen URL + sayfasındaki linkler</option>
+              <option value="2">2 seviye — alt sayfalar dahil</option>
+              <option value="3">3 seviye — derin tarama</option>
             </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              "Tek ekran" modunda agent sadece girilen URL'i ziyaret eder, içindeki tüm buton/alan/metin Claude Vision ile analiz edilir.
+            </p>
           </div>
         </Section>
 

@@ -17,7 +17,7 @@ export const env = {
   get appPassword() { return process.env.APP_PASSWORD || ""; },
 
   get docLanguage() { return process.env.DOC_LANGUAGE || "tr"; },
-  get maxDiscoveryDepth() { return parseInt(process.env.MAX_DISCOVERY_DEPTH || "2", 10); },
+  get maxDiscoveryDepth() { return parseInt(process.env.MAX_DISCOVERY_DEPTH || "0", 10); },
 
   // 'cli'  → shell out to `claude` (Claude Code CLI), uses local Claude Code auth
   // 'api'  → Anthropic SDK with ANTHROPIC_API_KEY
