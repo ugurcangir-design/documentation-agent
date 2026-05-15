@@ -38,10 +38,16 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
 
   useEffect(() => {
     discovery.getScreens().then(setScreens).catch(() => {});
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((d: { values: { APP_BASE_URL?: string } }) => setAppUrl(d.values?.APP_BASE_URL ?? ""))
-      .catch(() => {});
+    const loadConfig = () =>
+      fetch("/api/settings")
+        .then((r) => r.json())
+        .then((d: { values: { APP_BASE_URL?: string } }) => setAppUrl(d.values?.APP_BASE_URL ?? ""))
+        .catch(() => {});
+    loadConfig();
+    // Refresh when window regains focus (after user updates Settings in another tab)
+    const onFocus = () => loadConfig();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   async function startDiscovery() {
