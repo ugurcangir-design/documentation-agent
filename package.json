@@ -12,7 +12,8 @@
     "build:client":    "cd client && npm run build",
     "dist":            "npm run build && electron-builder",
     "cli":             "tsx src/index.ts",
-    "install:browsers":"playwright install chromium"
+    "install:browsers":"playwright install chromium",
+    "launcher":         "bash scripts/create-launcher.sh"
   },
   "keywords": [],
   "author": "",
