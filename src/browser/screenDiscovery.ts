@@ -7,16 +7,29 @@ import { captureScreenshot } from "./screenshotCapture";
 const NAV_SELECTORS = [
   "nav a",
   "header a",
+  "aside a",
   ".sidebar a",
   ".side-nav a",
   ".menu a",
   ".navigation a",
   "[role='navigation'] a",
   "[role='menubar'] a",
+  "[role='menuitem'] a",
+  "[role='tab'] a",
   ".nav-item a",
   ".menu-item a",
   ".navbar a",
+  ".MuiDrawer-root a",
+  ".ant-menu a",
+  "[data-testid*='nav'] a",
+  "[data-testid*='menu'] a",
+  "[class*='Sidebar'] a",
+  "[class*='Nav'] a",
+  "[class*='Menu'] a",
 ];
+
+// Fallback: any same-origin <a> when nav selectors return nothing
+const FALLBACK_SELECTOR = "a[href]";
 
 export async function discoverScreens(
   page: Page
@@ -67,14 +80,26 @@ async function discoverAtDepth(
   console.log(`  [depth ${depth}] Visiting: ${url}`);
 
   try {
-    await page.goto(url, {
-      waitUntil: "networkidle",
-      timeout: 20000,
-    });
+    // SPAs often never reach networkidle (polling, websockets).
+    // Use domcontentloaded + a render delay, fall back gracefully on timeout.
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+    } catch (gotoErr) {
+      console.warn(`    page.goto warning: ${(gotoErr as Error).message} — devam ediliyor`);
+    }
 
-    await page.waitForTimeout(800);
+    // Give the SPA a chance to render
+    await page.waitForTimeout(2000);
+    try {
+      await page.waitForLoadState("load", { timeout: 5000 });
+    } catch {
+      // ignore — some pages never fire 'load'
+    }
 
     const title = await page.title();
+    const finalUrl = page.url();
+    console.log(`    Page loaded: title="${title}" url="${finalUrl}"`);
+
     const { screenshotPath, screenshotBase64 } =
       await captureScreenshot(page, path);
 
@@ -135,31 +160,42 @@ async function extractNavLinks(
   for (const selector of NAV_SELECTORS) {
     try {
       const found = await page.$$eval(selector, (els) =>
-        els
-          .map((el) => (el as HTMLAnchorElement).href)
-          .filter(Boolean)
+        els.map((el) => (el as HTMLAnchorElement).href).filter(Boolean)
       );
-
       hrefs.push(...found);
     } catch {
       // selector not found on this page — skip
     }
   }
 
+  // Fallback: if nav selectors yielded nothing, collect ALL same-origin links
+  if (hrefs.length === 0) {
+    try {
+      const all = await page.$$eval(FALLBACK_SELECTOR, (els) =>
+        els.map((el) => (el as HTMLAnchorElement).href).filter(Boolean)
+      );
+      console.log(`    nav selectors empty — fallback gathered ${all.length} <a> elements`);
+      hrefs.push(...all);
+    } catch {
+      // ignore
+    }
+  }
+
   const unique = [...new Set(hrefs)];
 
-  return unique.filter((link) => {
+  const filtered = unique.filter((link) => {
     try {
       const linkUrl = new URL(link);
       const base = new URL(baseUrl);
-
       return (
         linkUrl.origin === base.origin &&
         !link.includes("#") &&
-        !link.match(/\.(pdf|xlsx|csv|zip|docx|png|jpg|svg)$/i)
+        !link.match(/\.(pdf|xlsx|csv|zip|docx|png|jpg|svg|ico)$/i)
       );
     } catch {
       return false;
     }
   });
+
+  return filtered;
 }

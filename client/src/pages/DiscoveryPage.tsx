@@ -25,8 +25,16 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
   const [docJobLoading, setDocJobLoading] = useState(false);
   const [appUrl, setAppUrl] = useState("");
   const [contextOpen, setContextOpen] = useState(true);
-  const [keywords, setKeywords] = useState("");
-  const [confluencePages, setConfluencePages] = useState("");
+  const [keywords, setKeywords] = useState(() => localStorage.getItem("ctx_keywords") ?? "");
+  const [confluencePages, setConfluencePages] = useState(() => localStorage.getItem("ctx_confluence_pages") ?? "");
+  const [contextSaved, setContextSaved] = useState(false);
+
+  function saveContext() {
+    localStorage.setItem("ctx_keywords", keywords);
+    localStorage.setItem("ctx_confluence_pages", confluencePages);
+    setContextSaved(true);
+    setTimeout(() => setContextSaved(false), 2000);
+  }
 
   const activeStep =
     docJobLoading ? 4
@@ -304,16 +312,27 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
               />
             </div>
-            <div className="flex gap-2 pt-1">
-              <button className="px-4 py-1.5 bg-gray-900 text-white text-[13px] font-medium rounded-lg hover:bg-gray-800">
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={saveContext}
+                className="px-4 py-1.5 bg-gray-900 text-white text-[13px] font-medium rounded-lg hover:bg-gray-800"
+              >
                 Kaydet
               </button>
               <button
-                onClick={() => { setKeywords(""); setConfluencePages(""); }}
+                onClick={() => {
+                  setKeywords("");
+                  setConfluencePages("");
+                  localStorage.removeItem("ctx_keywords");
+                  localStorage.removeItem("ctx_confluence_pages");
+                }}
                 className="px-4 py-1.5 border border-gray-200 text-gray-600 text-[13px] rounded-lg hover:bg-gray-50"
               >
                 Temizle
               </button>
+              {contextSaved && (
+                <span className="text-[12px] text-green-600 ml-2">✓ Kaydedildi</span>
+              )}
             </div>
           </div>
         )}

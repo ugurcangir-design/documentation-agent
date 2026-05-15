@@ -47,6 +47,18 @@ export async function runDiscoveryJob(
 
     const discoveredScreens = await discoverScreens(page);
 
+    emitJobEvent(jobId, {
+      type: "progress",
+      message: `Otomatik tarama: ${discoveredScreens.length} ekran bulundu`,
+    });
+
+    if (discoveredScreens.length === 0 && extraUrls.length === 0) {
+      emitJobEvent(jobId, {
+        type: "progress",
+        message: "Uyarı: Otomatik tarama sıfır link buldu. Login başarısız olmuş olabilir veya sayfa sidebar/nav yapısı tanınmıyor. Aşağıdaki 'Ek URL Ekle' alanından sayfa URL'lerini manuel ekleyebilirsiniz.",
+      });
+    }
+
     // Add manually provided extra URLs
     for (const url of extraUrls) {
       if (jobCancellation.isCancelled(jobId)) break;
@@ -64,11 +76,11 @@ export async function runDiscoveryJob(
           const parsed = new URL(url);
 
           await page.goto(url, {
-            waitUntil: "networkidle",
-            timeout: 15000,
+            waitUntil: "domcontentloaded",
+            timeout: 25000,
           });
 
-          await page.waitForTimeout(500);
+          await page.waitForTimeout(2000);
 
           const title = await page.title();
           const { screenshotPath, screenshotBase64 } =
