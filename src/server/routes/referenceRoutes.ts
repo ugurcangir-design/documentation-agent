@@ -7,6 +7,11 @@ import http from "http";
 
 import { referenceStore } from "../store/referenceStore";
 import { env } from "../../config/env";
+import {
+  getValidAccessToken,
+  getStoredTokens,
+  getConfluenceApiBase,
+} from "../auth/atlassianAuth";
 
 const router = Router();
 
@@ -36,74 +41,77 @@ router.post("/confluence/fetch", async (req: Request, res: Response) => {
   const { url } = req.body as { url?: string };
 
   if (!url) {
-    res.status(400).json({ error: "url required" });
+    res.status(400).json({ error: "url gerekli" });
     return;
   }
 
-  if (!env.confluenceBaseUrl || !env.confluenceEmail || !env.confluenceApiToken) {
-    res.status(400).json({ error: "Confluence credentials not configured in Settings" });
+  // Determine auth: OAuth tokens preferred, fall back to API token
+  const tokens = getStoredTokens();
+  const hasLegacy = env.confluenceBaseUrl && env.confluenceEmail && env.confluenceApiToken;
+
+  if (!tokens && !hasLegacy) {
+    res.status(400).json({
+      error: "Confluence bağlantısı yok. Ayarlar'dan Atlassian OAuth ile bağlanın.",
+    });
     return;
   }
 
   try {
-    // Extract page ID from URL (works for both /wiki/spaces/... and /pages/12345)
-    let pageId = "";
-    const idMatch = url.match(/\/pages\/(\d+)/);
-    if (idMatch) {
-      pageId = idMatch[1] ?? "";
+    let apiBase: string;
+    let authHeader: string;
+
+    if (tokens) {
+      const { accessToken, cloudId } = await getValidAccessToken();
+      apiBase = `${getConfluenceApiBase(cloudId)}/wiki/rest/api`;
+      authHeader = `Bearer ${accessToken}`;
     } else {
-      // Try to search by title if it's a named URL
-      const titleMatch = url.match(/\/([^/]+)$/);
-      const title = titleMatch ? decodeURIComponent(titleMatch[1] ?? "").replace(/\+/g, " ") : "";
-      const searchUrl = `${env.confluenceBaseUrl}/rest/api/content?title=${encodeURIComponent(title)}&expand=body.storage&limit=1`;
-      const auth = Buffer.from(`${env.confluenceEmail}:${env.confluenceApiToken}`).toString("base64");
-      const searchResp = await fetchUrl(searchUrl + `&Authorization=Basic ${auth}`);
-      const searchData = JSON.parse(searchResp) as { results?: Array<{ id: string }> };
-      pageId = searchData.results?.[0]?.id ?? "";
+      apiBase = `${env.confluenceBaseUrl.replace(/\/$/, "")}/wiki/rest/api`;
+      authHeader =
+        "Basic " + Buffer.from(`${env.confluenceEmail}:${env.confluenceApiToken}`).toString("base64");
     }
 
+    // Extract page ID from URL
+    const idMatch = url.match(/\/pages\/(\d+)/);
+    const pageId = idMatch?.[1] ?? "";
     if (!pageId) {
-      res.status(400).json({ error: "Could not extract page ID from URL" });
+      res.status(400).json({ error: "URL'den sayfa ID çıkarılamadı. '/pages/12345' formatında bir URL girin." });
       return;
     }
 
-    // Fetch page from Confluence API
-    const apiUrl = `${env.confluenceBaseUrl}/rest/api/content/${pageId}?expand=body.storage,space,version`;
-    const auth = Buffer.from(`${env.confluenceEmail}:${env.confluenceApiToken}`).toString("base64");
-
-    const rawResp = await fetchUrl(apiUrl);
-    // Re-fetch with auth header via axios pattern using native http
+    const apiUrl = `${apiBase}/content/${pageId}?expand=body.storage,space,version`;
     const pageResp = await new Promise<string>((resolve, reject) => {
       const parsed = new URL(apiUrl);
       const options = {
         hostname: parsed.hostname,
+        port: parsed.port || undefined,
         path: parsed.pathname + parsed.search,
-        headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
+        headers: { Authorization: authHeader, Accept: "application/json" },
       };
       const client = parsed.protocol === "https:" ? https : http;
-      client.get(options, (res) => {
+      client.get(options, (res2) => {
         let d = "";
-        res.on("data", (chunk: Buffer) => { d += chunk.toString(); });
-        res.on("end", () => resolve(d));
-        res.on("error", reject);
+        res2.on("data", (chunk: Buffer) => { d += chunk.toString(); });
+        res2.on("end", () => resolve(d));
+        res2.on("error", reject);
       }).on("error", reject);
     });
 
     const page = JSON.parse(pageResp) as {
-      id: string;
-      title: string;
-      space: { key: string };
-      body: { storage: { value: string } };
+      id?: string;
+      title?: string;
+      space?: { key?: string };
+      body?: { storage?: { value?: string } };
+      message?: string;
     };
 
-    // Strip HTML tags to get plain text
-    const htmlContent = page.body?.storage?.value ?? "";
-    const plainText = htmlContent
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    if (!page.id) {
+      res.status(400).json({ error: page.message ?? "Sayfa bulunamadı veya erişim yok." });
+      return;
+    }
 
-    // Save to file
+    const htmlContent = page.body?.storage?.value ?? "";
+    const plainText = htmlContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
     const dir = path.join(REFS_DIR, "confluence");
     fs.mkdirSync(dir, { recursive: true });
     const contentFile = path.join(dir, `${page.id}.txt`);
@@ -112,7 +120,7 @@ router.post("/confluence/fetch", async (req: Request, res: Response) => {
     const ref = referenceStore.addConfluence({
       url,
       pageId: page.id,
-      title: page.title,
+      title: page.title ?? "(başlıksız)",
       spaceKey: page.space?.key ?? "",
       contentFile,
       syncedAt: new Date().toISOString(),
@@ -132,39 +140,102 @@ router.delete("/confluence/:id", (req: Request, res: Response) => {
 });
 
 // ── Swagger: fetch spec from URL ─────────────────────────────────
+function fetchWithRedirects(
+  url: string,
+  authorization?: string,
+  maxRedirects = 3
+): Promise<{ status: number; body: string; contentType: string }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const headers: Record<string, string> = { Accept: "application/json,text/plain,*/*" };
+    if (authorization) headers["Authorization"] = authorization;
+
+    const options = {
+      hostname: parsed.hostname,
+      port: parsed.port || undefined,
+      path: parsed.pathname + parsed.search,
+      headers,
+    };
+    const client = parsed.protocol === "https:" ? https : http;
+    client.get(options, (response) => {
+      const status = response.statusCode ?? 0;
+      const ct = (response.headers["content-type"] as string) ?? "";
+
+      if (status >= 300 && status < 400 && response.headers.location && maxRedirects > 0) {
+        const next = new URL(response.headers.location as string, url).toString();
+        response.resume();
+        fetchWithRedirects(next, authorization, maxRedirects - 1)
+          .then(resolve)
+          .catch(reject);
+        return;
+      }
+
+      let d = "";
+      response.on("data", (chunk: Buffer) => { d += chunk.toString(); });
+      response.on("end", () => resolve({ status, body: d, contentType: ct }));
+      response.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
 router.post("/swagger/fetch", async (req: Request, res: Response) => {
-  const { url, name } = req.body as { url?: string; name?: string };
+  const { url, name, authorization } = req.body as {
+    url?: string;
+    name?: string;
+    authorization?: string;
+  };
 
   if (!url) {
-    res.status(400).json({ error: "url required" });
+    res.status(400).json({ error: "url gerekli" });
     return;
   }
 
   try {
-    const rawText = await new Promise<string>((resolve, reject) => {
-      const parsed = new URL(url);
-      const options = { hostname: parsed.hostname, path: parsed.pathname + parsed.search };
-      const client = parsed.protocol === "https:" ? https : http;
-      client.get(options, (res) => {
-        let d = "";
-        res.on("data", (chunk: Buffer) => { d += chunk.toString(); });
-        res.on("end", () => resolve(d));
-        res.on("error", reject);
-      }).on("error", reject);
-    });
+    const { status, body, contentType } = await fetchWithRedirects(
+      url,
+      authorization?.trim() || undefined
+    );
 
-    const spec = JSON.parse(rawText) as {
-      info?: { title?: string };
-      paths?: Record<string, unknown>;
-    };
+    if (status === 401 || status === 403) {
+      res.status(400).json({
+        error: `Yetkisiz erişim (HTTP ${status}). Authorization header'ı kontrol edin.`,
+      });
+      return;
+    }
+
+    if (status >= 400) {
+      res.status(400).json({ error: `Sunucu HTTP ${status} döndürdü.` });
+      return;
+    }
+
+    const trimmed = body.trim();
+    const looksLikeHtml = trimmed.startsWith("<") || contentType.includes("text/html");
+
+    if (looksLikeHtml) {
+      res.status(400).json({
+        error:
+          "Sunucu JSON yerine HTML döndürdü. Genellikle giriş gerektirir — Authorization (Bearer token) ekleyin veya açık erişimli swagger URL'sini kullanın.",
+      });
+      return;
+    }
+
+    let spec: { info?: { title?: string }; paths?: Record<string, unknown> };
+    try {
+      spec = JSON.parse(body) as typeof spec;
+    } catch {
+      res.status(400).json({
+        error: `Yanıt JSON olarak ayrıştırılamadı. Content-Type: ${contentType || "yok"}. İlk 200 karakter: ${body.slice(0, 200)}`,
+      });
+      return;
+    }
 
     const endpointCount = Object.keys(spec.paths ?? {}).length;
-    const specName = name || spec.info?.title || new URL(url).hostname;
+    const specName = name?.trim() || spec.info?.title || new URL(url).hostname;
 
     const dir = path.join(process.cwd(), "data", "swagger");
     fs.mkdirSync(dir, { recursive: true });
     const specFile = path.join(dir, `${Date.now()}.json`);
-    fs.writeFileSync(specFile, rawText, "utf-8");
+    fs.writeFileSync(specFile, body, "utf-8");
 
     const ref = referenceStore.addSwagger({
       url,

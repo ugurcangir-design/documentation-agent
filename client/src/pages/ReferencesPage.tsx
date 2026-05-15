@@ -24,6 +24,7 @@ export default function ReferencesPage() {
   // Swagger
   const [swagUrl, setSwagUrl] = useState("");
   const [swagName, setSwagName] = useState("");
+  const [swagAuth, setSwagAuth] = useState("");
 
   // Upload
   const fileRef = useRef<HTMLInputElement>(null);
@@ -61,10 +62,10 @@ export default function ReferencesPage() {
       const r = await fetch("/api/references/swagger/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: swagUrl, name: swagName }),
+        body: JSON.stringify({ url: swagUrl, name: swagName, authorization: swagAuth }),
       });
       if (!r.ok) throw new Error((await r.json() as { error: string }).error);
-      setSwagUrl(""); setSwagName("");
+      setSwagUrl(""); setSwagName(""); setSwagAuth("");
       await load();
     } catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
@@ -205,33 +206,56 @@ export default function ReferencesPage() {
       {tab === "swagger" && (
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="text-[13px] font-semibold text-gray-700 mb-3">Swagger / OpenAPI Endpoint Ekle</h3>
-            <p className="text-[12px] text-gray-400 mb-3">
-              Swagger JSON URL'si girin. Endpoint listesi çekilerek teknik döküman yazımında referans olarak kullanılır.
+            <h3 className="text-[13px] font-semibold text-gray-700">BE Servisi Ekle / Güncelle (Swagger URL)</h3>
+            <p className="text-[12px] text-gray-400 mt-0.5 mb-4">
+              Swagger / OpenAPI spec URL'si. Endpoint listesi teknik döküman yazımında referans olarak kullanılır.
             </p>
-            <div className="space-y-2 mb-3">
-              <input
-                value={swagName}
-                onChange={(e) => setSwagName(e.target.value)}
-                placeholder="Servis adı (örn: Kullanıcı Yönetimi API)"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-              />
-              <div className="flex gap-2">
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[12px] font-medium text-gray-700 mb-1">Servis Adı</label>
+                <input
+                  value={swagName}
+                  onChange={(e) => setSwagName(e.target.value)}
+                  placeholder="örn. payment-service, risk-api"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-medium text-gray-700 mb-1">Swagger URL</label>
                 <input
                   value={swagUrl}
                   onChange={(e) => setSwagUrl(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && fetchSwagger()}
-                  placeholder="https://api.sirket.com/swagger.json veya /v2/api-docs"
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                  placeholder="https://dev-servis.example.com/v3/api-docs"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
                 />
-                <button
-                  onClick={fetchSwagger}
-                  disabled={loading || !swagUrl.trim()}
-                  className="px-4 py-2 bg-blue-600 text-white text-[13px] font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40"
-                >
-                  {loading ? "Çekiliyor..." : "Ekle"}
-                </button>
               </div>
+
+              <div>
+                <label className="block text-[12px] font-medium text-gray-700 mb-1">
+                  Authorization <span className="text-gray-400 font-normal">(opsiyonel)</span>
+                </label>
+                <input
+                  value={swagAuth}
+                  onChange={(e) => setSwagAuth(e.target.value)}
+                  placeholder="Bearer TOKEN"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Korumalı swagger için "Bearer …" veya "Basic …" şeklinde tam header değeri.
+                </p>
+              </div>
+
+              <button
+                onClick={fetchSwagger}
+                disabled={loading || !swagUrl.trim()}
+                className="px-4 py-2 bg-blue-600 text-white text-[13px] font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center gap-2"
+              >
+                {loading && <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                {loading ? "Çekiliyor..." : "Ekle / Güncelle"}
+              </button>
             </div>
           </div>
 

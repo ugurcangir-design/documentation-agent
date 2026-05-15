@@ -1,5 +1,10 @@
 import axios from "axios";
 import { env } from "../config/env";
+import {
+  getValidAccessToken,
+  getConfluenceApiBase,
+  getStoredTokens,
+} from "../server/auth/atlassianAuth";
 import type {
   DocumentSection,
   DocumentSourceType,
@@ -8,11 +13,7 @@ import type {
 interface ConfluencePage {
   id: string;
   title: string;
-  body: {
-    storage: {
-      value: string;
-    };
-  };
+  body: { storage: { value: string } };
 }
 
 function stripHtml(html: string): string {
@@ -35,66 +36,46 @@ async function fetchPages(
   limit = 50
 ): Promise<ConfluencePage[]> {
   const url =
-    `${baseUrl}/wiki/rest/api/content` +
+    `${baseUrl}/rest/api/content` +
     `?type=page&spaceKey=${spaceKey}` +
     `&expand=body.storage` +
     `&start=${start}&limit=${limit}`;
 
-  const response = await axios.get<{
-    results: ConfluencePage[];
-    size: number;
-  }>(url, {
-    headers: {
-      Authorization: authHeader,
-      "Content-Type": "application/json",
-    },
+  const response = await axios.get<{ results: ConfluencePage[]; size: number }>(url, {
+    headers: { Authorization: authHeader, Accept: "application/json" },
   });
 
   const pages = response.data.results;
-
   if (pages.length === limit) {
-    const next = await fetchPages(
-      baseUrl,
-      spaceKey,
-      authHeader,
-      start + limit,
-      limit
-    );
+    const next = await fetchPages(baseUrl, spaceKey, authHeader, start + limit, limit);
     return [...pages, ...next];
   }
-
   return pages;
 }
 
-export async function readConfluencePages(): Promise<
-  DocumentSection[]
-> {
-  if (
-    !env.confluenceBaseUrl ||
-    !env.confluenceEmail ||
-    !env.confluenceApiToken ||
-    !env.confluenceSpaceKey
-  ) {
-    return [];
-  }
+export async function readConfluencePages(): Promise<DocumentSection[]> {
+  if (!env.confluenceSpaceKey) return [];
 
   try {
-    const baseUrl = env.confluenceBaseUrl.replace(/\/$/, "");
-    const authHeader =
-      "Basic " +
-      Buffer.from(
-        `${env.confluenceEmail}:${env.confluenceApiToken}`
-      ).toString("base64");
+    let baseUrl: string;
+    let authHeader: string;
 
-    const pages = await fetchPages(
-      baseUrl,
-      env.confluenceSpaceKey,
-      authHeader
-    );
+    if (getStoredTokens()) {
+      // OAuth path
+      const { accessToken, cloudId } = await getValidAccessToken();
+      baseUrl = `${getConfluenceApiBase(cloudId)}/wiki`;
+      authHeader = `Bearer ${accessToken}`;
+    } else if (env.confluenceBaseUrl && env.confluenceEmail && env.confluenceApiToken) {
+      // Legacy API token fallback
+      baseUrl = `${env.confluenceBaseUrl.replace(/\/$/, "")}/wiki`;
+      authHeader =
+        "Basic " + Buffer.from(`${env.confluenceEmail}:${env.confluenceApiToken}`).toString("base64");
+    } else {
+      return [];
+    }
 
-    console.log(
-      `  Confluence: ${pages.length} sayfa çekildi (space: ${env.confluenceSpaceKey})`
-    );
+    const pages = await fetchPages(baseUrl, env.confluenceSpaceKey, authHeader);
+    console.log(`  Confluence: ${pages.length} sayfa çekildi (space: ${env.confluenceSpaceKey})`);
 
     return pages.map((page) => ({
       id: `confluence_${page.id}`,
@@ -105,9 +86,7 @@ export async function readConfluencePages(): Promise<
       content: stripHtml(page.body.storage.value),
     }));
   } catch (err) {
-    console.warn(
-      `  Confluence okuma başarısız: ${(err as Error).message}`
-    );
+    console.warn(`  Confluence okuma başarısız: ${(err as Error).message}`);
     return [];
   }
 }

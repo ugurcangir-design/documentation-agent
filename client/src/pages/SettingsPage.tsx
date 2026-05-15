@@ -7,6 +7,8 @@ interface SettingsValues {
   APP_BASE_URL: string;
   APP_USERNAME: string;
   APP_PASSWORD: string;
+  ATLASSIAN_OAUTH_CLIENT_ID: string;
+  ATLASSIAN_OAUTH_CLIENT_SECRET: string;
   CONFLUENCE_BASE_URL: string;
   CONFLUENCE_EMAIL: string;
   CONFLUENCE_API_TOKEN: string;
@@ -22,6 +24,8 @@ const DEFAULTS: SettingsValues = {
   APP_BASE_URL: "",
   APP_USERNAME: "",
   APP_PASSWORD: "",
+  ATLASSIAN_OAUTH_CLIENT_ID: "",
+  ATLASSIAN_OAUTH_CLIENT_SECRET: "",
   CONFLUENCE_BASE_URL: "",
   CONFLUENCE_EMAIL: "",
   CONFLUENCE_API_TOKEN: "",
@@ -30,12 +34,30 @@ const DEFAULTS: SettingsValues = {
   MAX_DISCOVERY_DEPTH: "2",
 };
 
+interface OAuthStatus {
+  clientConfigured: boolean;
+  connected: boolean;
+  siteUrl: string | null;
+  cloudId: string | null;
+  scope: string | null;
+  expiresAt: number | null;
+  redirectUri: string;
+}
+
 export default function SettingsPage() {
   const [values, setValues] = useState<SettingsValues>(DEFAULTS);
   const [configured, setConfigured] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [oauth, setOauth] = useState<OAuthStatus | null>(null);
+
+  const refreshOauth = () => {
+    fetch("/api/auth/atlassian/status")
+      .then((r) => r.json())
+      .then((d: OAuthStatus) => setOauth(d))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     fetch("/api/settings")
@@ -45,7 +67,40 @@ export default function SettingsPage() {
         setConfigured(data.configured);
       })
       .catch(() => {});
+    refreshOauth();
+    const i = setInterval(refreshOauth, 5000);
+    return () => clearInterval(i);
   }, []);
+
+  async function connectAtlassian() {
+    // Save credentials first so they're available server-side
+    await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    window.open("/api/auth/atlassian/start", "_blank", "width=620,height=720");
+  }
+
+  async function disconnectAtlassian() {
+    await fetch("/api/auth/atlassian/disconnect", { method: "POST" });
+    refreshOauth();
+  }
+
+  async function testAtlassian() {
+    setError(null);
+    try {
+      const r = await fetch("/api/auth/atlassian/test");
+      const d = await r.json() as { ok?: boolean; error?: string; status?: number; body?: string; sampleSpaceCount?: number };
+      if (d.ok) {
+        setSaved(true); setTimeout(() => setSaved(false), 2500);
+      } else {
+        setError(`Test başarısız: ${d.error ?? `HTTP ${d.status} — ${d.body?.slice(0, 200)}`}`);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -204,32 +259,71 @@ export default function SettingsPage() {
           </div>
         </Section>
 
-        {/* Confluence */}
-        <Section title="Confluence" icon="📘">
+        {/* Atlassian OAuth */}
+        <Section title="Atlassian (Confluence + Jira)" icon="📘">
           <p className="text-xs text-gray-400 mb-3">
-            Dökümanları yayınlamak için Atlassian Confluence bağlantısı
+            OAuth 2.0 ile bağlanın. Developer Console'da OAuth uygulaması oluşturun,
+            redirect URI olarak <code className="bg-gray-100 px-1 rounded text-[11px]">{oauth?.redirectUri ?? "http://localhost:3000/api/auth/atlassian/callback"}</code> ekleyin.
           </p>
+
+          {/* Connection status */}
+          <div className={`rounded-lg border p-3 mb-3 ${
+            oauth?.connected ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm font-medium ${oauth?.connected ? "text-green-800" : "text-gray-600"}`}>
+                  {oauth?.connected ? "✓ Bağlı" : "Bağlı değil"}
+                </p>
+                {oauth?.connected && (
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Site: <code className="bg-white px-1 rounded">{oauth.siteUrl}</code>
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {oauth?.connected ? (
+                  <>
+                    <button
+                      onClick={testAtlassian}
+                      className="px-3 py-1.5 text-xs border border-gray-200 text-gray-600 rounded-lg hover:bg-white"
+                    >
+                      Test Et
+                    </button>
+                    <button
+                      onClick={disconnectAtlassian}
+                      className="px-3 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50"
+                    >
+                      Bağlantıyı Kes
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={connectAtlassian}
+                    disabled={!values.ATLASSIAN_OAUTH_CLIENT_ID || !values.ATLASSIAN_OAUTH_CLIENT_SECRET}
+                    className="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40"
+                  >
+                    Atlassian'a Bağlan
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <Field
-            label="Confluence URL"
-            value={values.CONFLUENCE_BASE_URL}
-            onChange={(v) => set("CONFLUENCE_BASE_URL", v)}
-            placeholder="https://sirket.atlassian.net"
-            configured={isConfigured("CONFLUENCE_BASE_URL")}
+            label="OAuth Client ID"
+            value={values.ATLASSIAN_OAUTH_CLIENT_ID}
+            onChange={(v) => set("ATLASSIAN_OAUTH_CLIENT_ID", v)}
+            placeholder="developer.atlassian.com/console/myapps/"
+            configured={isConfigured("ATLASSIAN_OAUTH_CLIENT_ID")}
           />
           <Field
-            label="E-posta"
-            value={values.CONFLUENCE_EMAIL}
-            onChange={(v) => set("CONFLUENCE_EMAIL", v)}
-            placeholder="kullanici@sirket.com"
-            configured={isConfigured("CONFLUENCE_EMAIL")}
-          />
-          <Field
-            label="API Token"
-            value={values.CONFLUENCE_API_TOKEN}
-            onChange={(v) => set("CONFLUENCE_API_TOKEN", v)}
+            label="OAuth Client Secret"
+            value={values.ATLASSIAN_OAUTH_CLIENT_SECRET}
+            onChange={(v) => set("ATLASSIAN_OAUTH_CLIENT_SECRET", v)}
             type="password"
-            placeholder="ATATT3x..."
-            configured={isConfigured("CONFLUENCE_API_TOKEN")}
+            placeholder="••••••••••••"
+            configured={isConfigured("ATLASSIAN_OAUTH_CLIENT_SECRET")}
           />
           <div className="grid grid-cols-2 gap-3">
             <Field
@@ -247,6 +341,36 @@ export default function SettingsPage() {
               configured={isConfigured("CONFLUENCE_PARENT_PAGE_ID")}
             />
           </div>
+
+          <details className="mt-2">
+            <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+              Eski API token yöntemi (OAuth yoksa fallback)
+            </summary>
+            <div className="mt-3 space-y-3 pl-3 border-l-2 border-gray-100">
+              <Field
+                label="Confluence URL"
+                value={values.CONFLUENCE_BASE_URL}
+                onChange={(v) => set("CONFLUENCE_BASE_URL", v)}
+                placeholder="https://sirket.atlassian.net"
+                configured={isConfigured("CONFLUENCE_BASE_URL")}
+              />
+              <Field
+                label="E-posta"
+                value={values.CONFLUENCE_EMAIL}
+                onChange={(v) => set("CONFLUENCE_EMAIL", v)}
+                placeholder="kullanici@sirket.com"
+                configured={isConfigured("CONFLUENCE_EMAIL")}
+              />
+              <Field
+                label="API Token"
+                value={values.CONFLUENCE_API_TOKEN}
+                onChange={(v) => set("CONFLUENCE_API_TOKEN", v)}
+                type="password"
+                placeholder="ATATT3x..."
+                configured={isConfigured("CONFLUENCE_API_TOKEN")}
+              />
+            </div>
+          </details>
         </Section>
       </div>
 
