@@ -1,6 +1,36 @@
+# Dependencies
 node_modules/
+client/node_modules/
+
+# Environment — never commit secrets
 .env
-.DS_Store
-data/
-*.js.map
+.env.local
+
+# Generated data (large / ephemeral)
+data/screenshots/
+data/db/
+data/ai-output/
+data/output/
+data/cache/
+
+# BRD source files (may contain sensitive business docs)
+data/brd/*.docx
+
+# Build outputs
 dist/
+dist-electron/
+client/dist/
+*.js.map
+*.tsbuildinfo
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/

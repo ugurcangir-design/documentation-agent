@@ -1,18 +1,79 @@
 {
   "name": "documentation-agent",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
- "scripts": {
-  "dev": "tsx src/index.ts"
-},
+  "description": "DocAgent — Analysis Studio: Ekranları gezen, BRD + API + Confluence ile birleştiren döküman üretim ajanı",
+  "main": "electron/main.js",
+  "scripts": {
+    "server":          "tsx src/server/app.ts",
+    "client":          "cd client && npm run dev",
+    "dev":             "concurrently \"npm run server\" \"npm run client\"",
+    "electron":        "node scripts/generate-icon.cjs && electron .",
+    "build":           "npm run build:client",
+    "build:client":    "cd client && npm run build",
+    "dist":            "npm run build && electron-builder",
+    "cli":             "tsx src/index.ts",
+    "install:browsers":"playwright install chromium"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "build": {
+    "appId": "com.docagent.analysis-studio",
+    "productName": "DocAgent",
+    "copyright": "Copyright © 2025",
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "assets"
+    },
+    "files": [
+      "electron/**",
+      "src/**",
+      "client/dist/**",
+      "node_modules/**",
+      "package.json",
+      "!node_modules/.cache",
+      "!data/screenshots",
+      "!data/db"
+    ],
+    "mac": {
+      "icon": "assets/icon.png",
+      "category": "public.app-category.developer-tools",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] }
+      ]
+    },
+    "win": {
+      "icon": "assets/icon.png",
+      "target": [{ "target": "nsis" }]
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "target": [{ "target": "AppImage" }]
+    }
+  },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "axios": "^1.7.0",
+    "cors": "^2.8.6",
+    "docx": "^9.6.1",
     "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "form-data": "^4.0.5",
+    "playwright": "^1.48.0",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/form-data": "^2.2.1",
+    "@types/node": "^25.8.0",
+    "@types/uuid": "^10.0.0",
+    "concurrently": "^9.2.1",
+    "electron": "^42.1.0",
+    "electron-builder": "^26.8.1",
+    "sharp": "^0.34.5"
   }
 }

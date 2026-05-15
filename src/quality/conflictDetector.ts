@@ -35,8 +35,9 @@ export function detectConflicts(
 
   for (let i = 0; i < sections.length; i++) {
     for (let j = i + 1; j < sections.length; j++) {
-      const a = sections[i].section;
-      const b = sections[j].section;
+      const a = sections[i]?.section;
+      const b = sections[j]?.section;
+      if (!a || !b) continue;
 
       const aContent = a.content.toLowerCase();
       const bContent = b.content.toLowerCase();
