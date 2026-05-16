@@ -69,6 +69,25 @@ export default function HistoryPage() {
     }
   }
 
+  async function cleanupAll() {
+    if (!confirm("TÜM job kayıtlarını silmek üzeresin (çalışıyor görünenler dahil). Devam edilsin mi?")) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/jobs/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: ["completed", "failed", "running", "pending"] }),
+      });
+      const d = await r.json() as { removed: number };
+      toast.show(`${d.removed} job silindi`, "success");
+      load();
+    } catch (e) {
+      toast.show((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="p-7 max-w-4xl mx-auto space-y-5">
       <div className="flex items-start justify-between">
@@ -78,15 +97,27 @@ export default function HistoryPage() {
             Tüm keşif ve döküman üretimi job'larının kaydı.
           </p>
         </div>
-        {jobs.some((j) => j.status === "completed" || j.status === "failed") && (
-          <button
-            onClick={cleanupCompleted}
-            disabled={busy}
-            className="px-3 py-1.5 text-[12px] border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
-          >
-            Tamamlananları Temizle
-          </button>
-        )}
+        <div className="flex gap-2">
+          {jobs.some((j) => j.status === "completed" || j.status === "failed") && (
+            <button
+              onClick={cleanupCompleted}
+              disabled={busy}
+              className="px-3 py-1.5 text-[12px] border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
+            >
+              Tamamlananları Temizle
+            </button>
+          )}
+          {jobs.some((j) => j.status === "running" || j.status === "pending") && (
+            <button
+              onClick={cleanupAll}
+              disabled={busy}
+              className="px-3 py-1.5 text-[12px] border border-red-300 text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-50"
+              title="Çalışıyor görünen orphan job'ları dahil hepsini sil"
+            >
+              Tümünü Sil
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter chips */}
@@ -152,15 +183,13 @@ export default function HistoryPage() {
                     {new Date(job.createdAt).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {job.status !== "running" && (
-                      <button
-                        onClick={() => deleteOne(job.id)}
-                        className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-[12px]"
-                        title="Sil"
-                      >
-                        ✕
-                      </button>
-                    )}
+                    <button
+                      onClick={() => deleteOne(job.id)}
+                      className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-[12px]"
+                      title={job.status === "running" ? "Zorla sil (orphan job ise)" : "Sil"}
+                    >
+                      ✕
+                    </button>
                   </td>
                 </tr>
               ))}
