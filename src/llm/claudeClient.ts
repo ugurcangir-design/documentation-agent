@@ -34,6 +34,18 @@ export interface ClaudeResult {
 }
 
 export async function callClaude(opts: ClaudeCallOptions): Promise<ClaudeResult> {
+  const imageCount = (opts.images?.length ?? 0) + (opts.imageBase64 || opts.imagePath ? 1 : 0);
+  const promptLen = opts.prompt.length;
+  console.log(`[claude] backend=${env.claudeBackend} prompt=${promptLen}c images=${imageCount}`);
+  if (process.env.DOCAGENT_DUMP_PROMPT) {
+    const fs = require("fs") as typeof import("fs");
+    const path = require("path") as typeof import("path");
+    const dir = path.join(process.cwd(), "data", "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    const f = path.join(dir, `prompt_${Date.now()}.txt`);
+    fs.writeFileSync(f, opts.prompt, "utf-8");
+    console.log(`[claude] prompt dumped → ${f}`);
+  }
   return env.claudeBackend === "api" ? callApi(opts) : callCli(opts);
 }
 

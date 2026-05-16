@@ -139,6 +139,14 @@ export async function runDocumentationJob(
     total,
   });
 
+  console.log(`[docjob ${jobId}] CONTEXT INVENTORY:`);
+  console.log(`  - Endpoints: ${allEndpoints.length}`);
+  console.log(`  - BRD/Confluence sections: ${allSections.length}`);
+  console.log(`  - Templates: ${templateContents.length} (total chars: ${templateContents.reduce((s, t) => s + t.length, 0)})`);
+  if (allSections.length > 0) {
+    console.log(`  - First 3 sections: ${allSections.slice(0, 3).map(s => `'${s.title}'`).join(", ")}`);
+  }
+
   // ── Process screens in parallel (with concurrency limit) ─────────
   let completed = 0;
 
