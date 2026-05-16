@@ -16,12 +16,28 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .map((c) => `### ${c.title} (${c.sourceType})\n${c.content}`)
     .join("\n\n");
 
+  const paragraphContext = ctx.paragraphMatches.length > 0
+    ? "\n\n### BRD'den İlave Paragraflar (uzun-kuyruk eşleşmeler)\n\n" +
+      ctx.paragraphMatches
+        .map((m) => `> _[${m.sectionTitle}]_ ${m.paragraph}`)
+        .join("\n\n")
+    : "";
+
   const apiContext = ctx.relatedEndpoints
     .map((r) => `- [${r.endpoint.method}] ${r.endpoint.path} — ${r.endpoint.summary || ""}`)
     .join("\n");
 
   const uiElements = ctx.analysis.uiElements
     .map((el) => `- ${el.type.toUpperCase()}: "${el.label}" — ${el.description}${el.action ? ` → ${el.action}` : ""}`)
+    .join("\n");
+
+  // Explicit per-element coverage requirement — forces narrative coverage
+  // of EVERY UI element the analyzer detected, not just a representative few.
+  const coverageList = ctx.analysis.uiElements
+    .map((el, i) => `${i + 1}. "${el.label}" (${el.type})`)
+    .join("\n");
+  const workflowList = ctx.analysis.workflows
+    .map((wf, i) => `${i + 1}. ${wf.name}`)
     .join("\n");
 
   const workflows = ctx.analysis.workflows
@@ -52,14 +68,26 @@ ${uiElements}
 ${workflows}
 
 İlgili BRD / Confluence Bölümleri:
-${brdContext || "(Yok)"}
+${brdContext || "(Yok)"}${paragraphContext}
 
 İlgili API Endpoint'leri:
 ${apiContext || "(Yok)"}
 ${stateBlock}${templateBlock}
 ---
 
-Bu ekran için KULLANICI KILAVUZU bölümü yaz. Teknik olmayan bir son kullanıcının anlayabileceği dilde olmalı.
+# KAPSAM ZORUNLULUĞU — KILAVUZUN HER ÖĞEYİ İŞLEMESİ ŞARTTIR
+
+Aşağıdaki ${ctx.analysis.uiElements.length} UI öğesi ekranda tespit edildi. Kılavuzun bir yerinde **her birinden bahsetmek zorundasın** (envanter tablosu olarak değil, akışlar/bölümler içinde doğal anlatımla):
+
+${coverageList}
+
+Aşağıdaki ${ctx.analysis.workflows.length} iş akışı için ayrıca **Adım Adım Kullanım** altında ayrı alt başlık aç:
+
+${workflowList || "(akış tespit edilmedi — sen 3-5 ana akışı görsellerden çıkar)"}
+
+---
+
+Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine hakim olabilmeli. Hiçbir görünür element atlanmamalı.
 
 ${buildPromptFooter(cfg)}`;
 }

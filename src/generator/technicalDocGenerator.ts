@@ -11,6 +11,11 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .map((c) => `### ${c.title} (${c.sourceType})\n${c.content}`)
     .join("\n\n");
 
+  const paragraphContext = ctx.paragraphMatches.length > 0
+    ? "\n\n### BRD İlave Paragraflar (long-tail)\n" +
+      ctx.paragraphMatches.map((m) => `> _[${m.sectionTitle}]_ ${m.paragraph}`).join("\n\n")
+    : "";
+
   const apiContext = ctx.relatedEndpoints
     .map((r) => `- [${r.endpoint.method}] ${r.endpoint.path} — ${r.endpoint.summary || ""} (service: ${r.endpoint.serviceName})`)
     .join("\n");
@@ -40,14 +45,19 @@ UI Elementleri:
 ${uiElements}
 
 İlgili BRD / Confluence Bölümleri:
-${brdContext || "(Yok)"}
+${brdContext || "(Yok)"}${paragraphContext}
 
 İlgili API Endpoint'leri:
 ${apiContext || "(Yok)"}
 ${stateBlock}${templateBlock}
 ---
 
-Bu ekran için TEKNİK DÖKÜMAN bölümü yaz. Geliştirici ve sistem analisti hedef kitlesi.
+# KAPSAM
+Aşağıdaki ${ctx.analysis.uiElements.length} UI bileşeni ekranda tespit edildi. Her birine **Bileşen Envanteri tablosunda bir satır ayır**:
+
+${ctx.analysis.uiElements.map((el, i) => `${i + 1}. ${el.label} (${el.type})`).join("\n")}
+
+Bu ekran için TEKNİK DÖKÜMAN yaz. Geliştirici sayfayı sıfırdan inşa edebilsin, QA test case çıkarabilsin.
 
 ${buildPromptFooter(cfg)}`;
 }
