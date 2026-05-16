@@ -298,12 +298,35 @@ export async function exploreInteractiveStates(
       );
       log(`  ✓ ${kind} yakalandı: ${label}`);
 
+      // Sub-explore: while the panel/modal is still open, focus any newly
+      // visible date input or text input so its label/options are revealed.
+      try {
+        const subInputs = page.locator(
+          'input[type="date"]:visible, input[type="datetime-local"]:visible, ' +
+          'input[type="text"]:not([disabled]):not([readonly]):visible, ' +
+          'input[type="search"]:visible, ' +
+          '[class*="DatePicker"]:visible, [role="combobox"]:visible'
+        );
+        const subCount = await subInputs.count();
+        if (subCount > 0) {
+          const sub = subInputs.first();
+          await sub.focus({ timeout: 1500 }).catch(async () => {
+            await sub.click({ timeout: 1500, force: true }).catch(() => {});
+          });
+          await page.waitForTimeout(700);
+          await pushState(
+            `${kind} içi alan focus: "${label}"`,
+            `${kind} açıkken alt input/date focus`,
+            `${basePath}_btn_${i}_inner`
+          );
+          log(`  ↳ ${kind} içi state yakalandı (${subCount} alt alan görünür)`);
+        }
+      } catch { /* noop */ }
+
       if (isModal) {
         await closeModal(page);
         await page.waitForTimeout(300);
       } else {
-        // Try Escape to close any popup; otherwise try clicking the
-        // button again to toggle off (e.g. Filters panel)
         await page.keyboard.press("Escape").catch(() => {});
         await page.waitForTimeout(200);
       }
@@ -497,7 +520,8 @@ export async function exploreInteractiveStates(
       '[class*="info-icon" i]', '[class*="InfoIcon"]',
       '[class*="help-icon" i]', '[class*="HelpIcon"]',
       '[class*="question" i]', '[data-tooltip]',
-      '[title]:not(a):not(button):not(html):not(body)',
+      '[title]:not(html):not(body)',
+      'th[title]', 'td[title]', '[aria-describedby]',
     ].join(", "),
     MAX.hovers, log, "Yardım icon", false,
     async (_loc, _label, i) => {

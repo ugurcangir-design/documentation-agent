@@ -23,8 +23,9 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     ? `\n\n### Şablon Referansı (Anlatım dilini, başlık yapısını ve detay seviyesini taklit et — içeriği kopyalama)\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 4000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n`
     : "";
 
-  const stateBlock = (ctx.screen.states ?? []).length > 0
-    ? `\n\nTest user simülasyonu sırasında yakalanan ek state'ler de görsellerde mevcuttur:\n${(ctx.screen.states ?? []).map((s, i) => `${i + 2}. ${s.label} — ${s.triggeredBy}`).join("\n")}\n\nBu state'lerden hangi UI bileşeninin hangi etkileşimle değiştiğini, hangi modal/form'un hangi butonla açıldığını teknik açıdan çıkar.\n`
+  const stateCount = (ctx.screen.states ?? []).length;
+  const stateBlock = stateCount > 0
+    ? `\n\nSANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ — 1 ana ekran + ${stateCount} test user simülasyon state'i. Etiketler:\n${(ctx.screen.states ?? []).map((s, i) => `  Görsel #${i + 2}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\nTEKNİK DÖKÜMANDA HER GÖRSELDEN BİLGİ ÇIKAR:\n- Her bileşenin tipi (button/input/select/datepicker/modal), props/state ihtiyacı\n- Form alanlarının validasyon kuralları (görsel ipuçlarından çıkarım yap)\n- Tablo kolonlarının veri tipleri ve sıralama davranışı\n- Modal/dialog açılış mekanizması ve form yapısı\n- Bileşen Envanteri tablosunda hiçbir öğeyi atlama\n`
     : "";
 
   return `${buildPromptHeader(cfg)}
