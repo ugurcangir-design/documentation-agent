@@ -9,9 +9,48 @@ import {
   BorderStyle,
   AlignmentType,
   Packer,
+  ImageRun,
 } from "docx";
 import fs from "fs";
+import path from "path";
 import type { StoredDocument } from "../server/store/documentStore";
+
+// Resolve a markdown image src (e.g. '/screenshots/foo.png') to an
+// absolute filesystem path under data/screenshots/.
+function resolveImagePath(src: string): string | null {
+  const trimmed = src.trim();
+  if (trimmed.startsWith("/screenshots/")) {
+    const file = trimmed.replace("/screenshots/", "");
+    return path.join(process.cwd(), "data", "screenshots", file);
+  }
+  if (trimmed.startsWith("data/screenshots/")) {
+    return path.join(process.cwd(), trimmed);
+  }
+  if (path.isAbsolute(trimmed) && fs.existsSync(trimmed)) return trimmed;
+  return null;
+}
+
+function imageParagraph(src: string, alt: string): Paragraph | null {
+  const filePath = resolveImagePath(src);
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    const buf = fs.readFileSync(filePath);
+    return new Paragraph({
+      children: [
+        new ImageRun({
+          data: buf,
+          transformation: { width: 540, height: 320 },
+          type: "png",
+        }),
+        new TextRun({ text: alt ? `\n${alt}` : "", italics: true, size: 16, color: "888888" }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200, after: 200 },
+    });
+  } catch {
+    return null;
+  }
+}
 
 function parseMarkdownToParagraphs(
   markdown: string
@@ -20,6 +59,16 @@ function parseMarkdownToParagraphs(
   const lines = markdown.split("\n");
 
   for (const line of lines) {
+    // Markdown image — single ![alt](src) on its own line
+    const imgMatch = line.match(/^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$/);
+    if (imgMatch) {
+      const p = imageParagraph(imgMatch[2]!, imgMatch[1] ?? "");
+      if (p) {
+        paragraphs.push(p);
+        continue;
+      }
+      // If image can't be loaded, fall through to plain-text rendering
+    }
     if (line.startsWith("# ")) {
       paragraphs.push(
         new Paragraph({

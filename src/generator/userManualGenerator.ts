@@ -48,9 +48,33 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     ? `\n\n### ÖRNEK ŞABLON KILAVUZ — BU FORMAT VE ÜSLUBA UY\n\nAşağıdaki örnek dökümanı dikkatle incele. Senin yazacağın kılavuz **bu dökümanın anlatım üslubu, paragraf-cümle yapısı, başlık tarzı ve detay seviyesinde** olmalı. İçeriği KOPYALAMA — sadece formu örnek al.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 8000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n\nÖZELLIKLE DİKKAT ET:\n- Şablon adımları nasıl numaralandırıyor → aynı şekilde yap\n- Şablon ne kadar açıklayıcı (her butonu ayrı paragraf mı, kısa madde mi)\n- Şablonun \"sen/siz\" hitabı nasıl → onu kullan\n- Şablonda kullanılan terimleri (örn: 'panel', 'sekme', 'kayıt') benimse\n`
     : "";
 
-  const stateCount = (ctx.screen.states ?? []).length;
+  // Build URL-based image catalog. Express serves files from
+  // data/screenshots/ at /screenshots/<basename>.
+  const basename = (p: string) => p.split("/").pop() ?? p;
+  const mainImgUrl = `/screenshots/${basename(ctx.screen.screenshotPath)}`;
+
+  const stateImageList = (ctx.screen.states ?? []).map((s, i) => ({
+    n: i + 2,
+    label: s.label,
+    triggeredBy: s.triggeredBy,
+    url: `/screenshots/${basename(s.screenshotPath)}`,
+  }));
+
+  const imageCatalog =
+    `### KULLANILABİLİR EKRAN GÖRÜNTÜLERİ\n\n` +
+    `Aşağıdaki görsellerin markdown image syntax'i hazırdır. ` +
+    `Kılavuzda ilgili anlatımın yanına bunları **doğrudan satır içine** EKLEMELİSİN:\n\n` +
+    `1. Ana ekran:\n   \`![Prematch Program ana ekran](${mainImgUrl})\`\n\n` +
+    stateImageList
+      .map(
+        (s) =>
+          `${s.n}. ${s.label} _(${s.triggeredBy})_:\n   \`![${s.label}](${s.url})\``
+      )
+      .join("\n\n");
+
+  const stateCount = stateImageList.length;
   const stateBlock = stateCount > 0
-    ? `\n\nSAHNANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ:\n  Görsel #1: Ana ekran\n${(ctx.screen.states ?? []).map((s, i) => `  Görsel #${i + 2}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\nBu görselleri kullanarak:\n- 'Adım Adım Kullanım' bölümünde her akışın hangi state'lerden geçtiğini doğal cümlelerle anlat (örn: 'Filters butonuna tıkladığında ekranın üst kısmında bir filtre paneli açılır — burada şu alanları görürsün…')\n- 'Modallar ve Yan Paneller' bölümünde her modal'ı ayrı alt başlık altında ele al: ne zaman açılır, içinde ne var, nasıl tamamlanır\n- 'Satır Üzerindeki İşlemler'de kebab/aksiyon menüsündeki tüm seçenekleri sırayla anlat\n\nUNUTMA: BİR KULLANICI KILAVUZU YAZIYORSUN, teknik bir doküman değil. Bileşen tablosu, açık sorular, hiyerarşi gibi teknik bölümler EKLEME.\n`
+    ? `\n\nSANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ:\n  Görsel #1: Ana ekran\n${stateImageList.map(s => `  Görsel #${s.n}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\n${imageCatalog}\n\nGÖRSEL EKLEME KURALI (ZORUNLU):\n- 'Ekrana İlk Bakış' bölümünün ilk paragrafından sonra **ana ekran görselini** ekle.\n- 'Adım Adım Kullanım' içindeki her akışta, ilgili modal/dropdown/panel ile etkileşim anlatılıyorsa **o state'in görselini** o adımın yanına ekle.\n- 'Modallar ve Yan Paneller' altındaki her alt başlıkta o modal'ın görselini başlığın hemen altında göster.\n- 'Filtreler ve Arama Seçenekleri' bölümünde filtre paneli açık görseli kullan.\n- 'Satır Üzerindeki İşlemler' bölümünde satır aksiyon menüsü görselleri kullan.\n- En az 6 farklı görsel kılavuzun farklı yerlerine yerleştirilmiş olmalı.\n- Görselleri AYNEN yukarıdaki listedeki path'lerle kullan (örn: \`![Filters paneli](/screenshots/event-management_prematch-program_btn_1.png)\`).\n\nUNUTMA: KILAVUZUN, kullanıcının ekran karşısında olmadan bile ne göreceğini görsellerle anlamasına izin vermeli.\n`
     : "";
 
   return `${buildPromptHeader(cfg)}
