@@ -329,11 +329,22 @@ router.post(
         const result = await mammoth.extractRawText({ path: req.file.path });
         plainText = result.value;
       } else if (ext === ".pdf") {
+        // pdf-parse v2+ exports PDFParse class with async getText()
         // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
+        const { PDFParse } = require("pdf-parse") as {
+          PDFParse: new (opts: { data: Uint8Array }) => {
+            getText: () => Promise<{ text: string }>;
+            destroy: () => void;
+          };
+        };
         const buf = fs.readFileSync(req.file.path);
-        const data = await pdfParse(buf);
-        plainText = data.text;
+        const parser = new PDFParse({ data: new Uint8Array(buf) });
+        try {
+          const result = await parser.getText();
+          plainText = result.text;
+        } finally {
+          parser.destroy();
+        }
       } else if (ext === ".txt" || ext === ".md") {
         plainText = fs.readFileSync(req.file.path, "utf-8");
       } else {

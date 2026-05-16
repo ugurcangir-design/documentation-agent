@@ -20,12 +20,12 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .join("\n");
 
   const templateBlock = templates.length > 0
-    ? `\n\n### Şablon Referansı (Anlatım dilini, başlık yapısını ve detay seviyesini taklit et — içeriği kopyalama)\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 4000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n`
+    ? `\n\n### Örnek Şablon (yapı referansı)\n\nDikkat: Aşağıdaki şablon kullanıcı kılavuzu olabilir — TEKNİK dökümanını şablonun tarzında değil, kendi başına teknik referans olarak yaz. Şablonu sadece terminoloji çıkarımı için kullanabilirsin.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} (sadece sözlük olarak kullan) ---\n${t.slice(0, 4000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n`
     : "";
 
   const stateCount = (ctx.screen.states ?? []).length;
   const stateBlock = stateCount > 0
-    ? `\n\nSANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ — 1 ana ekran + ${stateCount} test user simülasyon state'i. Etiketler:\n${(ctx.screen.states ?? []).map((s, i) => `  Görsel #${i + 2}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\nTEKNİK DÖKÜMANDA HER GÖRSELDEN BİLGİ ÇIKAR:\n- Her bileşenin tipi (button/input/select/datepicker/modal), props/state ihtiyacı\n- Form alanlarının validasyon kuralları (görsel ipuçlarından çıkarım yap)\n- Tablo kolonlarının veri tipleri ve sıralama davranışı\n- Modal/dialog açılış mekanizması ve form yapısı\n- Bileşen Envanteri tablosunda hiçbir öğeyi atlama\n`
+    ? `\n\nSANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ — 1 ana ekran + ${stateCount} test user simülasyon state'i. Etiketler:\n${(ctx.screen.states ?? []).map((s, i) => `  Görsel #${i + 2}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\nBu görsellerden:\n- 'Veri Tablosu' bölümünde kolon spesifikasyonlarını çıkar\n- 'Filtreleme Mekanizması' bölümünde filtre alanlarının davranışını yaz\n- 'Form ve Modal Spec'leri' bölümünde her modal'ın alan listesini ver\n- 'API Bağlantıları' bölümünde Swagger context'inden eşleştirme yap\n\nKullanıcı kılavuzunda anlatılan akışları TEKRAR YAZMA — sadece teknik spesifikasyon olarak listele.\n`
     : "";
 
   return `${buildPromptHeader(cfg)}
