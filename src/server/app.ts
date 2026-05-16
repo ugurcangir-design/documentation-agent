@@ -13,6 +13,7 @@ import promptRoutes from "./routes/promptRoutes";
 import referenceRoutes from "./routes/referenceRoutes";
 import statsRoutes from "./routes/statsRoutes";
 import authRoutes from "./routes/authRoutes";
+import { jobStore } from "./store/jobStore";
 
 const app = express();
 const PORT = process.env["PORT"] || 3000;
@@ -84,6 +85,28 @@ if (fs.existsSync(clientBuild)) {
         "Documentation Agent API. Run `cd client && npm run dev` for the UI.",
     });
   });
+}
+
+// ── Reap orphaned 'running' jobs from a previous process ─────────
+// Any job marked 'running' at startup is by definition dead — the
+// in-memory execution state did not survive the restart, so it
+// cannot continue to make progress. Mark them 'failed' on boot so
+// the UI stops showing a perpetual spinner.
+{
+  const allJobsAtBoot = jobStore.getAll();
+  let reaped = 0;
+  for (const j of allJobsAtBoot) {
+    if (j.status === "running" || j.status === "pending") {
+      jobStore.update(j.id, {
+        status: "failed",
+        completedAt: new Date().toISOString(),
+        error: "Sunucu yeniden başlatıldı — bu job tamamlanmadan kesildi",
+        progress: { ...j.progress, message: "Sunucu yeniden başlatıldı (orphan)" },
+      });
+      reaped++;
+    }
+  }
+  if (reaped > 0) console.log(`[boot] ${reaped} orphan job 'failed' olarak işaretlendi`);
 }
 
 app.listen(PORT, () => {
