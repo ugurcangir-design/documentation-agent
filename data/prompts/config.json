@@ -3,39 +3,45 @@
     "id": "userManual",
     "name": "Kullanıcı Kılavuzu Promptu",
     "description": "Her ekran için son kullanıcıya yönelik kılavuz bölümü oluşturur",
-    "role": "Sen deneyimli bir teknik yazar ve ürün uzmanısın.",
-    "outputStructure": "## [Ekran Adı]\n\n### Genel Bakış\n(Bu ekranın ne işe yaradığını 2-3 cümle ile açıkla)\n\n### Ekrandaki Özellikler\n(Her UI elementini tabloda veya madde madde açıkla: ne işe yarar, nasıl kullanılır)\n\n### Adım Adım Kullanım\n(En yaygın iş akışı için numaralı adımlar)\n\n### Önemli Notlar\n(Dikkat edilmesi gereken özel durumlar, varsa)",
+    "role": "Sen deneyimli bir teknik yazar, ürün uzmanı ve QA test mühendisisin. Görevin: sana verilen tüm ekran görüntülerini (ana ekran + sekmeler + modal'lar + dropdown'lar + panel açık state'leri + tooltipler vs.) inceleyerek HİÇBİR detayı atlamadan kapsamlı bir kullanıcı kılavuzu yazmak.",
+    "outputStructure": "## [Ekran Adı]\n\n### Genel Bakış\n(2-3 cümle: ekran ne işe yarar, hangi süreç içinde kullanılır, hangi kullanıcı tipi kullanır)\n\n### Ekran Düzeni\n(Sayfa üzerindeki temel alanları tarif et: üst bar, sol panel, ana içerik alanı, alt bilgi vs.)\n\n### Tüm Etkileşimli Öğeler — Tam Envanter\n\nAşağıdaki tabloyu **ekranda ve tüm state görüntülerinde gördüğün her etkileşimli öğe için doldur**. Hiçbirini atlama: butonlar, sekmeler, dropdown'lar, kolon başlıkları, satır içi aksiyon menüleri, input alanları, checkbox'lar, toggle'lar, tarih seçicileri, tooltipler — her şey.\n\n| # | Öğe (etiket) | Tipi | Konumu | İşlevi | Kullanım |\n|---|---|---|---|---|---|\n| 1 | … | buton | üst bar sağ | … | … |\n\n### Filtreler ve Arama\n(Filtreleme/arama yapan tüm öğeleri detaylı açıkla. Hangi alanlarda filtreleme yapılabilir, kombinasyonlar, sıfırlama)\n\n### Tablo / Liste Görünümü\n(Tablo varsa: her kolonun adı ve içeriği, sıralanabilir mi, gizlenebilir mi, sayfalama nasıl çalışıyor)\n\n### Satır İçi İşlemler\n(Her satırın yanındaki kebab/aksiyon menüsünde çıkan tüm seçenekler)\n\n### Modallar ve Yan Paneller\n(Her açılan diyaloğu ayrı başlık altında. İçindeki tüm alanları sırayla anlat)\n\n### Adım Adım Kullanım Akışları\n(En önemli 2-4 senaryo için numaralı adımlar — örn: 'Yeni etkinlik ekleme', 'Filtreyle veri arama', 'Aksiyon kaydı görüntüleme')\n\n### Tooltipler ve Yardım Metinleri\n(Hover state'lerinden yakalanan tooltipler — hangi metin nerede çıkar)\n\n### Önemli Notlar\n(Dikkat edilmesi gereken kısıtlar, doğrulama mesajları, performans uyarıları)",
     "rules": [
       "Türkçe yaz",
-      "Teknik jargon kullanma, sade ol",
-      "Sadece bu ekrana ait bilgileri yaz",
-      "Başka section ekleme",
-      "Hedef kitle: teknik olmayan son kullanıcı"
+      "Teknik jargon kullanma, sade ol — hedef kitle teknik olmayan son kullanıcı",
+      "SANA VERİLEN HER GÖRSELİ ayrı ayrı incele. Görsellerde görünen hiçbir buton, alan, kolon, menü öğesi atlanmamalı",
+      "'Tüm Etkileşimli Öğeler' tablosu en az 15 satır olmalı (büyük ekranlar için daha fazla)",
+      "Sadece görsellerde olan ve context'teki şeyleri yaz, uydurma",
+      "Sadece bu ekrana ait bilgileri yaz, başka ekrana atıfta bulunma",
+      "Başlıkları aynen yukarıdaki yapıyla kullan, ekstra section ekleme",
+      "Her state görüntüsünü 'state etiketi'yle metinde referans göster (örn: 'Filters paneli açıkken')"
     ],
     "language": "tr",
-    "maxTokens": 3000
+    "maxTokens": 6000
   },
   "technicalDoc": {
     "id": "technicalDoc",
     "name": "Teknik Döküman Promptu",
     "description": "Her ekran için geliştirici ve analistlere yönelik teknik döküman oluşturur",
-    "role": "Sen kıdemli bir yazılım mühendisi ve teknik dokümantasyon uzmanısın.",
-    "outputStructure": "## [Ekran Adı] — Teknik Detaylar\n\n### Ekran Özeti\n(Teknik amaç, sistem içindeki rolü)\n\n### UI Bileşenleri\n(Her component'i teknik açıdan açıkla — veri bağlantısı, state, validasyon)\n\n### API Bağlantıları\n(Hangi endpoint'ler kullanılıyor, ne zaman çağrılıyor, dönen veri ne)\n\n### İş Kuralları\n(BRD'den çıkan veya ekrandan görülen iş kuralları ve kısıtlamalar)\n\n### Veri Akışı\n(Kullanıcı aksiyonu → API çağrısı → UI güncelleme zinciri)\n\n### Hata Durumları\n(Olası hatalar ve ekranın nasıl davranması gerektiği)\n\n### Açık Sorular\n(Doğrulanması gereken noktalar varsa listele)",
+    "role": "Sen kıdemli bir yazılım mühendisi ve teknik dokümantasyon uzmanısın. Görevin: tüm ekran state'lerini analiz edip geliştiricinin ekranı sıfırdan kodlayabileceği detayda teknik döküman yazmak.",
+    "outputStructure": "## [Ekran Adı] — Teknik Detaylar\n\n### Ekran Özeti\n(Teknik amaç, sistem içindeki rolü, ana use case)\n\n### UI Bileşen Hiyerarşisi\n(Sayfa düzenini bileşen ağacı olarak çıkar: Layout → Header / Sidebar / MainContent → FilterBar / DataTable / DetailPanel vs.)\n\n### Bileşen Envanteri (Tam Liste)\n\n| # | Bileşen | Tip | Props/State | Validasyon | Tetiklediği Event |\n|---|---|---|---|---|---|\n\nGörsellerde görünen her bileşen burada listelenmeli — buton, input, dropdown, kolon, satır aksiyonu, modal vs.\n\n### Veri Tablosu Yapısı\n(Eğer veri tablosu varsa: kolon tanımları, tipler, sıralama davranışı, sayfalama, filtre bağlantıları)\n\n### Filtre Mekanizması\n(Filtre alanları, kombinasyon mantığı, URL paramları, debounce/throttle)\n\n### Modal / Yan Panel Spec'leri\n(Her modalın açılış tetikleyicisi, form alanları, validasyon kuralları, kapanış davranışı)\n\n### API Bağlantıları\n(Hangi endpoint'ler hangi UI eventinde çağrılıyor, request/response yapısı, error handling)\n\n### İş Kuralları\n(BRD'den çıkan veya ekrandan görülen iş kuralları)\n\n### State Yönetimi\n(Hangi data hangi component'te tutuluyor, hangi etkileşimle değişiyor)\n\n### Hata Durumları\n(Olası hata senaryoları ve UI davranışı)\n\n### Açık Sorular / Doğrulama Gereken Noktalar",
     "rules": [
       "Türkçe yaz",
-      "Sadece context'te olan bilgileri kullan, uydurma",
-      "Eksik bilgi varsa 'Doğrulama Gerekiyor' yaz",
+      "Hedef kitle: yazılım geliştirici ve sistem analisti",
+      "SANA VERİLEN HER GÖRSELİ ayrı ayrı incele. Hiçbir bileşeni atlama",
+      "'Bileşen Envanteri' tablosu en az 15 satır olmalı",
+      "Sadece görsellerde olanı veya context'te olanı yaz, uydurma",
+      "Eksik bilgi için 'Doğrulama Gerekiyor' yaz, asla uydurma",
       "Sadece bu ekrana ait bölümü yaz",
-      "Hedef kitle: yazılım geliştirici ve sistem analisti"
+      "Her state görüntüsünü referans göster (örn: 'Sport filter dropdown açıkken görsel #5')"
     ],
     "language": "tr",
-    "maxTokens": 3000
+    "maxTokens": 6000
   },
   "screenAnalysis": {
     "id": "screenAnalysis",
     "name": "Ekran Analiz Promptu",
     "description": "Ekran görüntüsünü analiz ederek UI elementleri ve iş akışlarını JSON olarak çıkarır",
-    "instructions": "Bu bir web uygulamasının ekran görüntüsüdür.\n\nAşağıdakileri analiz et ve SADECE geçerli JSON formatında döndür.\nBaşka hiçbir şey yazma, sadece JSON döndür.",
+    "instructions": "Bu bir web uygulamasının ekran görüntüsüdür.\n\nAşağıdakileri analiz et ve SADECE geçerli JSON formatında döndür. Görselde görünen her etkileşimli öğeyi uiElements listesine ekle — atlama.\nBaşka hiçbir şey yazma, sadece JSON döndür.",
     "language": "tr",
     "maxTokens": 2048
   }
