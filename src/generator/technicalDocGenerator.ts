@@ -7,8 +7,8 @@ import type { GenerationResult } from "./userManualGenerator";
 function buildPrompt(ctx: ScreenContext, templates: string[]): string {
   const cfg = loadPromptConfig("technicalDoc");
 
-  const brdContext = ctx.relatedSections
-    .map((r) => `### ${r.section.title} (${r.section.sourceType})\n${r.section.content}`)
+  const brdContext = ctx.preparedChunks
+    .map((c) => `### ${c.title} (${c.sourceType})\n${c.content}`)
     .join("\n\n");
 
   const apiContext = ctx.relatedEndpoints

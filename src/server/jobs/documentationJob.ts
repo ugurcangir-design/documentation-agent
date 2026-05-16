@@ -188,14 +188,28 @@ export async function runDocumentationJob(
         generateTechnicalDocSection(context, templateContents),
       ]);
 
+      // Append a retrieval-trace footer so the analyst sees exactly
+      // which BRD chunks, API endpoints and templates fed the doc.
+      const usedTemplates = referenceStore.getDocuments("template").map((t) => t.originalName);
+      const trace = [
+        `\n\n---`,
+        `### Üretim Bilgisi`,
+        `Bu döküman aşağıdaki kaynaklarla üretildi:`,
+        `- **BRD bölümleri** (${context.preparedChunks.length}): ${context.preparedChunks.map((c) => c.title).slice(0, 8).join(", ") || "(yok)"}`,
+        `- **API endpoint** (${context.relatedEndpoints.length}): ${context.relatedEndpoints.slice(0, 5).map((e) => `\`${e.endpoint.method} ${e.endpoint.path}\``).join(", ") || "(yok)"}`,
+        `- **Şablon** (${usedTemplates.length}): ${usedTemplates.join(", ") || "(yok)"}`,
+        `- **Ekran state** (${(storedScreen.states?.length ?? 0) + 1}): 1 ana + ${storedScreen.states?.length ?? 0} test user simülasyon görüntüsü`,
+        `- **Üretim**: ${new Date().toLocaleString("tr-TR")}`,
+      ].join("\n");
+
       documentStore.create({
         id: uuid(),
         jobId,
         screenPath,
         screenTitle: analysis.screenTitle || screenTitle,
         screenshotPath: storedScreen.screenshotPath,
-        userManualContent: userManual.content,
-        technicalDocContent: technical.content,
+        userManualContent: userManual.content + trace,
+        technicalDocContent: technical.content + trace,
         status: "draft",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
