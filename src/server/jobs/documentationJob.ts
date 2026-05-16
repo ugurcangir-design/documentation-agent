@@ -142,6 +142,8 @@ export async function runDocumentationJob(
   // ── Process screens in parallel (with concurrency limit) ─────────
   let completed = 0;
 
+  console.log(`[docjob ${jobId}] starting with ${selectedScreenPaths.length} paths`);
+
   await processInParallel(selectedScreenPaths, CONCURRENCY, async (screenPath, _idx) => {
     if (jobCancellation.isCancelled(jobId)) return;
 
@@ -157,25 +159,21 @@ export async function runDocumentationJob(
     }
 
     const screenTitle = storedScreen.title || screenPath;
+    const stateCount = storedScreen.states?.length ?? 0;
 
-    emitJobEvent(jobId, {
-      type: "progress",
-      message: `Analiz ediliyor: ${screenTitle}`,
-      current: completed,
-      total,
-    });
+    const setProgress = (msg: string) => {
+      jobStore.update(jobId, { progress: { current: completed, total, message: msg } });
+      emitJobEvent(jobId, { type: "progress", message: msg, current: completed, total });
+    };
+
+    setProgress(`Ekran analiz ediliyor: ${screenTitle} (${stateCount} state ile)`);
 
     try {
       const screen = screenStore.toDiscoveredScreen(storedScreen);
       const analysis = await analyzeScreen(screen);
       const context = buildScreenContext(screen, analysis, allSections, allEndpoints);
 
-      emitJobEvent(jobId, {
-        type: "progress",
-        message: `Döküman yazılıyor: ${screenTitle}`,
-        current: completed,
-        total,
-      });
+      setProgress(`Kullanıcı kılavuzu + teknik döküman yazılıyor: ${screenTitle}`);
 
       const [userManual, technical] = await Promise.all([
         generateUserManualSection(context, templateContents),
@@ -211,9 +209,13 @@ export async function runDocumentationJob(
       });
     } catch (err) {
       completed++;
+      const errMsg = (err as Error).message;
+      const errStack = (err as Error).stack;
+      console.error(`[docjob ${jobId}] ERROR for ${screenTitle}: ${errMsg}`);
+      if (errStack) console.error(errStack);
       emitJobEvent(jobId, {
         type: "error",
-        message: `Hata (${screenTitle}): ${(err as Error).message}`,
+        message: `Hata (${screenTitle}): ${errMsg}`,
         current: completed,
         total,
       });
