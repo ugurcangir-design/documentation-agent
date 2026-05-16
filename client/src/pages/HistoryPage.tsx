@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useToast } from "../components/Toast";
 
 interface Job {
   id: string;
@@ -14,13 +15,18 @@ interface Job {
 export default function HistoryPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [filter, setFilter] = useState<"all" | "discovery" | "documentation">("all");
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  const load = useCallback(() => {
+    fetch("/api/jobs").then((r) => r.json()).then(setJobs).catch(() => {});
+  }, []);
 
   useEffect(() => {
-    const load = () => fetch("/api/jobs").then((r) => r.json()).then(setJobs).catch(() => {});
     load();
     const i = setInterval(load, 5000);
     return () => clearInterval(i);
-  }, []);
+  }, [load]);
 
   const sorted = [...jobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const filtered = filter === "all" ? sorted : sorted.filter((j) => j.type === filter);
@@ -33,13 +39,54 @@ export default function HistoryPage() {
     return `${Math.floor(sec / 60)}d ${sec % 60}s`;
   }
 
+  async function deleteOne(id: string) {
+    if (!confirm("Bu job kaydını silmek istediğinden emin misin?")) return;
+    try {
+      await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+      load();
+      toast.show("Job silindi", "success");
+    } catch (e) {
+      toast.show((e as Error).message, "error");
+    }
+  }
+
+  async function cleanupCompleted() {
+    if (!confirm("Tüm tamamlanmış (completed + failed) job kayıtlarını silmek üzeresin. Devam edilsin mi?")) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/jobs/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: ["completed", "failed"] }),
+      });
+      const d = await r.json() as { removed: number };
+      toast.show(`${d.removed} job silindi`, "success");
+      load();
+    } catch (e) {
+      toast.show((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="p-7 max-w-4xl mx-auto space-y-5">
-      <div>
-        <h1 className="text-[22px] font-semibold text-gray-900">Geçmiş</h1>
-        <p className="text-[13px] text-gray-400 mt-0.5">
-          Tüm keşif ve döküman üretimi job'larının kaydı.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-[22px] font-semibold text-gray-900">Geçmiş</h1>
+          <p className="text-[13px] text-gray-400 mt-0.5">
+            Tüm keşif ve döküman üretimi job'larının kaydı.
+          </p>
+        </div>
+        {jobs.some((j) => j.status === "completed" || j.status === "failed") && (
+          <button
+            onClick={cleanupCompleted}
+            disabled={busy}
+            className="px-3 py-1.5 text-[12px] border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
+          >
+            Tamamlananları Temizle
+          </button>
+        )}
       </div>
 
       {/* Filter chips */}
@@ -71,11 +118,12 @@ export default function HistoryPage() {
                 <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İlerleme</th>
                 <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Süre</th>
                 <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Tarih</th>
+                <th className="px-4 py-3 w-10" />
               </tr>
             </thead>
             <tbody>
               {filtered.map((job) => (
-                <tr key={job.id} className="border-b border-gray-50 hover:bg-gray-50">
+                <tr key={job.id} className="border-b border-gray-50 hover:bg-gray-50 group">
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-1.5">
                       <span className={`w-1.5 h-1.5 rounded-full ${
@@ -102,6 +150,17 @@ export default function HistoryPage() {
                   <td className="px-4 py-3 text-gray-500">{duration(job)}</td>
                   <td className="px-4 py-3 text-gray-400 text-[12px]">
                     {new Date(job.createdAt).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {job.status !== "running" && (
+                      <button
+                        onClick={() => deleteOne(job.id)}
+                        className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-[12px]"
+                        title="Sil"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
