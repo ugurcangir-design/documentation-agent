@@ -126,12 +126,16 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
   }
 
   return new Promise<ClaudeResult>((resolve, reject) => {
-    const args = ["--print", "--output-format", "json"];
+    // Pass the prompt as the value of --print (positional doesn't work
+    // when stdin is closed; CLI requires the prompt as an argument).
+    const args = ["--print", prompt, "--output-format", "json"];
     if (imagePaths.length > 0) args.push("--allowed-tools", "Read");
-    args.push(prompt);
 
     const proc = spawn(env.claudeCliBin, args, {
       env: { ...process.env, FORCE_COLOR: "0" },
+      // Explicitly: no stdin, pipe stdout/stderr. Otherwise the CLI waits
+      // 3s for stdin data and exits with a non-zero warning.
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     let out = "";

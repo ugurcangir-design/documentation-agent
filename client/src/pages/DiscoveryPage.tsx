@@ -395,9 +395,16 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
                         {screen.title || screen.path}
                       </p>
                       <p className="text-[11px] text-gray-400 truncate mt-0.5">{screen.path}</p>
-                      <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded mt-1 inline-block">
-                        depth {screen.depth}
-                      </span>
+                      <div className="flex gap-1.5 mt-1">
+                        <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded inline-block">
+                          depth {screen.depth}
+                        </span>
+                        {(screen.states?.length ?? 0) > 0 && (
+                          <span className="text-[10px] text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded inline-block">
+                            +{screen.states?.length} state
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -1,3 +1,9 @@
+export interface StoredScreenState {
+  label: string;
+  triggeredBy: string;
+  screenshotPath: string;
+}
+
 export interface StoredScreen {
   url: string;
   path: string;
@@ -6,6 +12,7 @@ export interface StoredScreen {
   depth: number;
   parentPath?: string;
   discoveredAt: string;
+  states?: StoredScreenState[];
 }
 
 export type DocumentStatus = "draft" | "approved" | "published";
