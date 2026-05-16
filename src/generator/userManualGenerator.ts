@@ -29,12 +29,12 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .join("\n\n");
 
   const templateBlock = templates.length > 0
-    ? `\n\n### Şablon Referansı (Anlatım dilini, başlık yapısını ve detay seviyesini taklit et — içeriği kopyalama)\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 4000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n`
+    ? `\n\n### ÖRNEK ŞABLON KILAVUZ — BU FORMAT VE ÜSLUBA UY\n\nAşağıdaki örnek dökümanı dikkatle incele. Senin yazacağın kılavuz **bu dökümanın anlatım üslubu, paragraf-cümle yapısı, başlık tarzı ve detay seviyesinde** olmalı. İçeriği KOPYALAMA — sadece formu örnek al.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 8000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n\nÖZELLIKLE DİKKAT ET:\n- Şablon adımları nasıl numaralandırıyor → aynı şekilde yap\n- Şablon ne kadar açıklayıcı (her butonu ayrı paragraf mı, kısa madde mi)\n- Şablonun \"sen/siz\" hitabı nasıl → onu kullan\n- Şablonda kullanılan terimleri (örn: 'panel', 'sekme', 'kayıt') benimse\n`
     : "";
 
   const stateCount = (ctx.screen.states ?? []).length;
   const stateBlock = stateCount > 0
-    ? `\n\nSAHANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ — 1 ana ekran + ${stateCount} test user simülasyon state'i. Bu state'lerin etiketleri:\n${(ctx.screen.states ?? []).map((s, i) => `  Görsel #${i + 2}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\nKILAVUZDA HER GÖRSELDEN BİLGİ ÇIKAR:\n- Her modal'ın içindeki her form alanı ve butonu listele\n- Her dropdown/popover'ın seçenekleri listele\n- Her kolon başlığının sıralanabilir/filtrelenebilir olup olmadığını belirt\n- Her satır aksiyon menüsündeki tüm seçenekleri listele\n- Her tooltip'in metnini ekle\n\nGörselleri 'Görsel #N (etiket)' olarak referans verebilirsin.\n`
+    ? `\n\nSAHNANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ:\n  Görsel #1: Ana ekran\n${(ctx.screen.states ?? []).map((s, i) => `  Görsel #${i + 2}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\nBu görselleri kullanarak:\n- 'Adım Adım Kullanım' bölümünde her akışın hangi state'lerden geçtiğini doğal cümlelerle anlat (örn: 'Filters butonuna tıkladığında ekranın üst kısmında bir filtre paneli açılır — burada şu alanları görürsün…')\n- 'Modallar ve Yan Paneller' bölümünde her modal'ı ayrı alt başlık altında ele al: ne zaman açılır, içinde ne var, nasıl tamamlanır\n- 'Satır Üzerindeki İşlemler'de kebab/aksiyon menüsündeki tüm seçenekleri sırayla anlat\n\nUNUTMA: BİR KULLANICI KILAVUZU YAZIYORSUN, teknik bir doküman değil. Bileşen tablosu, açık sorular, hiyerarşi gibi teknik bölümler EKLEME.\n`
     : "";
 
   return `${buildPromptHeader(cfg)}

@@ -2,18 +2,21 @@
   "userManual": {
     "id": "userManual",
     "name": "Kullanıcı Kılavuzu Promptu",
-    "description": "Her ekran için son kullanıcıya yönelik kılavuz bölümü oluşturur",
-    "role": "Sen deneyimli bir teknik yazar, ürün uzmanı ve QA test mühendisisin. Görevin: sana verilen tüm ekran görüntülerini (ana ekran + sekmeler + modal'lar + dropdown'lar + panel açık state'leri + tooltipler vs.) inceleyerek HİÇBİR detayı atlamadan kapsamlı bir kullanıcı kılavuzu yazmak.",
-    "outputStructure": "## [Ekran Adı]\n\n### Genel Bakış\n(2-3 cümle: ekran ne işe yarar, hangi süreç içinde kullanılır, hangi kullanıcı tipi kullanır)\n\n### Ekran Düzeni\n(Sayfa üzerindeki temel alanları tarif et: üst bar, sol panel, ana içerik alanı, alt bilgi vs.)\n\n### Tüm Etkileşimli Öğeler — Tam Envanter\n\nAşağıdaki tabloyu **ekranda ve tüm state görüntülerinde gördüğün her etkileşimli öğe için doldur**. Hiçbirini atlama: butonlar, sekmeler, dropdown'lar, kolon başlıkları, satır içi aksiyon menüleri, input alanları, checkbox'lar, toggle'lar, tarih seçicileri, tooltipler — her şey.\n\n| # | Öğe (etiket) | Tipi | Konumu | İşlevi | Kullanım |\n|---|---|---|---|---|---|\n| 1 | … | buton | üst bar sağ | … | … |\n\n### Filtreler ve Arama\n(Filtreleme/arama yapan tüm öğeleri detaylı açıkla. Hangi alanlarda filtreleme yapılabilir, kombinasyonlar, sıfırlama)\n\n### Tablo / Liste Görünümü\n(Tablo varsa: her kolonun adı ve içeriği, sıralanabilir mi, gizlenebilir mi, sayfalama nasıl çalışıyor)\n\n### Satır İçi İşlemler\n(Her satırın yanındaki kebab/aksiyon menüsünde çıkan tüm seçenekler)\n\n### Modallar ve Yan Paneller\n(Her açılan diyaloğu ayrı başlık altında. İçindeki tüm alanları sırayla anlat)\n\n### Adım Adım Kullanım Akışları\n(En önemli 2-4 senaryo için numaralı adımlar — örn: 'Yeni etkinlik ekleme', 'Filtreyle veri arama', 'Aksiyon kaydı görüntüleme')\n\n### Tooltipler ve Yardım Metinleri\n(Hover state'lerinden yakalanan tooltipler — hangi metin nerede çıkar)\n\n### Önemli Notlar\n(Dikkat edilmesi gereken kısıtlar, doğrulama mesajları, performans uyarıları)",
+    "description": "Kullanıcının ekranı nasıl kullanacağını öğrenebileceği, anlatımsal ve adım adım bir kılavuz oluşturur",
+    "role": "Sen ürünün gerçek kullanıcılarına yönelik kılavuz yazan bir teknik yazarsın. Ekranı kullanmayı hiç bilmeyen birinin (analist, operasyon kullanıcısı) okuyup uygulayabileceği bir REHBER yazıyorsun — teknik döküman değil. BRD süreç anlatımını + yüklenen örnek şablon stilini + gerçek ekran görüntülerini birleştirerek bütünlüklü bir anlatım üret.",
+    "outputStructure": "## [Ekran Adı]\n\n### Bu Ekran Ne İşe Yarar?\n\n(BRD'deki süreç anlatımından faydalanarak 2-4 paragraf: bu ekran hangi iş sürecinde kullanılır, hangi sorunu çözer, kim kullanır, sistem içinde nereye oturur. Teknik terim kullanma; iş diliyle anlat.)\n\n### Ekrana İlk Bakış\n\n(Kullanıcı ekrana girdiğinde ne görür: sayfanın ana bölümlerini doğal cümlelerle tanıt. 'Sayfanın üst kısmında … bulunur', 'Sol tarafta menü … ortada filtre çubuğu …' gibi. Liste değil, anlatımsal paragraf.)\n\n### Adım Adım Kullanım\n\nEkranda gerçekleştirilebilecek **3-5 ana iş akışı** için ayrı alt başlık aç. Her akış için:\n\n#### [Akış Adı — örn: \"Filtrelerle Etkinlik Arama\"]\n\n_Kısa açıklama: ne zaman bu akışı kullanırsın, neyi başarır._\n\n1. **Şunu yap**: detaylı talimat (hangi butona basılır, ne görünür)\n2. **Sonra**: bir sonraki adım\n3. **Karşılaşacağın durum**: açılan modal/dropdown/panel içinde ne yapacaksın\n4. **Tamamlamak için**: kaydetme/onaylama adımı\n\n> 💡 **İpucu**: bu akışta dikkat edilecek bir özel durum varsa burada belirt.\n\nÖrnekler (ekran içeriğine göre uyarla):\n- \"Filtrelerle Etkinlik Arama\"\n- \"Yeni Manuel Etkinlik Ekleme\"\n- \"Satır Üzerinde İşlem Yapma\"\n- \"Aksiyon Geçmişini Görüntüleme\"\n- \"Sayfa Boyutu / Sıralama Değiştirme\"\n\n### Filtreler ve Arama Seçenekleri\n\n(Filtre/arama yapılabilecek tüm alanları **anlatımsal** olarak açıkla — hangisi neye yarar, nasıl kombinlenir, hangi durumlarda boşaltılır. Sade tablo da olabilir ama tek başına bir liste değil, açıklamalarla beraber.)\n\n### Satır Üzerindeki İşlemler\n\n(Tabloda her satırın sağındaki menü/kebab/butonların açıklaması. Hangi seçenek ne yapar, hangi durumda kullanılır.)\n\n### Modallar ve Yan Paneller\n\n(Test user simülasyonunda yakalanan her modal/dialog için ayrı alt başlık: ne zaman açılır, içinde hangi alanlar var, kullanıcı ne doldurur, nasıl kaydeder/kapatır.)\n\n### Sık Sorular ve İpuçları\n\n(BRD'deki iş kuralları + ekrandaki davranışlardan çıkararak: 'X yaparsam ne olur?', 'Y görünmüyorsa nedeni nedir?', 'Z için en hızlı yol nedir?' tarzı 4-6 madde.)",
     "rules": [
-      "Türkçe yaz",
-      "Teknik jargon kullanma, sade ol — hedef kitle teknik olmayan son kullanıcı",
-      "SANA VERİLEN HER GÖRSELİ ayrı ayrı incele. Görsellerde görünen hiçbir buton, alan, kolon, menü öğesi atlanmamalı",
-      "'Tüm Etkileşimli Öğeler' tablosu en az 15 satır olmalı (büyük ekranlar için daha fazla)",
-      "Sadece görsellerde olan ve context'teki şeyleri yaz, uydurma",
-      "Sadece bu ekrana ait bilgileri yaz, başka ekrana atıfta bulunma",
-      "Başlıkları aynen yukarıdaki yapıyla kullan, ekstra section ekleme",
-      "Her state görüntüsünü 'state etiketi'yle metinde referans göster (örn: 'Filters paneli açıkken')"
+      "Türkçe yaz, akıcı ve doğal Türkçe ile",
+      "Hedef kitle: ekranı ilk defa kullanan analist veya operasyon kullanıcısı",
+      "TEKNİK terimleri ve geliştirici jargonunu KULLANMA — 'component', 'state', 'props', 'endpoint', 'validation' yazma",
+      "Bileşen envanteri, bileşen hiyerarşisi, açık sorular gibi teknik tablolar/listeler KOYMA",
+      "Şablon olarak yüklenmiş örnek dökümanın anlatım dili, başlık yapısı ve detay seviyesini TAKLİT et (içeriği kopyalama, sadece tarz)",
+      "BRD'deki süreç anlatımı varsa onu kullanarak ekranın iş süreci içindeki yerini açıkla",
+      "Adımlar 'şuna bas', 'şunu gör', 'şunu yap' şeklinde EYLEM cümleleri olsun",
+      "Verilen her görseli incele ve ilgili adımda hangi state'i gördüğünü yaz",
+      "Adım adım anlatım, kullanıcının kılavuza bakarak ekranı bağımsız kullanabileceği düzeyde olsun",
+      "Sadece bu ekrana ait yaz, başka ekrana atıf yapma",
+      "Başlık yapısını tam olarak yukarıdaki gibi koru — ekstra teknik bölüm ekleme"
     ],
     "language": "tr",
     "maxTokens": 6000
@@ -21,18 +24,18 @@
   "technicalDoc": {
     "id": "technicalDoc",
     "name": "Teknik Döküman Promptu",
-    "description": "Her ekran için geliştirici ve analistlere yönelik teknik döküman oluşturur",
-    "role": "Sen kıdemli bir yazılım mühendisi ve teknik dokümantasyon uzmanısın. Görevin: tüm ekran state'lerini analiz edip geliştiricinin ekranı sıfırdan kodlayabileceği detayda teknik döküman yazmak.",
-    "outputStructure": "## [Ekran Adı] — Teknik Detaylar\n\n### Ekran Özeti\n(Teknik amaç, sistem içindeki rolü, ana use case)\n\n### UI Bileşen Hiyerarşisi\n(Sayfa düzenini bileşen ağacı olarak çıkar: Layout → Header / Sidebar / MainContent → FilterBar / DataTable / DetailPanel vs.)\n\n### Bileşen Envanteri (Tam Liste)\n\n| # | Bileşen | Tip | Props/State | Validasyon | Tetiklediği Event |\n|---|---|---|---|---|---|\n\nGörsellerde görünen her bileşen burada listelenmeli — buton, input, dropdown, kolon, satır aksiyonu, modal vs.\n\n### Veri Tablosu Yapısı\n(Eğer veri tablosu varsa: kolon tanımları, tipler, sıralama davranışı, sayfalama, filtre bağlantıları)\n\n### Filtre Mekanizması\n(Filtre alanları, kombinasyon mantığı, URL paramları, debounce/throttle)\n\n### Modal / Yan Panel Spec'leri\n(Her modalın açılış tetikleyicisi, form alanları, validasyon kuralları, kapanış davranışı)\n\n### API Bağlantıları\n(Hangi endpoint'ler hangi UI eventinde çağrılıyor, request/response yapısı, error handling)\n\n### İş Kuralları\n(BRD'den çıkan veya ekrandan görülen iş kuralları)\n\n### State Yönetimi\n(Hangi data hangi component'te tutuluyor, hangi etkileşimle değişiyor)\n\n### Hata Durumları\n(Olası hata senaryoları ve UI davranışı)\n\n### Açık Sorular / Doğrulama Gereken Noktalar",
+    "description": "Kullanıcı kılavuzundan AYRI, yazılım geliştirici ve sistem analisti için teknik dökümandır",
+    "role": "Sen sistem analisti / yazılım geliştirici için teknik referans dökümanı yazan kıdemli bir analistsin. Bu döküman kullanıcı kılavuzu DEĞİL — geliştirici sayfasını yeniden inşa edebilsin ve QA test case'leri çıkarabilsin diye yazılıyor.",
+    "outputStructure": "## [Ekran Adı] — Teknik Döküman\n\n### Sayfa Özeti (Sistem Perspektifi)\n\n(Bu sayfanın sistemdeki rolü, hangi servisleri çağırır, hangi domain'e ait, ne tip verileri gösterir. Kısa ve teknik.)\n\n### Veri Tablosu / Liste\n\nTablo varsa her kolonu spesifikasyon olarak listele:\n\n| Kolon | Veri Tipi | Kaynak | Sıralanabilir | Filtrelenebilir | Notlar |\n|---|---|---|---|---|---|\n\n### Filtreleme Mekanizması\n\n(Filtre alanları, kombinasyon mantığı (AND/OR), debounce gerekli mi, URL parametresine yansıyor mu, varsayılan değerler.)\n\n### Form ve Modal Spec'leri\n\nHer modal/form için:\n\n#### [Form Adı — örn: \"Add Manual Event\"]\n\n**Tetikleyici**: Hangi butonla açılır\n**Alanlar**:\n\n| Alan | Tip | Zorunlu | Validasyon | Varsayılan |\n|---|---|---|---|---|\n\n**Submit davranışı**: Hangi API endpoint, hangi method\n**Kapanış**: Escape / Close / submit sonrası\n\n### API Bağlantıları\n\n(Swagger context'ten çıkar: hangi endpoint'ler bu ekran tarafından kullanılıyor olabilir, method/path/request body/response. Listele.)\n\n### İş Kuralları\n\n(BRD'den çıkar: bu ekrana özgü iş kuralları — örn: \"Multiplier Mapping aktif değilse satır işlemi yapılamaz\", \"Sistem otomatik tetikleyicisi 5 dakikada bir çalışır\" vb.)\n\n### Hata Durumları ve Edge Case'ler\n\n(Boş sonuç, ağ hatası, yetkisiz erişim, eşzamanlılık çatışmaları. Her birinde UI nasıl davranmalı.)",
     "rules": [
       "Türkçe yaz",
-      "Hedef kitle: yazılım geliştirici ve sistem analisti",
-      "SANA VERİLEN HER GÖRSELİ ayrı ayrı incele. Hiçbir bileşeni atlama",
-      "'Bileşen Envanteri' tablosu en az 15 satır olmalı",
-      "Sadece görsellerde olanı veya context'te olanı yaz, uydurma",
-      "Eksik bilgi için 'Doğrulama Gerekiyor' yaz, asla uydurma",
-      "Sadece bu ekrana ait bölümü yaz",
-      "Her state görüntüsünü referans göster (örn: 'Sport filter dropdown açıkken görsel #5')"
+      "Hedef kitle: yazılım geliştirici ve sistem analisti — teknik dili kullan",
+      "Bileşen hiyerarşisi (component tree) BÖLÜMÜ EKLEME — gereksiz",
+      "Açık Sorular bölümü EKLEME — eksik bilgi varsa ilgili spec satırına 'Doğrulama Gerekiyor' yaz",
+      "Sadece bu ekrana ait spec yaz",
+      "Görsellerden ve context'ten görünür/kanıtlanabilir bilgileri yaz, uydurma",
+      "API endpoint'leri varsa Swagger context'ten birebir referansla",
+      "Kullanıcı kılavuzunda olan içeriği BURAYA TEKRAR YAZMA — sadece teknik perspektif"
     ],
     "language": "tr",
     "maxTokens": 6000
