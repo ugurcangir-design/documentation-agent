@@ -12,8 +12,8 @@ export interface GenerationResult {
 function buildPrompt(ctx: ScreenContext, templates: string[]): string {
   const cfg = loadPromptConfig("userManual");
 
-  const brdContext = ctx.relatedSections
-    .map((r) => `### ${r.section.title} (${r.section.sourceType})\n${r.section.content}`)
+  const brdContext = ctx.preparedChunks
+    .map((c) => `### ${c.title} (${c.sourceType})\n${c.content}`)
     .join("\n\n");
 
   const apiContext = ctx.relatedEndpoints
