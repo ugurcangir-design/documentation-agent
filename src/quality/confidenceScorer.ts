@@ -1,5 +1,10 @@
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function countOccurrences(text: string, keyword: string): number {
-  const regex = new RegExp(keyword, "gi");
+  if (!keyword) return 0;
+  const regex = new RegExp(escapeRegExp(keyword), "gi");
   return (text.match(regex) || []).length;
 }
 
