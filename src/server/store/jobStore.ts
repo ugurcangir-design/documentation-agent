@@ -71,4 +71,22 @@ export const jobStore = {
           new Date(a.createdAt).getTime()
       )[0];
   },
+
+  delete(id: string): boolean {
+    const jobs = load();
+    const filtered = jobs.filter((j) => j.id !== id);
+    if (filtered.length === jobs.length) return false;
+    save(filtered);
+    return true;
+  },
+
+  /** Delete all jobs whose status is in the given set (default: all
+   *  terminal states). Returns how many were removed. */
+  deleteWhere(predicate: (j: Job) => boolean): number {
+    const jobs = load();
+    const remaining = jobs.filter((j) => !predicate(j));
+    const removed = jobs.length - remaining.length;
+    if (removed > 0) save(remaining);
+    return removed;
+  },
 };

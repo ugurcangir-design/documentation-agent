@@ -44,26 +44,22 @@ app.get("/api/health", (_req, res) => {
 });
 
 // ── Heartbeat / auto-shutdown ──────────────────────────────────────
-// Browser sends a heartbeat every 10s. If no heartbeat for 30s,
+// Browser sends a heartbeat every 10s. If no heartbeat for 90s,
 // process exits → supervisor kills Vite → all gone.
+// 90s tolerates: browser tab refresh, brief network drops, OS sleep
+// awakening, browser background-tab throttling.
 let lastHeartbeat: number | null = null;
-const HEARTBEAT_TIMEOUT = 30_000;
-const CHECK_INTERVAL = 10_000;
+const HEARTBEAT_TIMEOUT = 90_000;
+const CHECK_INTERVAL = 15_000;
 
 app.post("/api/heartbeat", (_req, res) => {
   lastHeartbeat = Date.now();
   res.json({ ok: true });
 });
 
-app.post("/api/shutdown", (_req, res) => {
-  res.json({ ok: true });
-  console.log("[server] shutdown requested by client");
-  setTimeout(() => process.exit(0), 300);
-});
-
 setInterval(() => {
   if (lastHeartbeat && Date.now() - lastHeartbeat > HEARTBEAT_TIMEOUT) {
-    console.log("[server] no heartbeat for 30s, exiting");
+    console.log("[server] no heartbeat for 90s, exiting");
     process.exit(0);
   }
 }, CHECK_INTERVAL);

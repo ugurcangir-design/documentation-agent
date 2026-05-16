@@ -68,6 +68,34 @@ router.post("/:jobId/cancel", (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// DELETE /api/jobs/:jobId — remove a single job from history
+router.delete("/:jobId", (req: Request, res: Response) => {
+  const ok = jobStore.delete(req.params["jobId"] as string);
+  if (!ok) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+// POST /api/jobs/cleanup — delete jobs by filter
+// body: { status?: ["completed","failed"], olderThanHours?: number }
+router.post("/cleanup", (req: Request, res: Response) => {
+  const { status, olderThanHours } = req.body as {
+    status?: string[];
+    olderThanHours?: number;
+  };
+  const statusSet = new Set(status ?? ["completed", "failed"]);
+  const cutoff = olderThanHours !== undefined ? Date.now() - olderThanHours * 3600_000 : Infinity;
+
+  const removed = jobStore.deleteWhere(
+    (j) =>
+      statusSet.has(j.status) &&
+      (olderThanHours === undefined || new Date(j.createdAt).getTime() < cutoff)
+  );
+  res.json({ removed });
+});
+
 // GET /api/jobs/:jobId/stream — SSE
 router.get("/:jobId/stream", (req: Request, res: Response) => {
   const jobId = req.params["jobId"] as string;
