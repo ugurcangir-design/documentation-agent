@@ -7,13 +7,45 @@ import {
 
 import { env } from "../config/env";
 
+// Global registry of live browsers so signal handlers can close them.
+const activeBrowsers = new Set<Browser>();
+let signalHandlersInstalled = false;
+
+function installSignalHandlers() {
+  if (signalHandlersInstalled) return;
+  signalHandlersInstalled = true;
+
+  const cleanup = async (signal: string) => {
+    console.log(`[browser] ${signal} alındı — ${activeBrowsers.size} aktif tarayıcı kapatılıyor`);
+    const closes = Array.from(activeBrowsers).map((b) =>
+      b.close().catch(() => {})
+    );
+    await Promise.race([
+      Promise.all(closes),
+      new Promise((r) => setTimeout(r, 3000)),
+    ]);
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", () => void cleanup("SIGTERM"));
+  process.on("SIGINT",  () => void cleanup("SIGINT"));
+  process.on("exit",    () => {
+    // Synchronous best-effort — can't await here
+    for (const b of activeBrowsers) {
+      try { void b.close(); } catch { /* noop */ }
+    }
+  });
+}
+
 export class BrowserSession {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
 
   async launch(): Promise<void> {
+    installSignalHandlers();
     this.browser = await chromium.launch({ headless: true });
+    activeBrowsers.add(this.browser);
 
     this.context = await this.browser.newContext({
       viewport: { width: 1440, height: 900 },
@@ -222,6 +254,10 @@ export class BrowserSession {
   }
 
   async close(): Promise<void> {
-    await this.browser?.close();
+    if (this.browser) activeBrowsers.delete(this.browser);
+    await this.browser?.close().catch(() => {});
+    this.browser = null;
+    this.context = null;
+    this.page = null;
   }
 }

@@ -2,6 +2,7 @@ import { ScreenContext } from "../types/documentation";
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
 import { loadPromptConfig, buildPromptHeader, buildPromptFooter } from "../config/promptConfig";
 import { callClaude } from "../llm/claudeClient";
+import { selectRepresentativeStates } from "./selectStates";
 
 export interface GenerationResult {
   content: string;
@@ -53,7 +54,8 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
   const basename = (p: string) => p.split("/").pop() ?? p;
   const mainImgUrl = `/screenshots/${basename(ctx.screen.screenshotPath)}`;
 
-  const stateImageList = (ctx.screen.states ?? []).map((s, i) => ({
+  const representativeStates = selectRepresentativeStates(ctx.screen.states ?? []);
+  const stateImageList = representativeStates.map((s, i) => ({
     n: i + 2,
     label: s.label,
     triggeredBy: s.triggeredBy,
@@ -122,7 +124,7 @@ export async function generateUserManualSection(
 ): Promise<GenerationResult> {
   const cfg = loadPromptConfig("userManual");
 
-  const stateImages = (ctx.screen.states ?? []).map((s) => ({
+  const stateImages = selectRepresentativeStates(ctx.screen.states ?? []).map((s) => ({
     base64: s.screenshotBase64,
     path: s.screenshotPath,
     label: s.label,

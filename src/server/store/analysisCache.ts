@@ -11,14 +11,14 @@ interface CacheEntry {
   cachedAt: string;
 }
 
+import { writeJsonAtomic, readJsonSafe } from "./atomicJson";
+
 function load(): Record<string, CacheEntry> {
-  if (!fs.existsSync(CACHE_PATH)) return {};
-  return JSON.parse(fs.readFileSync(CACHE_PATH, "utf-8")) as Record<string, CacheEntry>;
+  return readJsonSafe<Record<string, CacheEntry>>(CACHE_PATH, {});
 }
 
 function save(data: Record<string, CacheEntry>): void {
-  fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
-  fs.writeFileSync(CACHE_PATH, JSON.stringify(data, null, 2));
+  writeJsonAtomic(CACHE_PATH, data);
 }
 
 export function hashScreenshot(base64: string): string {
