@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { writeJsonAtomic, readJsonSafe } from "./atomicJson";
 
 export interface StoredScreenState {
   label: string;
@@ -25,27 +26,12 @@ const DB_PATH = path.join(
   "screens.json"
 );
 
-function ensureDir(): void {
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
-
 function load(): StoredScreen[] {
-  ensureDir();
-  if (!fs.existsSync(DB_PATH)) return [];
-  return JSON.parse(
-    fs.readFileSync(DB_PATH, "utf-8")
-  ) as StoredScreen[];
+  return readJsonSafe<StoredScreen[]>(DB_PATH, []);
 }
 
 function save(screens: StoredScreen[]): void {
-  ensureDir();
-  fs.writeFileSync(
-    DB_PATH,
-    JSON.stringify(screens, null, 2)
-  );
+  writeJsonAtomic(DB_PATH, screens);
 }
 
 export const screenStore = {

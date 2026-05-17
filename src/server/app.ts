@@ -14,6 +14,8 @@ import referenceRoutes from "./routes/referenceRoutes";
 import statsRoutes from "./routes/statsRoutes";
 import authRoutes from "./routes/authRoutes";
 import { jobStore } from "./store/jobStore";
+import { jobCancellation } from "./store/jobCancellation";
+import maintenanceRoutes from "./routes/maintenanceRoutes";
 
 const app = express();
 const PORT = process.env["PORT"] || 3000;
@@ -38,6 +40,7 @@ app.use("/api/prompts", promptRoutes);
 app.use("/api/references", referenceRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/maintenance", maintenanceRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -64,6 +67,31 @@ setInterval(() => {
     process.exit(0);
   }
 }, CHECK_INTERVAL);
+
+// ── Job runtime watchdog ──────────────────────────────────────────
+// Any job that has been 'running' for more than JOB_MAX_AGE is
+// considered hung. We cancel it, then mark it 'failed' so the UI
+// stops showing a perpetual spinner. The cancellation is honored
+// at the next checkpoint (see jobCancellation.isCancelled() in
+// documentationJob/discoveryJob).
+const JOB_MAX_AGE_MS = 30 * 60_000; // 30 dakika
+setInterval(() => {
+  const now = Date.now();
+  for (const job of jobStore.getAll()) {
+    if (job.status !== "running") continue;
+    const startedAt = new Date(job.createdAt).getTime();
+    if (now - startedAt < JOB_MAX_AGE_MS) continue;
+
+    console.log(`[watchdog] ${job.id} 30dk'dır çalışıyor, iptal ediliyor`);
+    jobCancellation.cancel(job.id);
+    jobStore.update(job.id, {
+      status: "failed",
+      completedAt: new Date().toISOString(),
+      error: "Job 30 dakikadan uzun süredir çalışıyordu — watchdog tarafından sonlandırıldı",
+      progress: { ...job.progress, message: "Watchdog tarafından sonlandırıldı" },
+    });
+  }
+}, 60_000);
 
 // Serve React build in production
 const clientBuild = path.join(

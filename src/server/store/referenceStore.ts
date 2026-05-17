@@ -42,16 +42,14 @@ interface ReferenceDB {
   documents: DocumentRef[];
 }
 
+import { writeJsonAtomic, readJsonSafe } from "./atomicJson";
+
 function load(): ReferenceDB {
-  if (!fs.existsSync(DB_PATH)) {
-    return { confluence: [], swagger: [], documents: [] };
-  }
-  return JSON.parse(fs.readFileSync(DB_PATH, "utf-8")) as ReferenceDB;
+  return readJsonSafe<ReferenceDB>(DB_PATH, { confluence: [], swagger: [], documents: [] });
 }
 
 function save(db: ReferenceDB) {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), "utf-8");
+  writeJsonAtomic(DB_PATH, db);
 }
 
 export const referenceStore = {

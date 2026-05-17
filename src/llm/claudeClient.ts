@@ -33,6 +33,24 @@ export interface ClaudeResult {
   outputTokens: number;
 }
 
+function isTransientError(err: unknown): boolean {
+  const msg = (err as Error)?.message?.toLowerCase() ?? "";
+  return (
+    msg.includes("overload") ||      // 529
+    msg.includes("rate limit") ||    // 429
+    msg.includes("timeout") ||
+    msg.includes("econnreset") ||
+    msg.includes("etimedout") ||
+    msg.includes("socket hang") ||
+    msg.includes("network") ||
+    msg.includes("ecconnrefused")
+  );
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 export async function callClaude(opts: ClaudeCallOptions): Promise<ClaudeResult> {
   const imageCount = (opts.images?.length ?? 0) + (opts.imageBase64 || opts.imagePath ? 1 : 0);
   const promptLen = opts.prompt.length;
@@ -46,7 +64,22 @@ export async function callClaude(opts: ClaudeCallOptions): Promise<ClaudeResult>
     fs.writeFileSync(f, opts.prompt, "utf-8");
     console.log(`[claude] prompt dumped → ${f}`);
   }
-  return env.claudeBackend === "api" ? callApi(opts) : callCli(opts);
+
+  // Retry transient failures with exponential backoff (1s, 4s).
+  const maxRetries = 2;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await (env.claudeBackend === "api" ? callApi(opts) : callCli(opts));
+    } catch (err) {
+      lastErr = err;
+      if (attempt === maxRetries || !isTransientError(err)) throw err;
+      const delay = 1000 * Math.pow(4, attempt);
+      console.warn(`[claude] geçici hata, ${delay}ms sonra tekrar (${attempt + 1}/${maxRetries}): ${(err as Error).message}`);
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
 }
 
 // ── API backend ─────────────────────────────────────────────────

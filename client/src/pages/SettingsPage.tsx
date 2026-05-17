@@ -402,6 +402,74 @@ export default function SettingsPage() {
         <code className="bg-gray-100 px-1 py-0.5 rounded">.env</code>{" "}
         dosyasına kaydedilir. Değerler GitHub'a push edilmez.
       </p>
+
+      <MaintenanceSection />
+    </div>
+  );
+}
+
+function MaintenanceSection() {
+  const [usage, setUsage] = useState<Record<string, { files: number; bytes: number }> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [lastCleanup, setLastCleanup] = useState<{ removed: number; bytesFreed: number } | null>(null);
+
+  const loadUsage = () => {
+    fetch("/api/maintenance/disk-usage")
+      .then((r) => r.json())
+      .then(setUsage)
+      .catch(() => {});
+  };
+
+  useEffect(() => { loadUsage(); }, []);
+
+  async function runCleanup() {
+    if (!confirm("Kullanılmayan ekran görüntüleri silinecek. Devam edilsin mi?")) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/maintenance/cleanup-screenshots", { method: "POST" });
+      const d = await r.json() as { removed: number; bytesFreed: number };
+      setLastCleanup(d);
+      loadUsage();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function fmt(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  return (
+    <div className="mt-8 bg-white rounded-xl border border-gray-200 p-6">
+      <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        <span>🧹</span> Bakım
+      </h2>
+
+      {usage && (
+        <div className="grid grid-cols-2 gap-2 mb-4 text-xs">
+          {Object.entries(usage).map(([dir, info]) => (
+            <div key={dir} className="flex justify-between bg-gray-50 px-3 py-1.5 rounded">
+              <span className="text-gray-500 font-mono">{dir}</span>
+              <span className="text-gray-700">{info.files} dosya · {fmt(info.bytes)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={runCleanup}
+        disabled={busy}
+        className="px-4 py-1.5 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
+      >
+        {busy ? "Temizleniyor..." : "Kullanılmayan ekran görüntülerini sil"}
+      </button>
+      {lastCleanup && (
+        <p className="text-xs text-green-600 mt-2">
+          ✓ {lastCleanup.removed} dosya silindi, {fmt(lastCleanup.bytesFreed)} alan boşaltıldı
+        </p>
+      )}
     </div>
   );
 }

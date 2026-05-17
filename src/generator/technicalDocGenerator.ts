@@ -2,6 +2,7 @@ import { ScreenContext } from "../types/documentation";
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
 import { loadPromptConfig, buildPromptHeader, buildPromptFooter } from "../config/promptConfig";
 import { callClaude } from "../llm/claudeClient";
+import { selectRepresentativeStates } from "./selectStates";
 import type { GenerationResult } from "./userManualGenerator";
 
 function buildPrompt(ctx: ScreenContext, templates: string[]): string {
@@ -28,9 +29,10 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     ? `\n\n### Örnek Şablon (yapı referansı)\n\nDikkat: Aşağıdaki şablon kullanıcı kılavuzu olabilir — TEKNİK dökümanını şablonun tarzında değil, kendi başına teknik referans olarak yaz. Şablonu sadece terminoloji çıkarımı için kullanabilirsin.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} (sadece sözlük olarak kullan) ---\n${t.slice(0, 4000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n`
     : "";
 
-  const stateCount = (ctx.screen.states ?? []).length;
+  const representativeStates = selectRepresentativeStates(ctx.screen.states ?? []);
+  const stateCount = representativeStates.length;
   const stateBlock = stateCount > 0
-    ? `\n\nSANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ — 1 ana ekran + ${stateCount} test user simülasyon state'i. Etiketler:\n${(ctx.screen.states ?? []).map((s, i) => `  Görsel #${i + 2}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\nBu görsellerden:\n- 'Veri Tablosu' bölümünde kolon spesifikasyonlarını çıkar\n- 'Filtreleme Mekanizması' bölümünde filtre alanlarının davranışını yaz\n- 'Form ve Modal Spec'leri' bölümünde her modal'ın alan listesini ver\n- 'API Bağlantıları' bölümünde Swagger context'inden eşleştirme yap\n\nKullanıcı kılavuzunda anlatılan akışları TEKRAR YAZMA — sadece teknik spesifikasyon olarak listele.\n`
+    ? `\n\nSANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ — 1 ana ekran + ${stateCount} test user simülasyon state'i. Etiketler:\n${representativeStates.map((s, i) => `  Görsel #${i + 2}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\nBu görsellerden:\n- 'Veri Tablosu' bölümünde kolon spesifikasyonlarını çıkar\n- 'Filtreleme Mekanizması' bölümünde filtre alanlarının davranışını yaz\n- 'Form ve Modal Spec'leri' bölümünde her modal'ın alan listesini ver\n- 'API Bağlantıları' bölümünde Swagger context'inden eşleştirme yap\n\nKullanıcı kılavuzunda anlatılan akışları TEKRAR YAZMA — sadece teknik spesifikasyon olarak listele.\n`
     : "";
 
   return `${buildPromptHeader(cfg)}
@@ -67,7 +69,7 @@ export async function generateTechnicalDocSection(
   templates: string[] = []
 ): Promise<GenerationResult> {
   const cfg = loadPromptConfig("technicalDoc");
-  const stateImages = (ctx.screen.states ?? []).map((s) => ({
+  const stateImages = selectRepresentativeStates(ctx.screen.states ?? []).map((s) => ({
     base64: s.screenshotBase64,
     path: s.screenshotPath,
     label: s.label,
