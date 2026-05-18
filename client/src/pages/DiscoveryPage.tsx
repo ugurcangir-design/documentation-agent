@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { discovery, jobs } from "../lib/api";
+import { discovery, jobs, jobControl } from "../lib/api";
 import ProgressView from "../components/ProgressView";
 import type { StoredScreen } from "../types";
 
@@ -252,6 +252,13 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
           <ProgressView
             streamUrl={`/api/discovery/${discoveryJobId}/stream`}
             onComplete={handleDiscoveryComplete}
+            onPause={async () => { await jobControl.pause(discoveryJobId); }}
+            onResume={async () => { await jobControl.resume(discoveryJobId); }}
+            onCancel={async () => {
+              if (!confirm("Keşfi tamamen iptal etmek istiyor musun?")) return;
+              await jobControl.cancel(discoveryJobId);
+              setDiscovering(false);
+            }}
           />
         </div>
       )}

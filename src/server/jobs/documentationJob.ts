@@ -153,6 +153,7 @@ export async function runDocumentationJob(
   console.log(`[docjob ${jobId}] starting with ${selectedScreenPaths.length} paths`);
 
   await processInParallel(selectedScreenPaths, CONCURRENCY, async (screenPath, _idx) => {
+    if (!(await jobCancellation.waitIfPaused(jobId))) return;
     if (jobCancellation.isCancelled(jobId)) return;
 
     const storedScreen = screenStore.getByPath(screenPath);

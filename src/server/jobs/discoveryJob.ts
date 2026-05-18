@@ -65,6 +65,7 @@ export async function runDiscoveryJob(
 
     // Add manually provided extra URLs
     for (const url of extraUrls) {
+      if (!(await jobCancellation.waitIfPaused(jobId))) break;
       if (jobCancellation.isCancelled(jobId)) break;
       const alreadyFound = discoveredScreens.some(
         (s) => s.url === url

@@ -68,6 +68,38 @@ router.post("/:jobId/cancel", (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// POST /api/jobs/:jobId/pause — runner will block at the next checkpoint
+router.post("/:jobId/pause", (req: Request, res: Response) => {
+  const jobId = req.params["jobId"] as string;
+  const job = jobStore.getById(jobId);
+  if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+  if (job.status !== "running") {
+    res.status(400).json({ error: `Sadece çalışan job duraklatılabilir (mevcut: ${job.status})` });
+    return;
+  }
+  jobCancellation.pause(jobId);
+  jobStore.update(jobId, {
+    status: "paused" as never,
+    progress: { ...job.progress, message: "⏸ Kullanıcı tarafından duraklatıldı" },
+  });
+  eventBus.emit(`job:${jobId}`, { type: "progress", message: "⏸ Duraklatıldı" });
+  res.json({ ok: true });
+});
+
+// POST /api/jobs/:jobId/resume — clear pause flag
+router.post("/:jobId/resume", (req: Request, res: Response) => {
+  const jobId = req.params["jobId"] as string;
+  const job = jobStore.getById(jobId);
+  if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+  jobCancellation.resume(jobId);
+  jobStore.update(jobId, {
+    status: "running",
+    progress: { ...job.progress, message: "▶ Devam ediliyor" },
+  });
+  eventBus.emit(`job:${jobId}`, { type: "progress", message: "▶ Devam ediliyor" });
+  res.json({ ok: true });
+});
+
 // DELETE /api/jobs/:jobId — remove a single job from history
 router.delete("/:jobId", (req: Request, res: Response) => {
   const ok = jobStore.delete(req.params["jobId"] as string);

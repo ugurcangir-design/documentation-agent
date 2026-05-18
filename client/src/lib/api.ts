@@ -133,6 +133,10 @@ export const exportApi = {
 export const jobControl = {
   cancel: (jobId: string) =>
     fetch(`${BASE}/jobs/${jobId}/cancel`, { method: "POST" }).then((r) => r.json()) as Promise<{ ok: boolean }>,
+  pause: (jobId: string) =>
+    fetch(`${BASE}/jobs/${jobId}/pause`, { method: "POST" }).then((r) => r.json()) as Promise<{ ok: boolean }>,
+  resume: (jobId: string) =>
+    fetch(`${BASE}/jobs/${jobId}/resume`, { method: "POST" }).then((r) => r.json()) as Promise<{ ok: boolean }>,
 };
 
 // ── Section regeneration ─────────────────────────────────────────
