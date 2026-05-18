@@ -40,6 +40,8 @@ export default function JobProgressPage({ jobId, onComplete, onBack }: JobProgre
           streamUrl={`/api/jobs/${jobId}/stream`}
           onComplete={onComplete}
           onCancel={cancel}
+          onPause={async () => { await jobControl.pause(jobId); }}
+          onResume={async () => { await jobControl.resume(jobId); }}
         />
       </div>
 

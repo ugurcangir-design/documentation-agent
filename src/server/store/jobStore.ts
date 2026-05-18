@@ -2,7 +2,7 @@ import path from "path";
 import { writeJsonAtomic, readJsonSafe } from "./atomicJson";
 
 export type JobType = "discovery" | "documentation";
-export type JobStatus = "pending" | "running" | "completed" | "failed";
+export type JobStatus = "pending" | "running" | "paused" | "completed" | "failed";
 
 export interface Job {
   id: string;
