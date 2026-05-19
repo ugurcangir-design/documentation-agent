@@ -10,7 +10,17 @@ import { useToast } from "../components/Toast";
 
 type DocTab = "userManual" | "technicalDoc";
 
-export default function DocumentsPage() {
+interface DocumentsPageProps {
+  /** If set, after loading docs auto-select the document that came
+   *  from this job (e.g. the one just completed). */
+  autoSelectJobId?: string | null;
+  onAutoSelectConsumed?: () => void;
+}
+
+export default function DocumentsPage({
+  autoSelectJobId,
+  onAutoSelectConsumed,
+}: DocumentsPageProps = {}) {
   const [grouped, setGrouped] = useState<
     Record<string, StoredDocument[]>
   >({});
@@ -40,6 +50,19 @@ export default function DocumentsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Auto-select the document produced by the just-completed job
+  useEffect(() => {
+    if (!autoSelectJobId) return;
+    const allDocs = Object.values(grouped).flat();
+    const match = allDocs.find((d) => d.jobId === autoSelectJobId);
+    if (match) {
+      openDoc(match);
+      onAutoSelectConsumed?.();
+    }
+    // Don't reset onAutoSelectConsumed when no match — load() will repopulate
+    // grouped on the next tick and this effect will re-run.
+  }, [autoSelectJobId, grouped, onAutoSelectConsumed]);
 
   const activeDoc = activeDocId
     ? Object.values(grouped)
