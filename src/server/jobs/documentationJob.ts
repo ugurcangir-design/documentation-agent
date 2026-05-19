@@ -18,6 +18,7 @@ import { jobStore } from "../store/jobStore";
 import { referenceStore } from "../store/referenceStore";
 import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
+import { computeCoverage } from "../../quality/coverageCheck";
 
 import type { Endpoint } from "../../types/endpoint";
 import type { DocumentSection } from "../../types/documentSource";
@@ -202,10 +203,34 @@ export async function runDocumentationJob(
         generateTechnicalDocSection(context, templateContents),
       ]);
 
+      // Coverage check — verify each in-scope UI element is mentioned
+      // in the manual. Sidebar/global nav is excluded the same way the
+      // generator prompt excludes it.
+      const SIDEBAR_NAV_HINTS = [
+        "sport base data", "sports", "categories", "competitions", "market setup",
+        "priority settings", "venues", "competitors", "heroes", "multi feed",
+        "sport mapping", "market mapping", "definitions", "event management",
+        "outright program", "live program", "newspaper program", "v-sport program",
+      ];
+      const inScopeForCoverage = analysis.uiElements.filter((el) => {
+        if (el.type === "menu") return false;
+        const lbl = el.label.toLowerCase().trim();
+        return !SIDEBAR_NAV_HINTS.some((h) => lbl === h || lbl.startsWith(h + " "));
+      });
+      const umCoverage = computeCoverage(inScopeForCoverage, userManual.content);
+      const tdCoverage = computeCoverage(inScopeForCoverage, technical.content);
+      console.log(
+        `[docjob ${jobId}] Coverage: userManual=${umCoverage.coveragePct}% (${umCoverage.coveredElements}/${umCoverage.totalElements})  ` +
+        `technicalDoc=${tdCoverage.coveragePct}% (${tdCoverage.coveredElements}/${tdCoverage.totalElements})`
+      );
+      if (umCoverage.missing.length > 0) {
+        console.log(`[docjob ${jobId}] UM eksikleri: ${umCoverage.missing.join(", ")}`);
+      }
+
       // Append a retrieval-trace footer so the analyst sees exactly
       // which BRD chunks, API endpoints and templates fed the doc.
       const usedTemplates = referenceStore.getDocuments("template").map((t) => t.originalName);
-      const trace = [
+      const buildTrace = (cov: typeof umCoverage) => [
         `\n\n---`,
         `### Üretim Bilgisi`,
         `Bu döküman aşağıdaki kaynaklarla üretildi:`,
@@ -213,6 +238,8 @@ export async function runDocumentationJob(
         `- **API endpoint** (${context.relatedEndpoints.length}): ${context.relatedEndpoints.slice(0, 5).map((e) => `\`${e.endpoint.method} ${e.endpoint.path}\``).join(", ") || "(yok)"}`,
         `- **Şablon** (${usedTemplates.length}): ${usedTemplates.join(", ") || "(yok)"}`,
         `- **Ekran state** (${(storedScreen.states?.length ?? 0) + 1}): 1 ana + ${storedScreen.states?.length ?? 0} test user simülasyon görüntüsü`,
+        `- **UI öğesi kapsamı**: ${cov.coveragePct}% (${cov.coveredElements}/${cov.totalElements})` +
+          (cov.missing.length > 0 ? ` · _Eksik: ${cov.missing.slice(0, 5).join(", ")}${cov.missing.length > 5 ? "…" : ""}_` : ""),
         `- **Üretim**: ${new Date().toLocaleString("tr-TR")}`,
       ].join("\n");
 
@@ -222,8 +249,8 @@ export async function runDocumentationJob(
         screenPath,
         screenTitle: analysis.screenTitle || screenTitle,
         screenshotPath: storedScreen.screenshotPath,
-        userManualContent: userManual.content + trace,
-        technicalDocContent: technical.content + trace,
+        userManualContent: userManual.content + buildTrace(umCoverage),
+        technicalDocContent: technical.content + buildTrace(tdCoverage),
         status: "draft",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

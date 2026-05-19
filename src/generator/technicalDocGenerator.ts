@@ -37,8 +37,12 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
   };
   const inScopeElements = ctx.analysis.uiElements.filter((el) => !isSidebarNav(el));
 
-  const uiElements = inScopeElements
-    .map((el) => `- ${el.type}: "${el.label}" — ${el.description}${el.action ? ` → ${el.action}` : ""}`)
+  // Single consolidated UI elements block (replaces duplicate detail
+  // list + coverage list — same info served once).
+  const uiElementsBlock = inScopeElements
+    .map((el, i) =>
+      `${i + 1}. **${el.label}** (${el.type}) — ${el.description}${el.action ? ` → ${el.action}` : ""}`
+    )
     .join("\n");
 
   const templateBlock = templates.length > 0
@@ -48,35 +52,38 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
   const representativeStates = selectRepresentativeStates(ctx.screen.states ?? []);
   const stateCount = representativeStates.length;
   const stateBlock = stateCount > 0
-    ? `\n\nSANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ — 1 ana ekran + ${stateCount} test user simülasyon state'i. Etiketler:\n${representativeStates.map((s, i) => `  Görsel #${i + 2}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\nBu görsellerden:\n- 'Veri Tablosu' bölümünde kolon spesifikasyonlarını çıkar\n- 'Filtreleme Mekanizması' bölümünde filtre alanlarının davranışını yaz\n- 'Form ve Modal Spec'leri' bölümünde her modal'ın alan listesini ver\n- 'API Bağlantıları' bölümünde Swagger context'inden eşleştirme yap\n\nKullanıcı kılavuzunda anlatılan akışları TEKRAR YAZMA — sadece teknik spesifikasyon olarak listele.\n`
+    ? `\n\n# ${stateCount + 1} GÖRSEL VERİLDİ\n\n` +
+      `Görsel 1: Ana ekran\n` +
+      representativeStates.map((s, i) => `Görsel ${i + 2}: ${s.label} _(${s.triggeredBy})_`).join("\n") +
+      `\n\nKullanım:\n` +
+      `- 'Veri Tablosu' → kolon spec'leri görsellerden\n` +
+      `- 'Filtreleme Mekanizması' → filtre paneli görselinden alan davranışı\n` +
+      `- 'Form ve Modal Spec'leri' → her modal görselinden alan listesi\n` +
+      `- 'API Bağlantıları' → Swagger eşlemesi\n\n` +
+      `Kullanıcı kılavuzundaki akışları TEKRAR YAZMA — sadece teknik spec.\n`
     : "";
 
   return `${buildPromptHeader(cfg)}
 
-Aşağıdaki veriler verilmiştir:
-- Ekran: ${ctx.analysis.screenTitle}
-- URL: ${ctx.screen.path}
-- Amaç: ${ctx.analysis.purpose}
-- Ekranda gösterilen veriler: ${ctx.analysis.dataDisplayed.join(", ")}
+**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}
+**Amaç:** ${ctx.analysis.purpose}
+**Veriler:** ${ctx.analysis.dataDisplayed.join(", ")}
 
-UI Elementleri:
-${uiElements}
+# UI BİLEŞENLERİ — HER BİRİ İÇİN BİLEŞEN ENVANTERİ TABLOSUNDA BİR SATIR (${inScopeElements.length} adet, sidebar/global nav hariç)
 
-İlgili BRD / Confluence Bölümleri:
-${brdContext || "(Yok)"}${paragraphContext}
+${uiElementsBlock}
 
-İlgili API Endpoint'leri:
-${apiContext || "(Yok)"}
+# BRD / CONFLUENCE BAĞLAMI
+
+${brdContext || "_(yok)_"}${paragraphContext}
+
+# API ENDPOINT'LERİ
+
+${apiContext || "_(yok)_"}
 ${stateBlock}${templateBlock}
 ---
 
-# KAPSAM
-Aşağıdaki ${inScopeElements.length} UI bileşeni ekranda tespit edildi. Her birine **Bileşen Envanteri tablosunda bir satır ayır**:
-
-${inScopeElements.map((el, i) => `${i + 1}. ${el.label} (${el.type})`).join("\n")}
-
-# SIDEBAR / NAVİGASYON YASAĞI
-Görsellerde sol kenar çubuğunda 'Sport Base Data', 'Sports', 'Categories' vb. global navigasyon öğeleri görebilirsin — BUNLAR BU EKRANIN PARÇASI DEĞİL, başka sayfalara gider. Teknik dökümanda bunlara değinme. Yalnızca URL'i ${ctx.screen.path} olan ekrana özgü bileşenleri spec'leme.
+**Yasak:** Görsellerde sol sidebar'da 'Sport Base Data', 'Sports' vb. global nav öğeleri görebilirsin — bu ekranın parçası DEĞİL. Bahsetme. Yalnızca URL'i ${ctx.screen.path} olan ekrana özgü bileşenleri spec'leme.
 
 Bu ekran için TEKNİK DÖKÜMAN yaz. Geliştirici sayfayı sıfırdan inşa edebilsin, QA test case çıkarabilsin.
 
