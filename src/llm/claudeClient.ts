@@ -74,6 +74,17 @@ function isTransientError(err: unknown): boolean {
   );
 }
 
+export function isPromptTooLong(err: unknown): boolean {
+  const msg = (err as Error)?.message?.toLowerCase() ?? "";
+  return (
+    msg.includes("prompt is too long") ||
+    msg.includes("prompt too long") ||
+    msg.includes("context length") ||
+    msg.includes("token limit") ||
+    msg.includes("maximum context")
+  );
+}
+
 async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }

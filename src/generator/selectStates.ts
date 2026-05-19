@@ -11,22 +11,22 @@
 import type { ScreenState } from "../types/screen";
 
 const MAX_PER_CATEGORY: Record<string, number> = {
-  modal: 3,
+  modal: 2,
   panel: 2,
-  sekme: 2,
+  sekme: 1,
   dropdown: 1,
   tarih: 1,
   checkbox: 1,
   toggle: 1,
   input: 1,
-  tooltip: 1,
+  tooltip: 0,    // çoğu zaman zaten görselde okunabiliyor — tasarruf
   satır: 1,
   sıralama: 1,
   accordion: 1,
   buton: 1,
 };
 
-const TOTAL_MAX = 12;
+const TOTAL_MAX = 8;
 
 function categorize(state: ScreenState): string {
   const t = state.triggeredBy.toLowerCase();

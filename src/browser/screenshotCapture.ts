@@ -7,12 +7,10 @@ export interface ScreenshotResult {
   screenshotBase64: string;
 }
 
-// Max dimensions for stored/embedded screenshots. Vision tokens scale
-// roughly with image area, and Claude can read 1280×800 UI text just as
-// well as 1440×900 — so we trade ~20% area for ~20% input-token savings
-// without losing readability.
-const MAX_WIDTH = 1280;
-const MAX_HEIGHT = 800;
+// Vision tokens scale roughly with image area. Reducing to 1100×700 saves
+// ~25% tokens vs 1280×800, while still keeping UI text legible to Claude.
+const MAX_WIDTH = 1100;
+const MAX_HEIGHT = 700;
 
 export async function captureScreenshot(
   page: Page,

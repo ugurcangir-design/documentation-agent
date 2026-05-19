@@ -1,7 +1,7 @@
 import { ScreenContext } from "../types/documentation";
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
 import { loadPromptConfig, buildPromptHeader, buildPromptFooter } from "../config/promptConfig";
-import { callClaude } from "../llm/claudeClient";
+import { callClaude, isPromptTooLong } from "../llm/claudeClient";
 import { selectRepresentativeStates } from "./selectStates";
 import type { GenerationResult } from "./userManualGenerator";
 
@@ -42,7 +42,7 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .join("\n");
 
   const templateBlock = templates.length > 0
-    ? `\n\n### Örnek Şablon (yapı referansı)\n\nDikkat: Aşağıdaki şablon kullanıcı kılavuzu olabilir — TEKNİK dökümanını şablonun tarzında değil, kendi başına teknik referans olarak yaz. Şablonu sadece terminoloji çıkarımı için kullanabilirsin.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} (sadece sözlük olarak kullan) ---\n${t.slice(0, 4000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n`
+    ? `\n\n### Örnek Şablon (yapı referansı)\n\nDikkat: Aşağıdaki şablon kullanıcı kılavuzu olabilir — TEKNİK dökümanını şablonun tarzında değil, kendi başına teknik referans olarak yaz. Şablonu sadece terminoloji çıkarımı için kullanabilirsin.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} (sadece sözlük olarak kullan) ---\n${t.slice(0, 2500)}`).join("\n\n")}\n--- ŞABLON SONU ---\n`
     : "";
 
   const representativeStates = selectRepresentativeStates(ctx.screen.states ?? []);
@@ -88,22 +88,45 @@ export async function generateTechnicalDocSection(
   templates: string[] = []
 ): Promise<GenerationResult> {
   const cfg = loadPromptConfig("technicalDoc");
-  const stateImages = selectRepresentativeStates(ctx.screen.states ?? []).map((s) => ({
-    base64: s.screenshotBase64,
-    path: s.screenshotPath,
-    label: s.label,
-  }));
-  const result = await callClaude({
-    prompt: buildPrompt(ctx, templates),
-    imageBase64: ctx.screen.screenshotBase64,
-    imagePath: ctx.screen.screenshotPath,
-    images: stateImages,
-    maxTokens: cfg.maxTokens ?? 3000,
-  });
+  const allStates = selectRepresentativeStates(ctx.screen.states ?? []);
 
-  return {
-    content: cleanGeneratedMarkdown(result.text),
-    inputTokens: result.inputTokens,
-    outputTokens: result.outputTokens,
-  };
+  async function runWithBudget(stateCap: number, tmplChars: number): Promise<GenerationResult> {
+    const useStates = allStates.slice(0, stateCap);
+    const useTemplates = templates.map((t) => t.slice(0, tmplChars));
+    const trimmedCtx: ScreenContext = {
+      ...ctx,
+      screen: { ...ctx.screen, states: useStates },
+    };
+    const stateImages = useStates.map((s) => ({
+      base64: s.screenshotBase64,
+      path: s.screenshotPath,
+      label: s.label,
+    }));
+    const result = await callClaude({
+      prompt: buildPrompt(trimmedCtx, useTemplates),
+      imageBase64: ctx.screen.screenshotBase64,
+      imagePath: ctx.screen.screenshotPath,
+      images: stateImages,
+      maxTokens: cfg.maxTokens ?? 3000,
+    });
+    return {
+      content: cleanGeneratedMarkdown(result.text),
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+    };
+  }
+
+  try {
+    return await runWithBudget(allStates.length, 2500);
+  } catch (err) {
+    if (!isPromptTooLong(err)) throw err;
+    console.warn("[technicalDoc] prompt too long — retrying with reduced context");
+    try {
+      return await runWithBudget(Math.max(4, Math.floor(allStates.length / 2)), 1200);
+    } catch (err2) {
+      if (!isPromptTooLong(err2)) throw err2;
+      console.warn("[technicalDoc] still too long — minimal context");
+      return await runWithBudget(3, 600);
+    }
+  }
 }
