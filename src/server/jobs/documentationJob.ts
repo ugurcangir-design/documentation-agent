@@ -19,6 +19,7 @@ import { referenceStore } from "../store/referenceStore";
 import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
 import { computeCoverage } from "../../quality/coverageCheck";
+import { runCoverageFixUp } from "../../generator/coverageFixUp";
 
 import type { Endpoint } from "../../types/endpoint";
 import type { DocumentSection } from "../../types/documentSource";
@@ -217,20 +218,90 @@ export async function runDocumentationJob(
         const lbl = el.label.toLowerCase().trim();
         return !SIDEBAR_NAV_HINTS.some((h) => lbl === h || lbl.startsWith(h + " "));
       });
-      const umCoverage = computeCoverage(inScopeForCoverage, userManual.content);
-      const tdCoverage = computeCoverage(inScopeForCoverage, technical.content);
+      let umContent = userManual.content;
+      let tdContent = technical.content;
+      let umCoverage = computeCoverage(inScopeForCoverage, umContent);
+      let tdCoverage = computeCoverage(inScopeForCoverage, tdContent);
+      let umExtraTokens = { input: 0, output: 0 };
+      let tdExtraTokens = { input: 0, output: 0 };
+      let umFixUpAdded = 0;
+      let tdFixUpAdded = 0;
+
       console.log(
-        `[docjob ${jobId}] Coverage: userManual=${umCoverage.coveragePct}% (${umCoverage.coveredElements}/${umCoverage.totalElements})  ` +
+        `[docjob ${jobId}] Coverage (initial): userManual=${umCoverage.coveragePct}% (${umCoverage.coveredElements}/${umCoverage.totalElements})  ` +
         `technicalDoc=${tdCoverage.coveragePct}% (${tdCoverage.coveredElements}/${tdCoverage.totalElements})`
       );
+
+      // ── Targeted fix-up when coverage < 70% ──────────────────────
+      const FIX_UP_THRESHOLD = 70;
+      const labelToElement = new Map(inScopeForCoverage.map((el) => [el.label.toLowerCase(), el]));
+      const missingAsElements = (missing: string[]) =>
+        missing
+          .map((m) => {
+            // missing strings look like "Sayfalama (other)" — strip parens
+            const label = m.replace(/\s*\([^)]+\)\s*$/, "").trim();
+            return labelToElement.get(label.toLowerCase());
+          })
+          .filter((el): el is NonNullable<typeof el> => Boolean(el));
+
+      if (umCoverage.coveragePct < FIX_UP_THRESHOLD && umCoverage.missing.length > 0) {
+        emitJobEvent(jobId, {
+          type: "progress",
+          message: `Kullanıcı kılavuzu kapsamı %${umCoverage.coveragePct} — eksik ${umCoverage.missing.length} öğe için fix-up uygulanıyor`,
+          current: completed,
+          total,
+        });
+        try {
+          const fix = await runCoverageFixUp({
+            docKind: "userManual",
+            currentContent: umContent,
+            missing: umCoverage.missing,
+            uiElementsMissing: missingAsElements(umCoverage.missing),
+            screenTitle,
+          });
+          umContent = fix.content;
+          umExtraTokens = { input: fix.inputTokens, output: fix.outputTokens };
+          umFixUpAdded = fix.addedCount;
+          umCoverage = computeCoverage(inScopeForCoverage, umContent);
+          console.log(`[docjob ${jobId}] UM fix-up uygulandı → ${umCoverage.coveragePct}%`);
+        } catch (e) {
+          console.warn(`[docjob ${jobId}] UM fix-up başarısız:`, (e as Error).message);
+        }
+      }
+
+      if (tdCoverage.coveragePct < FIX_UP_THRESHOLD && tdCoverage.missing.length > 0) {
+        emitJobEvent(jobId, {
+          type: "progress",
+          message: `Teknik döküman kapsamı %${tdCoverage.coveragePct} — fix-up uygulanıyor`,
+          current: completed,
+          total,
+        });
+        try {
+          const fix = await runCoverageFixUp({
+            docKind: "technicalDoc",
+            currentContent: tdContent,
+            missing: tdCoverage.missing,
+            uiElementsMissing: missingAsElements(tdCoverage.missing),
+            screenTitle,
+          });
+          tdContent = fix.content;
+          tdExtraTokens = { input: fix.inputTokens, output: fix.outputTokens };
+          tdFixUpAdded = fix.addedCount;
+          tdCoverage = computeCoverage(inScopeForCoverage, tdContent);
+          console.log(`[docjob ${jobId}] TD fix-up uygulandı → ${tdCoverage.coveragePct}%`);
+        } catch (e) {
+          console.warn(`[docjob ${jobId}] TD fix-up başarısız:`, (e as Error).message);
+        }
+      }
+
       if (umCoverage.missing.length > 0) {
-        console.log(`[docjob ${jobId}] UM eksikleri: ${umCoverage.missing.join(", ")}`);
+        console.log(`[docjob ${jobId}] UM kalan eksikler: ${umCoverage.missing.join(", ")}`);
       }
 
       // Append a retrieval-trace footer so the analyst sees exactly
       // which BRD chunks, API endpoints and templates fed the doc.
       const usedTemplates = referenceStore.getDocuments("template").map((t) => t.originalName);
-      const buildTrace = (cov: typeof umCoverage) => [
+      const buildTrace = (cov: typeof umCoverage, fixUpAdded: number) => [
         `\n\n---`,
         `### Üretim Bilgisi`,
         `Bu döküman aşağıdaki kaynaklarla üretildi:`,
@@ -240,6 +311,9 @@ export async function runDocumentationJob(
         `- **Ekran state** (${(storedScreen.states?.length ?? 0) + 1}): 1 ana + ${storedScreen.states?.length ?? 0} test user simülasyon görüntüsü`,
         `- **UI öğesi kapsamı**: ${cov.coveragePct}% (${cov.coveredElements}/${cov.totalElements})` +
           (cov.missing.length > 0 ? ` · _Eksik: ${cov.missing.slice(0, 5).join(", ")}${cov.missing.length > 5 ? "…" : ""}_` : ""),
+        ...(fixUpAdded > 0
+          ? [`- **Kapsam fix-up**: ${fixUpAdded} eksik öğe için ikinci tur uygulandı`]
+          : []),
         `- **Üretim**: ${new Date().toLocaleString("tr-TR")}`,
       ].join("\n");
 
@@ -249,13 +323,13 @@ export async function runDocumentationJob(
         screenPath,
         screenTitle: analysis.screenTitle || screenTitle,
         screenshotPath: storedScreen.screenshotPath,
-        userManualContent: userManual.content + buildTrace(umCoverage),
-        technicalDocContent: technical.content + buildTrace(tdCoverage),
+        userManualContent: umContent + buildTrace(umCoverage, umFixUpAdded),
+        technicalDocContent: tdContent + buildTrace(tdCoverage, tdFixUpAdded),
         status: "draft",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        inputTokens: userManual.inputTokens + technical.inputTokens,
-        outputTokens: userManual.outputTokens + technical.outputTokens,
+        inputTokens: userManual.inputTokens + technical.inputTokens + umExtraTokens.input + tdExtraTokens.input,
+        outputTokens: userManual.outputTokens + technical.outputTokens + umExtraTokens.output + tdExtraTokens.output,
       });
 
       completed++;
