@@ -152,12 +152,24 @@ export async function runDocumentationJob(
 
   console.log(`[docjob ${jobId}] starting with ${selectedScreenPaths.length} paths`);
 
+  console.log(`[docjob ${jobId}] worker loop için ${selectedScreenPaths.length} path: ${JSON.stringify(selectedScreenPaths)}`);
+
   await processInParallel(selectedScreenPaths, CONCURRENCY, async (screenPath, _idx) => {
-    if (!(await jobCancellation.waitIfPaused(jobId))) return;
-    if (jobCancellation.isCancelled(jobId)) return;
+    console.log(`[docjob ${jobId}] worker başladı: ${screenPath}`);
+
+    if (!(await jobCancellation.waitIfPaused(jobId))) {
+      console.log(`[docjob ${jobId}] worker bailed (pause+cancel) for ${screenPath}`);
+      return;
+    }
+    if (jobCancellation.isCancelled(jobId)) {
+      console.log(`[docjob ${jobId}] worker bailed (cancelled) for ${screenPath}`);
+      return;
+    }
 
     const storedScreen = screenStore.getByPath(screenPath);
     if (!storedScreen) {
+      const allPaths = screenStore.getAll().map(s => s.path);
+      console.error(`[docjob ${jobId}] EKRAN BULUNAMADI: '${screenPath}'. Mevcut paths: ${JSON.stringify(allPaths)}`);
       emitJobEvent(jobId, {
         type: "error",
         message: `Ekran bulunamadı: ${screenPath}`,
@@ -166,6 +178,7 @@ export async function runDocumentationJob(
       });
       return;
     }
+    console.log(`[docjob ${jobId}] screen bulundu: ${storedScreen.title} (${storedScreen.states?.length ?? 0} state)`);
 
     const screenTitle = storedScreen.title || screenPath;
     const stateCount = storedScreen.states?.length ?? 0;
