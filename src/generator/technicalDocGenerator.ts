@@ -21,7 +21,23 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .map((r) => `- [${r.endpoint.method}] ${r.endpoint.path} — ${r.endpoint.summary || ""} (service: ${r.endpoint.serviceName})`)
     .join("\n");
 
-  const uiElements = ctx.analysis.uiElements
+  // Same sidebar/nav filter as the user manual generator — these point
+  // to other screens and must not appear in this screen's tech doc.
+  const SIDEBAR_NAV_HINTS = [
+    "sport base data", "sports", "categories", "competitions", "market setup",
+    "priority settings", "venues", "competitors", "heroes", "multi feed",
+    "sport mapping", "market mapping", "definitions", "event management",
+    "outright program", "live program", "newspaper program", "v-sport program",
+    "exported program", "groups", "outright", "settings", "logout", "çıkış",
+  ];
+  const isSidebarNav = (el: { label: string; type: string }) => {
+    const lbl = el.label.toLowerCase().trim();
+    if (el.type === "menu") return true;
+    return SIDEBAR_NAV_HINTS.some((h) => lbl === h || lbl.startsWith(h + " "));
+  };
+  const inScopeElements = ctx.analysis.uiElements.filter((el) => !isSidebarNav(el));
+
+  const uiElements = inScopeElements
     .map((el) => `- ${el.type}: "${el.label}" — ${el.description}${el.action ? ` → ${el.action}` : ""}`)
     .join("\n");
 
@@ -55,9 +71,12 @@ ${stateBlock}${templateBlock}
 ---
 
 # KAPSAM
-Aşağıdaki ${ctx.analysis.uiElements.length} UI bileşeni ekranda tespit edildi. Her birine **Bileşen Envanteri tablosunda bir satır ayır**:
+Aşağıdaki ${inScopeElements.length} UI bileşeni ekranda tespit edildi. Her birine **Bileşen Envanteri tablosunda bir satır ayır**:
 
-${ctx.analysis.uiElements.map((el, i) => `${i + 1}. ${el.label} (${el.type})`).join("\n")}
+${inScopeElements.map((el, i) => `${i + 1}. ${el.label} (${el.type})`).join("\n")}
+
+# SIDEBAR / NAVİGASYON YASAĞI
+Görsellerde sol kenar çubuğunda 'Sport Base Data', 'Sports', 'Categories' vb. global navigasyon öğeleri görebilirsin — BUNLAR BU EKRANIN PARÇASI DEĞİL, başka sayfalara gider. Teknik dökümanda bunlara değinme. Yalnızca URL'i ${ctx.screen.path} olan ekrana özgü bileşenleri spec'leme.
 
 Bu ekran için TEKNİK DÖKÜMAN yaz. Geliştirici sayfayı sıfırdan inşa edebilsin, QA test case çıkarabilsin.
 
