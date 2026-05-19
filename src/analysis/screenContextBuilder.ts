@@ -25,26 +25,26 @@ export function buildScreenContext(
 
   const keywords = queryParts.join(" ");
 
-  const relatedSections = searchDocumentSections(allSections, keywords).slice(0, 20);
-  const relatedEndpoints = searchEndpoints(allEndpoints, keywords).slice(0, 30);
+  const relatedSections = searchDocumentSections(allSections, keywords).slice(0, 15);
+  const relatedEndpoints = searchEndpoints(allEndpoints, keywords).slice(0, 20);
 
-  // Section-level chunks (diversity + 18KB budget)
-  const preparedChunks = prepareDocumentChunks(relatedSections, 18_000, 2500);
+  // Section-level chunks — tighter budget (12KB) to stay safely
+  // under Claude's prompt-too-long threshold with images attached.
+  const preparedChunks = prepareDocumentChunks(relatedSections, 12_000, 1800);
 
-  // Paragraph-level matches — captures relevant detail buried in
-  // low-ranked sections. Limited so we don't blow the prompt.
+  // Paragraph-level matches — fewer + shorter to keep prompt small.
   const usedSectionTitles = new Set(preparedChunks.map((c) => c.title));
   const paragraphMatches = searchParagraphs(allSections, keywords, {
     minHits: 2,
-    maxPerSection: 2,
-    maxTotal: 12,
+    maxPerSection: 1,
+    maxTotal: 6,
   }).filter((m) => !usedSectionTitles.has(m.sectionTitle));
 
   return {
     screen,
     analysis,
     relatedSections,
-    relatedEndpoints: relatedEndpoints.slice(0, 12),
+    relatedEndpoints: relatedEndpoints.slice(0, 8),
     preparedChunks,
     paragraphMatches,
   };
