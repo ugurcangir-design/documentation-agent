@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { discovery, jobs, jobControl } from "../lib/api";
 import ProgressView from "../components/ProgressView";
+import { useToast } from "../components/Toast";
 import type { StoredScreen } from "../types";
 
 interface DiscoveryPageProps {
+  /** Documentation job started (after Döküman Oluştur) */
   onJobStarted: (jobId: string) => void;
   deepAnalysis: boolean;
 }
@@ -16,6 +18,7 @@ const STEPS = [
 ];
 
 export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryPageProps) {
+  const toast = useToast();
   const [screens, setScreens] = useState<StoredScreen[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [extraUrl, setExtraUrl] = useState("");
@@ -77,6 +80,11 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
     discovery.getScreens().then((s) => {
       setScreens(s);
       setSelected(new Set(s.map((sc) => sc.path)));
+      const totalStates = s.reduce((sum, sc) => sum + ((sc as { states?: unknown[] }).states?.length ?? 0), 0);
+      toast.show(
+        `✓ Keşif tamamlandı — ${s.length} ekran, ${totalStates} etkileşim state'i yakalandı`,
+        "success"
+      );
     });
   }
 

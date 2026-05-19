@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import type { Page } from "./components/Layout";
 import Layout from "./components/Layout";
-import { ToastProvider } from "./components/Toast";
+import { ToastProvider, useToast } from "./components/Toast";
 import { useHeartbeat } from "./hooks/useHeartbeat";
 import DashboardPage from "./pages/DashboardPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
@@ -15,7 +15,9 @@ import HistoryPage from "./pages/HistoryPage";
 function AppInner() {
   const [page, setPage] = useState<Page>("dashboard");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [lastCompletedDocJobId, setLastCompletedDocJobId] = useState<string | null>(null);
   const [deepAnalysis, setDeepAnalysis] = useState(false);
+  const toast = useToast();
 
   useHeartbeat();
 
@@ -28,11 +30,20 @@ function AppInner() {
     return () => window.removeEventListener("navigate", handler);
   }, []);
 
+  function handleDocJobComplete() {
+    if (activeJobId) {
+      setLastCompletedDocJobId(activeJobId);
+      toast.show("✓ Döküman oluşturuldu — Dökümanlar sekmesinde açıldı", "success");
+    }
+    setActiveJobId(null);
+    setPage("documents");
+  }
+
   if (activeJobId) {
     return (
       <JobProgressPage
         jobId={activeJobId}
-        onComplete={() => { setActiveJobId(null); setPage("documents"); }}
+        onComplete={handleDocJobComplete}
         onBack={() => setActiveJobId(null)}
       />
     );
@@ -46,8 +57,15 @@ function AppInner() {
       onToggleDeepAnalysis={() => setDeepAnalysis((v) => !v)}
     >
       {page === "dashboard" && <DashboardPage />}
-      {page === "discovery" && <DiscoveryPage onJobStarted={setActiveJobId} deepAnalysis={deepAnalysis} />}
-      {page === "documents" && <DocumentsPage />}
+      {page === "discovery" && (
+        <DiscoveryPage onJobStarted={setActiveJobId} deepAnalysis={deepAnalysis} />
+      )}
+      {page === "documents" && (
+        <DocumentsPage
+          autoSelectJobId={lastCompletedDocJobId}
+          onAutoSelectConsumed={() => setLastCompletedDocJobId(null)}
+        />
+      )}
       {page === "history" && <HistoryPage />}
       {page === "references" && <ReferencesPage />}
       {page === "settings" && <SettingsPage />}
