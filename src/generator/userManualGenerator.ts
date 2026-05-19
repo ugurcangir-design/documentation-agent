@@ -47,22 +47,22 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
 
   const inScopeElements = ctx.analysis.uiElements.filter((el) => !isSidebarNav(el));
 
-  const uiElements = inScopeElements
-    .map((el) => `- ${el.type.toUpperCase()}: "${el.label}" — ${el.description}${el.action ? ` → ${el.action}` : ""}`)
+  // Single numbered list that serves BOTH as context AND as the
+  // coverage-required checklist (eliminates ~750-byte duplication).
+  const uiElementsBlock = inScopeElements
+    .map((el, i) =>
+      `${i + 1}. **${el.label}** (${el.type}) — ${el.description}${el.action ? ` → ${el.action}` : ""}`
+    )
     .join("\n");
 
-  // Coverage list also excludes sidebar nav so the model isn't pushed
-  // to document irrelevant items.
-  const coverageList = inScopeElements
-    .map((el, i) => `${i + 1}. "${el.label}" (${el.type})`)
+  // Single workflow listing with steps inline (eliminates duplicate
+  // workflow header list).
+  const workflowsBlock = ctx.analysis.workflows
+    .map((wf, i) =>
+      `${i + 1}. **${wf.name}**${wf.trigger ? ` _(tetikleyici: ${wf.trigger})_` : ""}\n` +
+      wf.steps.map((s) => `   - ${s}`).join("\n")
+    )
     .join("\n");
-  const workflowList = ctx.analysis.workflows
-    .map((wf, i) => `${i + 1}. ${wf.name}`)
-    .join("\n");
-
-  const workflows = ctx.analysis.workflows
-    .map((wf) => `**${wf.name}**${wf.trigger ? ` (Tetikleyici: ${wf.trigger})` : ""}:\n${wf.steps.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}`)
-    .join("\n\n");
 
   const templateBlock = templates.length > 0
     ? `\n\n### ÖRNEK ŞABLON KILAVUZ — BU FORMAT VE ÜSLUBA UY\n\nAşağıdaki örnek dökümanı dikkatle incele. Senin yazacağın kılavuz **bu dökümanın anlatım üslubu, paragraf-cümle yapısı, başlık tarzı ve detay seviyesinde** olmalı. İçeriği KOPYALAMA — sadece formu örnek al.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 7000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n\nÖZELLIKLE DİKKAT ET:\n- Şablon adımları nasıl numaralandırıyor → aynı şekilde yap\n- Şablon ne kadar açıklayıcı (her butonu ayrı paragraf mı, kısa madde mi)\n- Şablonun \"sen/siz\" hitabı nasıl → onu kullan\n- Şablonda kullanılan terimleri (örn: 'panel', 'sekme', 'kayıt') benimse\n`
@@ -81,58 +81,57 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     url: `/screenshots/${basename(s.screenshotPath)}`,
   }));
 
-  const imageCatalog =
-    `### KULLANILABİLİR EKRAN GÖRÜNTÜLERİ\n\n` +
-    `Aşağıdaki görsellerin markdown image syntax'i hazırdır. ` +
-    `Kılavuzda ilgili anlatımın yanına bunları **doğrudan satır içine** EKLEMELİSİN:\n\n` +
-    `1. Ana ekran:\n   \`![Prematch Program ana ekran](${mainImgUrl})\`\n\n` +
-    stateImageList
-      .map(
-        (s) =>
-          `${s.n}. ${s.label} _(${s.triggeredBy})_:\n   \`![${s.label}](${s.url})\``
-      )
-      .join("\n\n");
-
+  // Single compact image catalog — used both for context (list) and
+  // for embed enforcement. No more duplicate state-image listings.
   const stateCount = stateImageList.length;
+  const minEmbeds = Math.max(6, Math.min(stateCount + 1, 12));
+
+  const imageTable =
+    `| # | Etiket | Tetikleyici | Embed kodu |\n` +
+    `|---|---|---|---|\n` +
+    `| 1 | Ana ekran | (sayfa açılışı) | \`![Ana ekran](${mainImgUrl})\` |\n` +
+    stateImageList
+      .map((s) => `| ${s.n} | ${s.label} | ${s.triggeredBy} | \`![${s.label}](${s.url})\` |`)
+      .join("\n");
+
   const stateBlock = stateCount > 0
-    ? `\n\nSANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ:\n  Görsel #1: Ana ekran\n${stateImageList.map(s => `  Görsel #${s.n}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\n${imageCatalog}\n\n# GÖRSEL EKLEME KURALI — UYULMAZSA KILAVUZ EKSİK SAYILIR\n\nTÜM ${stateCount + 1} GÖRSELİ kılavuza markdown image syntax ile **EMBED ETMEK ZORUNDASIN** (sadece bahsetmek YETERSİZ).\n\nZORUNLU EŞLEME:\n1. **Ana ekran** (Görsel #1) → 'Ekrana İlk Bakış' bölümünün İLK PARAGRAFINDAN HEMEN SONRA embed et.\n2. **Filtre paneli açık state'i** (label'ı 'Filtre paneli' veya 'Filters' içeren görsel) → 'Filtreler ve Arama Seçenekleri' başlığının altına embed et. Ardından filtrelerdeki HER alanı (Event ID, Provider, Sport, Category, Match Status, vb.) görseldeki ipuçlarına göre tek tek açıkla.\n3. **Modal/dialog state'leri** (label'ı 'Modal' veya 'Panel/etki' ile başlayan görseller — örn: Add Manual Event, Edit & Details, Action Log) → 'Modallar ve Yan Paneller' altındaki ilgili alt başlığa embed et. Modal'ın içindeki TÜM form alanlarını, butonları, validasyon mesajlarını anlat.\n4. **Sıralama / kolon header state'leri** → 'Tablo / Liste Görünümü' kısmında embed et.\n5. **Satır aksiyon menüsü state'leri** → 'Satır Üzerindeki İşlemler' bölümünde embed et, menüde çıkan TÜM seçenekleri listele.\n6. **Diğer kalan state'ler** (toggle, checkbox, input focus, tooltip, dropdown) → ilgili oldukları bölümde embed et.\n\nKURALLAR:\n- Görselleri AYNEN yukarıdaki listedeki '/screenshots/...' path'leriyle kullan.\n- Embed sayısı en az ${Math.max(6, Math.min(stateCount + 1, 12))} olmalı.\n- 'Adım adım kullanım' içindeki her akışta, o akışın hangi state(ler)den geçtiğini görselle göster.\n\n# SIDEBAR / NAVİGASYON YASAĞI\n\nGörsellerde sol kenar çubuğunda 'Sport Base Data', 'Sports', 'Categories', 'Competitions', 'Market Setup', 'Multi Feed Settings', 'Event Management' gibi öğeler görebilirsin. **BUNLAR BU EKRANIN PARÇASI DEĞİL** — uygulamanın global navigasyonudur ve diğer ekranlara gider. Bunlara değinme, listeleme, açıklamaya çalışma. Yalnızca ana içerik alanındaki (URL'i ${ctx.screen.path} olan ekrana özgü) işlevselliği belgele.\n`
+    ? `\n\n# ${stateCount + 1} GÖRSEL VERİLDİ — TAMAMINI EMBED ET\n\n${imageTable}\n\n` +
+      `**Yerleştirme:**\n` +
+      `- Görsel 1 → 'Ekrana İlk Bakış' ilk paragraftan sonra\n` +
+      `- 'Filtre' / 'Filters' içeren görsel → 'Filtreler ve Arama Seçenekleri' başlığı altı + filtre alanlarını TEK TEK anlat\n` +
+      `- 'Modal' veya 'Panel/etki' ile başlayan görseller → 'Modallar ve Yan Paneller' alt başlıklarında, içindeki TÜM form alanlarını anlat\n` +
+      `- 'Sıralama' / kolon header → 'Tablo / Liste Görünümü' içinde\n` +
+      `- 'Satır aksiyon' → 'Satır Üzerindeki İşlemler' içinde, menüdeki tüm seçenekleri listele\n` +
+      `- Diğer state'ler (toggle, checkbox, input, tooltip, dropdown) → ilgili oldukları bölüm\n\n` +
+      `**Kural:** En az ${minEmbeds} embed. Path'leri AYNEN yukarıdaki tablodaki gibi kullan.\n\n` +
+      `**Yasak:** Görsellerde sol sidebar'da 'Sport Base Data', 'Sports', 'Categories', 'Multi Feed Settings' vb. olabilir — bunlar GLOBAL NAV, başka sayfalara gider. URL'i ${ctx.screen.path} olan bu ekranın parçası DEĞİL. Bahsetme, listeleme.\n`
     : "";
 
   return `${buildPromptHeader(cfg)}
 
-Aşağıdaki bilgiler verilmiştir:
-- Ekran başlığı: ${ctx.analysis.screenTitle}
-- URL: ${ctx.screen.path}
-- Ekran amacı: ${ctx.analysis.purpose}
-- Hedef kullanıcı: ${ctx.analysis.targetAudience || "Genel kullanıcı"}
+**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}
+**Amaç:** ${ctx.analysis.purpose}
+**Hedef kullanıcı:** ${ctx.analysis.targetAudience || "Genel kullanıcı"}
 
-UI Elementleri:
-${uiElements}
+# UI ÖĞELERİ — HEPSİNİ KILAVUZDA İŞLE (${inScopeElements.length} adet, sidebar/global nav hariç)
 
-İş Akışları:
-${workflows}
+${uiElementsBlock}
 
-İlgili BRD / Confluence Bölümleri:
-${brdContext || "(Yok)"}${paragraphContext}
+# İŞ AKIŞLARI — HER BİRİ İÇİN 'ADIM ADIM KULLANIM' ALTINA ALT BAŞLIK AÇ (${ctx.analysis.workflows.length} adet)
 
-İlgili API Endpoint'leri:
-${apiContext || "(Yok)"}
+${workflowsBlock || "_(akış tespit edilmedi — 3-5 ana akışı görsellerden çıkar)_"}
+
+# BRD / CONFLUENCE BAĞLAMI
+
+${brdContext || "_(yok)_"}${paragraphContext}
+
+# API ENDPOINT'LERİ
+
+${apiContext || "_(yok)_"}
 ${stateBlock}${templateBlock}
 ---
 
-# KAPSAM ZORUNLULUĞU — KILAVUZUN HER ÖĞEYİ İŞLEMESİ ŞARTTIR
-
-Aşağıdaki ${inScopeElements.length} UI öğesi bu ekranın ANA İÇERİĞİNDE tespit edildi (sidebar/header nav öğeleri çıkarıldı). Kılavuzun bir yerinde **her birinden bahsetmek zorundasın** (envanter tablosu olarak değil, akışlar/bölümler içinde doğal anlatımla):
-
-${coverageList}
-
-Aşağıdaki ${ctx.analysis.workflows.length} iş akışı için ayrıca **Adım Adım Kullanım** altında ayrı alt başlık aç:
-
-${workflowList || "(akış tespit edilmedi — sen 3-5 ana akışı görsellerden çıkar)"}
-
----
-
-Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine hakim olabilmeli. Hiçbir görünür element atlanmamalı.
+Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.
 
 ${buildPromptFooter(cfg)}`;
 }
