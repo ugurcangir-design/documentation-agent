@@ -8,8 +8,35 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { spawn } from "child_process";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { env } from "../config/env";
+
+/** Resolve `claude` binary even when the parent PATH is sanitized
+ *  (e.g. launched from a macOS .app via AppleScript). Tries the
+ *  configured bin first, then common install locations. */
+function resolveClaudeBin(configured: string): string {
+  if (path.isAbsolute(configured) && fs.existsSync(configured)) {
+    return configured;
+  }
+  // Probe PATH explicitly
+  for (const dir of (process.env.PATH ?? "").split(":")) {
+    const candidate = path.join(dir, configured);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  // Fallbacks for common install locations Claude Code uses
+  const home = os.homedir();
+  const fallbacks = [
+    path.join(home, ".local", "bin", "claude"),
+    path.join(home, ".claude", "local", "claude"),
+    "/usr/local/bin/claude",
+    "/opt/homebrew/bin/claude",
+  ];
+  for (const f of fallbacks) {
+    if (fs.existsSync(f)) return f;
+  }
+  return configured; // let spawn throw ENOENT with the original name
+}
 
 export interface ClaudeImage {
   base64?: string;
@@ -176,7 +203,11 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     const args = ["--print", prompt, "--output-format", "json"];
     if (imagePaths.length > 0) args.push("--allowed-tools", "Read");
 
-    const proc = spawn(env.claudeCliBin, args, {
+    const claudeBin = resolveClaudeBin(env.claudeCliBin);
+    if (claudeBin !== env.claudeCliBin) {
+      console.log(`[claude] CLI resolved: ${env.claudeCliBin} → ${claudeBin}`);
+    }
+    const proc = spawn(claudeBin, args, {
       env: { ...process.env, FORCE_COLOR: "0" },
       // Explicitly: no stdin, pipe stdout/stderr. Otherwise the CLI waits
       // 3s for stdin data and exits with a non-zero warning.
@@ -194,7 +225,7 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
       const code = (e as NodeJS.ErrnoException).code;
       if (code === "ENOENT") {
         reject(new Error(
-          `Claude CLI bulunamadı (${env.claudeCliBin}). ` +
+          `Claude CLI bulunamadı (denenen: ${claudeBin}). ` +
           `Kurulum: npm install -g @anthropic-ai/claude-code — veya Ayarlar'dan API moduna geçin.`
         ));
         return;
