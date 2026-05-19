@@ -65,7 +65,7 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .join("\n\n");
 
   const templateBlock = templates.length > 0
-    ? `\n\n### ÖRNEK ŞABLON KILAVUZ — BU FORMAT VE ÜSLUBA UY\n\nAşağıdaki örnek dökümanı dikkatle incele. Senin yazacağın kılavuz **bu dökümanın anlatım üslubu, paragraf-cümle yapısı, başlık tarzı ve detay seviyesinde** olmalı. İçeriği KOPYALAMA — sadece formu örnek al.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 4500)}`).join("\n\n")}\n--- ŞABLON SONU ---\n\nÖZELLIKLE DİKKAT ET:\n- Şablon adımları nasıl numaralandırıyor → aynı şekilde yap\n- Şablon ne kadar açıklayıcı (her butonu ayrı paragraf mı, kısa madde mi)\n- Şablonun \"sen/siz\" hitabı nasıl → onu kullan\n- Şablonda kullanılan terimleri (örn: 'panel', 'sekme', 'kayıt') benimse\n`
+    ? `\n\n### ÖRNEK ŞABLON KILAVUZ — BU FORMAT VE ÜSLUBA UY\n\nAşağıdaki örnek dökümanı dikkatle incele. Senin yazacağın kılavuz **bu dökümanın anlatım üslubu, paragraf-cümle yapısı, başlık tarzı ve detay seviyesinde** olmalı. İçeriği KOPYALAMA — sadece formu örnek al.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 7000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n\nÖZELLIKLE DİKKAT ET:\n- Şablon adımları nasıl numaralandırıyor → aynı şekilde yap\n- Şablon ne kadar açıklayıcı (her butonu ayrı paragraf mı, kısa madde mi)\n- Şablonun \"sen/siz\" hitabı nasıl → onu kullan\n- Şablonda kullanılan terimleri (örn: 'panel', 'sekme', 'kayıt') benimse\n`
     : "";
 
   // Build URL-based image catalog. Express serves files from
@@ -171,19 +171,19 @@ export async function generateUserManualSection(
     };
   }
 
-  // First try with full budget; if Claude says prompt is too long,
-  // back off — half the state images, half the template — and retry.
+  // First try with full budget; if Claude rejects with 'prompt too long',
+  // back off through 2 reduced tiers so we still produce a document.
   try {
-    return await runWithBudget(allStates.length, 4500);
+    return await runWithBudget(allStates.length, 7000);
   } catch (err) {
     if (!isPromptTooLong(err)) throw err;
     console.warn("[userManual] prompt too long — retrying with reduced context");
     try {
-      return await runWithBudget(Math.max(4, Math.floor(allStates.length / 2)), 2500);
+      return await runWithBudget(Math.max(5, Math.floor(allStates.length / 2)), 3500);
     } catch (err2) {
       if (!isPromptTooLong(err2)) throw err2;
       console.warn("[userManual] still too long — minimal context");
-      return await runWithBudget(3, 1200);
+      return await runWithBudget(4, 1500);
     }
   }
 }

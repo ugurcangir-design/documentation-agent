@@ -42,7 +42,7 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .join("\n");
 
   const templateBlock = templates.length > 0
-    ? `\n\n### Örnek Şablon (yapı referansı)\n\nDikkat: Aşağıdaki şablon kullanıcı kılavuzu olabilir — TEKNİK dökümanını şablonun tarzında değil, kendi başına teknik referans olarak yaz. Şablonu sadece terminoloji çıkarımı için kullanabilirsin.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} (sadece sözlük olarak kullan) ---\n${t.slice(0, 2500)}`).join("\n\n")}\n--- ŞABLON SONU ---\n`
+    ? `\n\n### Örnek Şablon (yapı referansı)\n\nDikkat: Aşağıdaki şablon kullanıcı kılavuzu olabilir — TEKNİK dökümanını şablonun tarzında değil, kendi başına teknik referans olarak yaz. Şablonu sadece terminoloji çıkarımı için kullanabilirsin.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} (sadece sözlük olarak kullan) ---\n${t.slice(0, 4000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n`
     : "";
 
   const representativeStates = selectRepresentativeStates(ctx.screen.states ?? []);
@@ -117,16 +117,16 @@ export async function generateTechnicalDocSection(
   }
 
   try {
-    return await runWithBudget(allStates.length, 2500);
+    return await runWithBudget(allStates.length, 4000);
   } catch (err) {
     if (!isPromptTooLong(err)) throw err;
     console.warn("[technicalDoc] prompt too long — retrying with reduced context");
     try {
-      return await runWithBudget(Math.max(4, Math.floor(allStates.length / 2)), 1200);
+      return await runWithBudget(Math.max(5, Math.floor(allStates.length / 2)), 2000);
     } catch (err2) {
       if (!isPromptTooLong(err2)) throw err2;
       console.warn("[technicalDoc] still too long — minimal context");
-      return await runWithBudget(3, 600);
+      return await runWithBudget(4, 1000);
     }
   }
 }
