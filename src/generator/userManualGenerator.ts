@@ -28,13 +28,32 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .map((r) => `- [${r.endpoint.method}] ${r.endpoint.path} — ${r.endpoint.summary || ""}`)
     .join("\n");
 
-  const uiElements = ctx.analysis.uiElements
+  // Filter out sidebar/header navigation menu items even if the analyzer
+  // accidentally included them. These point to other screens and must
+  // not appear in this screen's manual.
+  const SIDEBAR_NAV_HINTS = [
+    "sport base data", "sports", "categories", "competitions", "market setup",
+    "priority settings", "venues", "competitors", "heroes", "multi feed",
+    "sport mapping", "market mapping", "definitions", "event management",
+    "outright program", "live program", "newspaper program", "v-sport program",
+    "exported program", "groups", "outright", "live program", "settings",
+    "ürünler", "users", "settings", "logout", "çıkış",
+  ];
+  const isSidebarNav = (el: { label: string; type: string }) => {
+    const lbl = el.label.toLowerCase().trim();
+    if (el.type === "menu") return true;
+    return SIDEBAR_NAV_HINTS.some((h) => lbl === h || lbl.startsWith(h + " ") || lbl === `${h}`);
+  };
+
+  const inScopeElements = ctx.analysis.uiElements.filter((el) => !isSidebarNav(el));
+
+  const uiElements = inScopeElements
     .map((el) => `- ${el.type.toUpperCase()}: "${el.label}" — ${el.description}${el.action ? ` → ${el.action}` : ""}`)
     .join("\n");
 
-  // Explicit per-element coverage requirement — forces narrative coverage
-  // of EVERY UI element the analyzer detected, not just a representative few.
-  const coverageList = ctx.analysis.uiElements
+  // Coverage list also excludes sidebar nav so the model isn't pushed
+  // to document irrelevant items.
+  const coverageList = inScopeElements
     .map((el, i) => `${i + 1}. "${el.label}" (${el.type})`)
     .join("\n");
   const workflowList = ctx.analysis.workflows
@@ -76,7 +95,7 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
 
   const stateCount = stateImageList.length;
   const stateBlock = stateCount > 0
-    ? `\n\nSANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ:\n  Görsel #1: Ana ekran\n${stateImageList.map(s => `  Görsel #${s.n}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\n${imageCatalog}\n\nGÖRSEL EKLEME KURALI (ZORUNLU):\n- 'Ekrana İlk Bakış' bölümünün ilk paragrafından sonra **ana ekran görselini** ekle.\n- 'Adım Adım Kullanım' içindeki her akışta, ilgili modal/dropdown/panel ile etkileşim anlatılıyorsa **o state'in görselini** o adımın yanına ekle.\n- 'Modallar ve Yan Paneller' altındaki her alt başlıkta o modal'ın görselini başlığın hemen altında göster.\n- 'Filtreler ve Arama Seçenekleri' bölümünde filtre paneli açık görseli kullan.\n- 'Satır Üzerindeki İşlemler' bölümünde satır aksiyon menüsü görselleri kullan.\n- En az 6 farklı görsel kılavuzun farklı yerlerine yerleştirilmiş olmalı.\n- Görselleri AYNEN yukarıdaki listedeki path'lerle kullan (örn: \`![Filters paneli](/screenshots/event-management_prematch-program_btn_1.png)\`).\n\nUNUTMA: KILAVUZUN, kullanıcının ekran karşısında olmadan bile ne göreceğini görsellerle anlamasına izin vermeli.\n`
+    ? `\n\nSANA TOPLAM ${stateCount + 1} GÖRSEL VERİLDİ:\n  Görsel #1: Ana ekran\n${stateImageList.map(s => `  Görsel #${s.n}: ${s.label} — (${s.triggeredBy})`).join("\n")}\n\n${imageCatalog}\n\n# GÖRSEL EKLEME KURALI — UYULMAZSA KILAVUZ EKSİK SAYILIR\n\nTÜM ${stateCount + 1} GÖRSELİ kılavuza markdown image syntax ile **EMBED ETMEK ZORUNDASIN** (sadece bahsetmek YETERSİZ).\n\nZORUNLU EŞLEME:\n1. **Ana ekran** (Görsel #1) → 'Ekrana İlk Bakış' bölümünün İLK PARAGRAFINDAN HEMEN SONRA embed et.\n2. **Filtre paneli açık state'i** (label'ı 'Filtre paneli' veya 'Filters' içeren görsel) → 'Filtreler ve Arama Seçenekleri' başlığının altına embed et. Ardından filtrelerdeki HER alanı (Event ID, Provider, Sport, Category, Match Status, vb.) görseldeki ipuçlarına göre tek tek açıkla.\n3. **Modal/dialog state'leri** (label'ı 'Modal' veya 'Panel/etki' ile başlayan görseller — örn: Add Manual Event, Edit & Details, Action Log) → 'Modallar ve Yan Paneller' altındaki ilgili alt başlığa embed et. Modal'ın içindeki TÜM form alanlarını, butonları, validasyon mesajlarını anlat.\n4. **Sıralama / kolon header state'leri** → 'Tablo / Liste Görünümü' kısmında embed et.\n5. **Satır aksiyon menüsü state'leri** → 'Satır Üzerindeki İşlemler' bölümünde embed et, menüde çıkan TÜM seçenekleri listele.\n6. **Diğer kalan state'ler** (toggle, checkbox, input focus, tooltip, dropdown) → ilgili oldukları bölümde embed et.\n\nKURALLAR:\n- Görselleri AYNEN yukarıdaki listedeki '/screenshots/...' path'leriyle kullan.\n- Embed sayısı en az ${Math.max(6, Math.min(stateCount + 1, 12))} olmalı.\n- 'Adım adım kullanım' içindeki her akışta, o akışın hangi state(ler)den geçtiğini görselle göster.\n\n# SIDEBAR / NAVİGASYON YASAĞI\n\nGörsellerde sol kenar çubuğunda 'Sport Base Data', 'Sports', 'Categories', 'Competitions', 'Market Setup', 'Multi Feed Settings', 'Event Management' gibi öğeler görebilirsin. **BUNLAR BU EKRANIN PARÇASI DEĞİL** — uygulamanın global navigasyonudur ve diğer ekranlara gider. Bunlara değinme, listeleme, açıklamaya çalışma. Yalnızca ana içerik alanındaki (URL'i ${ctx.screen.path} olan ekrana özgü) işlevselliği belgele.\n`
     : "";
 
   return `${buildPromptHeader(cfg)}
@@ -103,7 +122,7 @@ ${stateBlock}${templateBlock}
 
 # KAPSAM ZORUNLULUĞU — KILAVUZUN HER ÖĞEYİ İŞLEMESİ ŞARTTIR
 
-Aşağıdaki ${ctx.analysis.uiElements.length} UI öğesi ekranda tespit edildi. Kılavuzun bir yerinde **her birinden bahsetmek zorundasın** (envanter tablosu olarak değil, akışlar/bölümler içinde doğal anlatımla):
+Aşağıdaki ${inScopeElements.length} UI öğesi bu ekranın ANA İÇERİĞİNDE tespit edildi (sidebar/header nav öğeleri çıkarıldı). Kılavuzun bir yerinde **her birinden bahsetmek zorundasın** (envanter tablosu olarak değil, akışlar/bölümler içinde doğal anlatımla):
 
 ${coverageList}
 
