@@ -7,10 +7,10 @@ export interface ScreenshotResult {
   screenshotBase64: string;
 }
 
-// Vision tokens scale roughly with image area. Reducing to 1100×700 saves
-// ~25% tokens vs 1280×800, while still keeping UI text legible to Claude.
-const MAX_WIDTH = 1100;
-const MAX_HEIGHT = 700;
+// Vision tokens scale roughly with image area. 1280×800 keeps UI text
+// fully legible to Claude while saving ~20% tokens vs raw 1440×900.
+const MAX_WIDTH = 1280;
+const MAX_HEIGHT = 800;
 
 export async function captureScreenshot(
   page: Page,
