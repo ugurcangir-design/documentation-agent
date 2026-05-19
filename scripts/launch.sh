@@ -3,7 +3,12 @@
 # monitor) and opens the default browser. When the user closes the browser tab,
 # the heartbeat times out → server exits → supervisor kills vite → all gone.
 
-export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+# When launched from AppleScript (.app), the inherited PATH is minimal
+# (/usr/bin:/bin:/usr/sbin:/sbin). Pull the user's full PATH from their
+# login shell so tools like `claude` (Claude Code CLI), `node`, `npm`,
+# `tsx`, etc. resolve correctly.
+LOGIN_PATH="$(/bin/zsh -lic 'echo $PATH' 2>/dev/null)"
+export PATH="${LOGIN_PATH}:$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 
 PROJECT="$(cd "$(dirname "$0")/.." && pwd)"
 LOG_DIR="$PROJECT/data/logs"
