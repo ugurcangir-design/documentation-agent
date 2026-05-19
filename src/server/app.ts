@@ -16,6 +16,7 @@ import authRoutes from "./routes/authRoutes";
 import { jobStore } from "./store/jobStore";
 import { jobCancellation } from "./store/jobCancellation";
 import maintenanceRoutes from "./routes/maintenanceRoutes";
+import updateRoutes from "./routes/updateRoutes";
 
 const app = express();
 const PORT = process.env["PORT"] || 3000;
@@ -41,6 +42,7 @@ app.use("/api/references", referenceRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
+app.use("/api/update", updateRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {

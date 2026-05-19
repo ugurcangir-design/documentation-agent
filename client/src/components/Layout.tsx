@@ -7,7 +7,8 @@ export type Page =
   | "history"
   | "references"
   | "settings"
-  | "prompts";
+  | "prompts"
+  | "update";
 
 interface LayoutProps {
   currentPage: Page;
@@ -67,6 +68,7 @@ const SIDEBAR_GROUPS = [
     items: [
       { id: "settings" as Page, label: "Ayarlar", icon: icons.settings },
       { id: "prompts" as Page, label: "Sistem Promptları", icon: icons.prompts },
+      { id: "update" as Page, label: "Güncelleme", icon: "M8 2v8M5 7l3 3 3-3M2 13h12" },
     ],
   },
 ];
