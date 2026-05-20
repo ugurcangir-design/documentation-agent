@@ -86,18 +86,26 @@ router.post("/atlassian/disconnect", (_req: Request, res: Response) => {
 });
 
 // GET /api/auth/atlassian/test — make a probe API call
+// Uses the Confluence v1 REST API (/wiki/rest/api/space) which is
+// compatible with the classic OAuth scopes we request. The v2 API
+// (/wiki/api/v2/spaces) needs granular scopes and would return
+// '401 scope does not match'.
 router.get("/atlassian/test", async (_req: Request, res: Response) => {
   try {
     const { accessToken, cloudId } = await getValidAccessToken();
-    const resp = await fetch(`https://api.atlassian.com/ex/confluence/${cloudId}/wiki/api/v2/spaces?limit=1`, {
+    const url = `https://api.atlassian.com/ex/confluence/${cloudId}/wiki/rest/api/space?limit=1`;
+    const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     });
     if (!resp.ok) {
       res.json({ ok: false, status: resp.status, body: await resp.text() });
       return;
     }
-    const data = await resp.json() as { results?: unknown[] };
-    res.json({ ok: true, sampleSpaceCount: data.results?.length ?? 0 });
+    const data = await resp.json() as { results?: unknown[]; size?: number };
+    res.json({
+      ok: true,
+      sampleSpaceCount: data.results?.length ?? data.size ?? 0,
+    });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
