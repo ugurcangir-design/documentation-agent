@@ -1,10 +1,9 @@
 import { Router, type Request, type Response } from "express";
-import axios from "axios";
 
-import { env } from "../../config/env";
 import { documentStore } from "../store/documentStore";
 import {
   publishToConfluence,
+  searchConfluencePages,
 } from "../../publisher/confluencePublisher";
 import type { DocumentationOutput } from "../../types/documentation";
 
@@ -13,46 +12,11 @@ const router = Router();
 // GET /api/confluence/pages/search?q=...
 router.get("/pages/search", async (req: Request, res: Response) => {
   const q = (req.query["q"] as string) || "";
-
-  if (!env.confluenceBaseUrl || !env.confluenceSpaceKey) {
-    res
-      .status(400)
-      .json({ error: "Confluence not configured" });
-    return;
-  }
-
   try {
-    const baseUrl = env.confluenceBaseUrl.replace(/\/$/, "");
-    const token = Buffer.from(
-      `${env.confluenceEmail}:${env.confluenceApiToken}`
-    ).toString("base64");
-
-    const apiUrl = `${baseUrl}/wiki/rest/api/content?type=page&spaceKey=${env.confluenceSpaceKey}&title=${encodeURIComponent(q)}&expand=version&limit=20`;
-
-    const response = await axios.get(apiUrl, {
-      headers: {
-        Authorization: `Basic ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    const pages = (
-      response.data.results as Array<{
-        id: string;
-        title: string;
-        _links: { webui: string };
-      }>
-    ).map((p) => ({
-      id: p.id,
-      title: p.title,
-      url: `${baseUrl}${p._links.webui}`,
-    }));
-
+    const pages = await searchConfluencePages(q);
     res.json(pages);
   } catch (err) {
-    res
-      .status(500)
-      .json({ error: (err as Error).message });
+    res.status(500).json({ error: (err as Error).message });
   }
 });
 
@@ -127,9 +91,9 @@ router.post("/publish", async (req: Request, res: Response) => {
       generatedAt: new Date().toISOString(),
     };
 
-    // Override parentPageId from request
+    // Override parentPageId from request (env reads process.env lazily)
     if (parentPageId) {
-      env.confluenceParentPageId = parentPageId;
+      process.env["CONFLUENCE_PARENT_PAGE_ID"] = parentPageId;
     }
 
     await publishToConfluence(output, mode);

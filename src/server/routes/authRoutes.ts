@@ -85,27 +85,37 @@ router.post("/atlassian/disconnect", (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-// GET /api/auth/atlassian/test — make a probe API call
-// Uses the Confluence v1 REST API (/wiki/rest/api/space) which is
-// compatible with the classic OAuth scopes we request. The v2 API
-// (/wiki/api/v2/spaces) needs granular scopes and would return
-// '401 scope does not match'.
+// GET /api/auth/atlassian/test — probe the connection.
+// Uses the Confluence v2 REST API (/wiki/api/v2/spaces) which the
+// granular OAuth scopes authorize. The v1 API is removed (HTTP 410).
 router.get("/atlassian/test", async (_req: Request, res: Response) => {
   try {
     const { accessToken, cloudId } = await getValidAccessToken();
-    const url = `https://api.atlassian.com/ex/confluence/${cloudId}/wiki/rest/api/space?limit=1`;
+    const url = `https://api.atlassian.com/ex/confluence/${cloudId}/wiki/api/v2/spaces?limit=1`;
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     });
-    if (!resp.ok) {
-      res.json({ ok: false, status: resp.status, body: await resp.text() });
+
+    if (resp.ok) {
+      const data = await resp.json() as { results?: unknown[] };
+      res.json({ ok: true, sampleSpaceCount: data.results?.length ?? 0 });
       return;
     }
-    const data = await resp.json() as { results?: unknown[]; size?: number };
-    res.json({
-      ok: true,
-      sampleSpaceCount: data.results?.length ?? data.size ?? 0,
-    });
+
+    // 401/403 here usually means the token was issued with the OLD
+    // classic scopes — the user must disconnect + reconnect so the
+    // new granular scopes are granted.
+    const body = await resp.text();
+    if (resp.status === 401 || resp.status === 403) {
+      res.json({
+        ok: false,
+        status: resp.status,
+        body,
+        hint: "Token eski scope'larla alınmış. Ayarlar → Atlassian → 'Bağlantıyı Kes', sonra Developer Console'da granular izinleri ekleyip tekrar 'Atlassian'a Bağlan'.",
+      });
+      return;
+    }
+    res.json({ ok: false, status: resp.status, body });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

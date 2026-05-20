@@ -45,11 +45,10 @@ router.post("/confluence/fetch", async (req: Request, res: Response) => {
     return;
   }
 
-  // Determine auth: OAuth tokens preferred, fall back to API token
+  // OAuth required — the v1 API + classic token path no longer exists.
   const tokens = getStoredTokens();
-  const hasLegacy = env.confluenceBaseUrl && env.confluenceEmail && env.confluenceApiToken;
 
-  if (!tokens && !hasLegacy) {
+  if (!tokens) {
     res.status(400).json({
       error: "Confluence bağlantısı yok. Ayarlar'dan Atlassian OAuth ile bağlanın.",
     });
@@ -57,18 +56,9 @@ router.post("/confluence/fetch", async (req: Request, res: Response) => {
   }
 
   try {
-    let apiBase: string;
-    let authHeader: string;
-
-    if (tokens) {
-      const { accessToken, cloudId } = await getValidAccessToken();
-      apiBase = `${getConfluenceApiBase(cloudId)}/wiki/rest/api`;
-      authHeader = `Bearer ${accessToken}`;
-    } else {
-      apiBase = `${env.confluenceBaseUrl.replace(/\/$/, "")}/wiki/rest/api`;
-      authHeader =
-        "Basic " + Buffer.from(`${env.confluenceEmail}:${env.confluenceApiToken}`).toString("base64");
-    }
+    // Confluence v2 API + OAuth bearer (v1 API removed — HTTP 410).
+    const { accessToken, cloudId } = await getValidAccessToken();
+    const apiBase = `${getConfluenceApiBase(cloudId)}/wiki/api/v2`;
 
     // Extract page ID from URL
     const idMatch = url.match(/\/pages\/(\d+)/);
@@ -78,14 +68,14 @@ router.post("/confluence/fetch", async (req: Request, res: Response) => {
       return;
     }
 
-    const apiUrl = `${apiBase}/content/${pageId}?expand=body.storage,space,version`;
+    const apiUrl = `${apiBase}/pages/${pageId}?body-format=storage`;
     const pageResp = await new Promise<string>((resolve, reject) => {
       const parsed = new URL(apiUrl);
       const options = {
         hostname: parsed.hostname,
         port: parsed.port || undefined,
         path: parsed.pathname + parsed.search,
-        headers: { Authorization: authHeader, Accept: "application/json" },
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
       };
       const client = parsed.protocol === "https:" ? https : http;
       client.get(options, (res2) => {
@@ -99,7 +89,7 @@ router.post("/confluence/fetch", async (req: Request, res: Response) => {
     const page = JSON.parse(pageResp) as {
       id?: string;
       title?: string;
-      space?: { key?: string };
+      spaceId?: string;
       body?: { storage?: { value?: string } };
       message?: string;
     };
@@ -121,7 +111,7 @@ router.post("/confluence/fetch", async (req: Request, res: Response) => {
       url,
       pageId: page.id,
       title: page.title ?? "(başlıksız)",
-      spaceKey: page.space?.key ?? "",
+      spaceKey: page.spaceId ?? "",
       contentFile,
       syncedAt: new Date().toISOString(),
       wordCount: plainText.split(/\s+/).length,
