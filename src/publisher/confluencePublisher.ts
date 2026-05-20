@@ -1,30 +1,36 @@
-import axios from "axios";
+/**
+ * Confluence publisher — v2 REST API + OAuth 2.0 bearer.
+ *
+ * Atlassian removed the v1 REST API (/wiki/rest/api/...) — it now
+ * returns HTTP 410 Gone. Everything here uses the v2 API
+ * (/wiki/api/v2/...) which requires granular OAuth scopes
+ * (read:page:confluence, write:page:confluence, read:space:confluence).
+ */
+
 import fs from "fs";
 import path from "path";
 import FormData from "form-data";
+import axios from "axios";
 
 import { env } from "../config/env";
+import {
+  getValidAccessToken,
+  getConfluenceApiBase,
+} from "../server/auth/atlassianAuth";
 import type { DocumentationOutput } from "../types/documentation";
 
 export type PublishMode = "new" | "append" | "child";
 
-interface ConfluencePage {
+interface V2Page {
   id: string;
   title: string;
+  spaceId: string;
   version: { number: number };
-  body?: { storage: { value: string } };
-  _links: { webui: string };
+  body?: { storage?: { value: string } };
+  _links?: { webui?: string };
 }
 
-function getAuthHeader(): string {
-  return (
-    "Basic " +
-    Buffer.from(
-      `${env.confluenceEmail}:${env.confluenceApiToken}`
-    ).toString("base64")
-  );
-}
-
+// ── Markdown → Confluence storage format ─────────────────────────
 export function markdownToStorage(md: string): string {
   let html = md;
 
@@ -115,92 +121,105 @@ function convertOrderedLists(md: string): string {
   });
 }
 
-async function getPage(
-  baseUrl: string,
-  authHeader: string,
-  title: string
-): Promise<ConfluencePage | null> {
-  const url =
-    `${baseUrl}/wiki/rest/api/content` +
-    `?title=${encodeURIComponent(title)}&spaceKey=${env.confluenceSpaceKey}` +
-    `&expand=version,body.storage`;
+// ── v2 API helpers ───────────────────────────────────────────────
+interface ApiCtx {
+  base: string;       // …/wiki/api/v2
+  wikiBase: string;   // …/wiki   (for attachments)
+  token: string;
+}
 
-  const res = await axios.get<{ results: ConfluencePage[] }>(url, {
-    headers: { Authorization: authHeader, "Content-Type": "application/json" },
-  });
+async function apiContext(): Promise<ApiCtx> {
+  const { accessToken, cloudId } = await getValidAccessToken();
+  return {
+    base: `${getConfluenceApiBase(cloudId)}/wiki/api/v2`,
+    wikiBase: `${getConfluenceApiBase(cloudId)}/wiki`,
+    token: accessToken,
+  };
+}
 
+function authHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+}
+
+/** Resolve a space key (e.g. "DOCS") to its numeric v2 space id. */
+async function getSpaceId(ctx: ApiCtx, spaceKey: string): Promise<string> {
+  const res = await axios.get<{ results: Array<{ id: string; key: string }> }>(
+    `${ctx.base}/spaces?keys=${encodeURIComponent(spaceKey)}&limit=1`,
+    { headers: authHeaders(ctx.token) }
+  );
+  const space = res.data.results[0];
+  if (!space) {
+    throw new Error(`Confluence space bulunamadı: "${spaceKey}" — Ayarlar'daki Space Key'i kontrol edin.`);
+  }
+  return space.id;
+}
+
+/** Find a page by exact title within a space. */
+async function findPage(ctx: ApiCtx, spaceId: string, title: string): Promise<V2Page | null> {
+  const res = await axios.get<{ results: V2Page[] }>(
+    `${ctx.base}/pages?space-id=${spaceId}&title=${encodeURIComponent(title)}` +
+      `&body-format=storage&limit=1`,
+    { headers: authHeaders(ctx.token) }
+  );
   return res.data.results[0] ?? null;
 }
 
 async function createPage(
-  baseUrl: string,
-  authHeader: string,
+  ctx: ApiCtx,
+  spaceId: string,
   title: string,
-  content: string,
+  storage: string,
   parentId?: string
-): Promise<ConfluencePage> {
+): Promise<V2Page> {
   const body = {
-    type: "page",
+    spaceId,
+    status: "current",
     title,
-    space: { key: env.confluenceSpaceKey },
-    ...(parentId ? { ancestors: [{ id: parentId }] } : {}),
-    body: { storage: { value: content, representation: "storage" } },
+    ...(parentId ? { parentId } : {}),
+    body: { representation: "storage", value: storage },
   };
-
-  const res = await axios.post<ConfluencePage>(
-    `${baseUrl}/wiki/rest/api/content`,
-    body,
-    {
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-      },
-    }
-  );
-
+  const res = await axios.post<V2Page>(`${ctx.base}/pages`, body, {
+    headers: authHeaders(ctx.token),
+  });
   return res.data;
 }
 
 async function updatePage(
-  baseUrl: string,
-  authHeader: string,
-  page: ConfluencePage,
-  newContent: string,
+  ctx: ApiCtx,
+  page: V2Page,
+  storage: string,
   append: boolean
-): Promise<ConfluencePage> {
-  const content = append
-    ? (page.body?.storage.value ?? "") + "\n" + newContent
-    : newContent;
+): Promise<V2Page> {
+  const finalValue = append
+    ? (page.body?.storage?.value ?? "") + "\n" + storage
+    : storage;
 
   const body = {
-    type: "page",
+    id: page.id,
+    status: "current",
     title: page.title,
-    space: { key: env.confluenceSpaceKey },
+    body: { representation: "storage", value: finalValue },
     version: { number: page.version.number + 1 },
-    body: { storage: { value: content, representation: "storage" } },
   };
-
-  const res = await axios.put<ConfluencePage>(
-    `${baseUrl}/wiki/rest/api/content/${page.id}`,
-    body,
-    {
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-      },
-    }
-  );
-
+  const res = await axios.put<V2Page>(`${ctx.base}/pages/${page.id}`, body, {
+    headers: authHeaders(ctx.token),
+  });
   return res.data;
 }
 
+/** Attachment upload. v2 has no clean multipart endpoint, so this
+ *  still uses the v1 attachment route which Atlassian keeps alive
+ *  for attachments. Failure is non-fatal. */
 async function uploadScreenshot(
-  baseUrl: string,
-  authHeader: string,
+  ctx: ApiCtx,
   pageId: string,
   screenshotPath: string
 ): Promise<void> {
-  const url = `${baseUrl}/wiki/rest/api/content/${pageId}/child/attachment`;
+  const url = `${ctx.wikiBase}/rest/api/content/${pageId}/child/attachment`;
   const fileName = path.basename(screenshotPath);
   const buffer = fs.readFileSync(screenshotPath);
 
@@ -210,24 +229,24 @@ async function uploadScreenshot(
 
   await axios.post(url, form, {
     headers: {
-      Authorization: authHeader,
+      Authorization: `Bearer ${ctx.token}`,
       "X-Atlassian-Token": "no-check",
       ...form.getHeaders(),
     },
   });
 }
 
+// ── Public API ───────────────────────────────────────────────────
 export async function publishToConfluence(
   output: DocumentationOutput,
   mode: PublishMode = "new"
-): Promise<void> {
-  if (!env.confluenceBaseUrl || !env.confluenceSpaceKey) {
-    console.log("  Confluence not configured — skipping");
-    return;
+): Promise<{ userManualUrl: string; technicalDocUrl: string }> {
+  if (!env.confluenceSpaceKey) {
+    throw new Error("Confluence Space Key ayarlanmamış (Ayarlar sayfası).");
   }
 
-  const baseUrl = env.confluenceBaseUrl.replace(/\/$/, "");
-  const authHeader = getAuthHeader();
+  const ctx = await apiContext();
+  const spaceId = await getSpaceId(ctx, env.confluenceSpaceKey);
   const parentId = env.confluenceParentPageId || undefined;
 
   const userManualTitle = `${output.appTitle} — Kullanıcı Kılavuzu`;
@@ -235,55 +254,65 @@ export async function publishToConfluence(
   const userManualStorage = markdownToStorage(output.userManual);
   const technicalDocStorage = markdownToStorage(output.technicalDoc);
 
-  let userManualPage: ConfluencePage;
-  let technicalDocPage: ConfluencePage;
+  let umPage: V2Page;
+  let tdPage: V2Page;
 
-  if (mode === "append") {
-    // Append content to existing pages if they exist
-    const existingManual = await getPage(baseUrl, authHeader, userManualTitle);
-    const existingTechnical = await getPage(baseUrl, authHeader, technicalDocTitle);
-
-    userManualPage = existingManual
-      ? await updatePage(baseUrl, authHeader, existingManual, userManualStorage, true)
-      : await createPage(baseUrl, authHeader, userManualTitle, userManualStorage, parentId);
-
-    technicalDocPage = existingTechnical
-      ? await updatePage(baseUrl, authHeader, existingTechnical, technicalDocStorage, true)
-      : await createPage(baseUrl, authHeader, technicalDocTitle, technicalDocStorage, parentId);
-  } else if (mode === "child") {
-    // Create as child page under parentId
-    userManualPage = await createPage(
-      baseUrl, authHeader, userManualTitle, userManualStorage, parentId
-    );
-    technicalDocPage = await createPage(
-      baseUrl, authHeader, technicalDocTitle, technicalDocStorage, parentId
-    );
+  if (mode === "child") {
+    // Always create new child pages under parentId
+    umPage = await createPage(ctx, spaceId, userManualTitle, userManualStorage, parentId);
+    tdPage = await createPage(ctx, spaceId, technicalDocTitle, technicalDocStorage, parentId);
   } else {
-    // new — create or replace
-    const existingManual = await getPage(baseUrl, authHeader, userManualTitle);
-    const existingTechnical = await getPage(baseUrl, authHeader, technicalDocTitle);
+    // 'new' (create or replace) and 'append' both look up existing pages
+    const existingUm = await findPage(ctx, spaceId, userManualTitle);
+    const existingTd = await findPage(ctx, spaceId, technicalDocTitle);
+    const append = mode === "append";
 
-    userManualPage = existingManual
-      ? await updatePage(baseUrl, authHeader, existingManual, userManualStorage, false)
-      : await createPage(baseUrl, authHeader, userManualTitle, userManualStorage, parentId);
+    umPage = existingUm
+      ? await updatePage(ctx, existingUm, userManualStorage, append)
+      : await createPage(ctx, spaceId, userManualTitle, userManualStorage, parentId);
 
-    technicalDocPage = existingTechnical
-      ? await updatePage(baseUrl, authHeader, existingTechnical, technicalDocStorage, false)
-      : await createPage(baseUrl, authHeader, technicalDocTitle, technicalDocStorage, parentId);
+    tdPage = existingTd
+      ? await updatePage(ctx, existingTd, technicalDocStorage, append)
+      : await createPage(ctx, spaceId, technicalDocTitle, technicalDocStorage, parentId);
   }
 
-  console.log(`  User manual → ${baseUrl}${userManualPage._links?.webui ?? ""}`);
-  console.log(`  Technical doc → ${baseUrl}${technicalDocPage._links?.webui ?? ""}`);
-
+  // Upload screenshots as attachments (non-fatal on failure)
   for (const screenDoc of output.screens) {
-    if (fs.existsSync(screenDoc.screen.screenshotPath)) {
+    if (screenDoc.screen?.screenshotPath && fs.existsSync(screenDoc.screen.screenshotPath)) {
       try {
-        await uploadScreenshot(
-          baseUrl, authHeader, userManualPage.id, screenDoc.screen.screenshotPath
-        );
-      } catch {
-        // Screenshot upload failure is non-fatal
+        await uploadScreenshot(ctx, umPage.id, screenDoc.screen.screenshotPath);
+      } catch (err) {
+        console.warn(`  Screenshot upload skip: ${(err as Error).message}`);
       }
     }
   }
+
+  const umUrl = `${ctx.wikiBase}${umPage._links?.webui ?? ""}`;
+  const tdUrl = `${ctx.wikiBase}${tdPage._links?.webui ?? ""}`;
+  console.log(`  User manual → ${umUrl}`);
+  console.log(`  Technical doc → ${tdUrl}`);
+
+  return { userManualUrl: umUrl, technicalDocUrl: tdUrl };
+}
+
+/** Search pages by title fragment — used by the publish modal. */
+export async function searchConfluencePages(
+  query: string
+): Promise<Array<{ id: string; title: string; url: string }>> {
+  const ctx = await apiContext();
+  // v2 page list supports a title filter; for a fragment search we
+  // pull a page batch and filter client-side.
+  const res = await axios.get<{ results: V2Page[] }>(
+    `${ctx.base}/pages?limit=100`,
+    { headers: authHeaders(ctx.token) }
+  );
+  const q = query.toLowerCase();
+  return res.data.results
+    .filter((p) => p.title.toLowerCase().includes(q))
+    .slice(0, 20)
+    .map((p) => ({
+      id: p.id,
+      title: p.title,
+      url: `${ctx.wikiBase}${p._links?.webui ?? ""}`,
+    }));
 }

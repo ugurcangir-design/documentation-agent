@@ -25,12 +25,21 @@ export interface AtlassianTokens {
   scope: string;
 }
 
+// Granular scopes — required by the Confluence v2 REST API. The classic
+// scopes (read:confluence-content.all, …) only authorize the v1 API
+// which Atlassian has now removed (HTTP 410 Gone).
 export const ATLASSIAN_SCOPES = [
-  "read:confluence-content.all",
-  "read:confluence-space.summary",
-  "write:confluence-content",
+  // Confluence (granular)
+  "read:space:confluence",
+  "read:page:confluence",
+  "write:page:confluence",
+  "read:attachment:confluence",
+  "write:attachment:confluence",
+  "read:content-details:confluence",
+  // Jira
   "read:jira-work",
   "write:jira-work",
+  // Refresh tokens
   "offline_access",
 ].join(" ");
 
