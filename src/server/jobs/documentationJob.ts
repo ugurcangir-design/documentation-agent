@@ -20,6 +20,7 @@ import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
 import { computeCoverage } from "../../quality/coverageCheck";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
+import { cleanReferenceText } from "../../quality/referenceTextCleaner";
 
 import type { Endpoint } from "../../types/endpoint";
 import type { DocumentSection } from "../../types/documentSource";
@@ -96,11 +97,14 @@ export async function runDocumentationJob(
     allSections.push(...parseBrdSections(doc.content, doc.fileName));
   }
 
-  // 4. Uploaded reference documents (.docx → text)
+  // 4. Uploaded reference documents (.docx/.pdf → text). PDF-extracted
+  //    text is cleaned of TOC dot-leaders, page markers and running
+  //    headers before sectioning so retrieval works on real prose.
   for (const docRef of referenceStore.getDocuments()) {
     if (docRef.type === "template") continue; // templates handled separately
     if (fs.existsSync(docRef.contentFile)) {
-      const content = fs.readFileSync(docRef.contentFile, "utf-8");
+      const raw = fs.readFileSync(docRef.contentFile, "utf-8");
+      const content = cleanReferenceText(raw);
       allSections.push(...parseBrdSections(content, docRef.originalName));
     }
   }
@@ -126,11 +130,13 @@ export async function runDocumentationJob(
     // skip if not configured
   }
 
-  // 7. Load templates for style reference
+  // 7. Load templates for style reference — cleaned so the model sees
+  //    real guide prose, not 7000 chars of table-of-contents dots.
   const templateContents: string[] = [];
   for (const tplRef of referenceStore.getDocuments("template")) {
     if (fs.existsSync(tplRef.contentFile)) {
-      templateContents.push(fs.readFileSync(tplRef.contentFile, "utf-8"));
+      const raw = fs.readFileSync(tplRef.contentFile, "utf-8");
+      templateContents.push(cleanReferenceText(raw));
     }
   }
 
