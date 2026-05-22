@@ -52,22 +52,54 @@ app.get("/api/health", (_req, res) => {
 });
 
 // ── Heartbeat / auto-shutdown ──────────────────────────────────────
-// Browser sends a heartbeat every 10s. If no heartbeat for 90s,
-// process exits → supervisor kills Vite → all gone.
-// 90s tolerates: browser tab refresh, brief network drops, OS sleep
-// awakening, browser background-tab throttling.
+// The local app must close when its browser tab is *closed*, but stay
+// open on a refresh and while the tab is merely idle / in the
+// background. Two independent signals make that distinction reliable:
+//
+//  1. `pagehide` beacon → the tab is going away. This fires on a
+//     refresh AND on a real close, but NOT on backgrounding the tab.
+//     On receipt we start a short grace countdown; if a heartbeat
+//     arrives before it fires, the tab came back (refresh, or another
+//     tab is still open) and we cancel. If nothing reconnects, the tab
+//     was truly closed → exit.
+//
+//  2. Heartbeat every 10s → liveness. A long fallback timeout only
+//     covers abnormal exits (browser crash, OS kill) where `pagehide`
+//     never fires. It is deliberately long so a backgrounded tab —
+//     whose timers the browser throttles hard — is never mistaken for
+//     a closed one.
 let lastHeartbeat: number | null = null;
-const HEARTBEAT_TIMEOUT = 90_000;
-const CHECK_INTERVAL = 15_000;
+let leaveTimer: NodeJS.Timeout | null = null;
+
+const LEAVE_GRACE = 30_000;              // tab gone → exit unless a tab reconnects
+const HEARTBEAT_FALLBACK = 15 * 60_000;  // crash fallback (survives bg throttling)
+const CHECK_INTERVAL = 30_000;
 
 app.post("/api/heartbeat", (_req, res) => {
   lastHeartbeat = Date.now();
+  // A live tab is talking to us → it did not leave after all.
+  if (leaveTimer) {
+    clearTimeout(leaveTimer);
+    leaveTimer = null;
+  }
   res.json({ ok: true });
 });
 
+// Sent via navigator.sendBeacon on `pagehide`. A refresh fires this too,
+// so we wait out a grace period — the reloaded page's first heartbeat
+// cancels the countdown. Only a real tab close leaves no reconnect.
+app.post("/api/heartbeat/leave", (_req, res) => {
+  res.json({ ok: true });
+  if (leaveTimer) return; // already counting down
+  leaveTimer = setTimeout(() => {
+    console.log("[server] browser tab closed (no reconnect) — exiting");
+    process.exit(0);
+  }, LEAVE_GRACE);
+});
+
 setInterval(() => {
-  if (lastHeartbeat && Date.now() - lastHeartbeat > HEARTBEAT_TIMEOUT) {
-    console.log("[server] no heartbeat for 90s, exiting");
+  if (lastHeartbeat && Date.now() - lastHeartbeat > HEARTBEAT_FALLBACK) {
+    console.log("[server] no heartbeat for 15min — exiting (crash fallback)");
     process.exit(0);
   }
 }, CHECK_INTERVAL);

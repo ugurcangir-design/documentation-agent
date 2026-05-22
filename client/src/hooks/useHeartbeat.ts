@@ -1,23 +1,49 @@
 import { useEffect } from "react";
 
 /**
- * Send a heartbeat to the server every 10s so it knows a browser tab
- * is alive. The server self-terminates after ~90s of no heartbeat —
- * see /api/heartbeat in src/server/app.ts.
+ * Keeps the local server alive while a browser tab is open.
  *
- * We intentionally do NOT send /api/shutdown on beforeunload. That
- * killed the server during a tab refresh because the unload fired
- * before the new page could establish its own heartbeat.
+ *  - Heartbeat every 10s → liveness signal.
+ *  - On `pagehide` (fires on refresh AND on tab close, but NOT on
+ *    merely backgrounding the tab) we send a `leave` beacon. The server
+ *    then waits out a short grace period: on a refresh the reloaded
+ *    page's heartbeat cancels the shutdown; on a real close nothing
+ *    reconnects and the server exits.
+ *  - Backgrounding / idling a tab never fires `pagehide`, so the app
+ *    stays open while idle. On `visibilitychange` → visible and on
+ *    `pageshow` we send an immediate heartbeat, so returning to a
+ *    long-backgrounded tab instantly refreshes liveness.
+ *
+ * We deliberately do NOT shut the server down immediately on unload —
+ * that historically killed the server during a refresh. The grace
+ * period on the server side is what makes a refresh safe.
  */
 export function useHeartbeat() {
   useEffect(() => {
     const send = () => {
-      fetch("/api/heartbeat", { method: "POST" }).catch(() => {});
+      fetch("/api/heartbeat", { method: "POST", keepalive: true }).catch(() => {});
     };
 
     send();
     const interval = setInterval(send, 10_000);
 
-    return () => clearInterval(interval);
+    // sendBeacon is reliable during page unload — a normal fetch is not.
+    const onPageHide = () => {
+      navigator.sendBeacon("/api/heartbeat/leave");
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") send();
+    };
+
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 }
