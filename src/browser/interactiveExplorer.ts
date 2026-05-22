@@ -136,6 +136,145 @@ async function forEachVisible(
   return captured;
 }
 
+// Keywords that strongly suggest a button opens a modal / form / panel.
+// Buttons whose label matches these are explored FIRST.
+const MODAL_KEYWORDS = [
+  "add", "yeni", "ekle", "oluştur", "create", "new",
+  "edit", "düzenle", "detay", "detail", "görüntüle", "view",
+  "filter", "filtre", "search", "ara", " + ", "(+)",
+  "log", "kayıt", "history", "geçmiş", "ayar", "settings",
+  "info", "bilgi", "aç", "open", "import", "export", "dışa", "içe",
+  "manual", "manuel",
+];
+
+const PRIORITY_RE = new RegExp(
+  MODAL_KEYWORDS.map((k) => k.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+  "i"
+);
+
+// Labels that are pagination / not worth a modal probe.
+function isPaginationOrNoise(label: string): boolean {
+  const l = label.trim();
+  if (/^[0-9]+$/.test(l)) return true;                  // page numbers
+  if (/^[‹›«»<>|–—.\s]+$/.test(l)) return true;          // arrows / separators
+  if (l.length < 2) return true;
+  return false;
+}
+
+/**
+ * Priority-ordered action-button exploration. Collects every button in
+ * the main content, scores each (modal-keyword labels rank highest),
+ * skips column headers + pagination, then clicks the top MAX.modals.
+ */
+async function runActionButtonPass(
+  page: Page,
+  basePath: string,
+  log: (m: string) => void,
+  clickedLabels: Set<string>,
+  pushState: (label: string, triggeredBy: string, filename: string) => Promise<void>
+): Promise<void> {
+  const root = page.locator(
+    'button:not([disabled]), [role="button"]:not([aria-disabled="true"])'
+  );
+  const total = await root.count();
+
+  // Collect candidates with metadata
+  interface Candidate { index: number; label: string; priority: number }
+  const candidates: Candidate[] = [];
+
+  for (let i = 0; i < total; i++) {
+    const loc = root.nth(i);
+    if (!(await loc.isVisible().catch(() => false))) continue;
+    if (await isInNavOrSidebar(loc)) continue;
+
+    // Skip column-header buttons (handled by the column-header pass)
+    const inThead = await loc
+      .evaluate((el: Element) => Boolean(el.closest("thead, th")))
+      .catch(() => false);
+    if (inThead) continue;
+    // Skip buttons inside table rows (handled by the row-action pass)
+    const inTbodyRow = await loc
+      .evaluate((el: Element) => Boolean(el.closest("tbody tr, [role=\"row\"]")))
+      .catch(() => false);
+    if (inTbodyRow) continue;
+
+    const label = await safeText(loc);
+    if (!label || label.length > 35) continue;
+    if (isDestructive(label)) continue;
+    if (isPaginationOrNoise(label)) continue;
+    if (clickedLabels.has(label)) continue;
+
+    const priority = PRIORITY_RE.test(label) ? 2 : 1;
+    candidates.push({ index: i, label, priority });
+  }
+
+  // Highest priority first; preserve DOM order within a tier
+  candidates.sort((a, b) => b.priority - a.priority || a.index - b.index);
+
+  log(`  Action-button: ${total} buton, ${candidates.length} aday (${candidates.filter((c) => c.priority === 2).length} öncelikli)`);
+
+  let captured = 0;
+  for (const cand of candidates) {
+    if (captured >= MAX.modals) break;
+    if (clickedLabels.has(cand.label)) continue;
+    clickedLabels.add(cand.label);
+
+    const loc = root.nth(cand.index);
+    if (!(await loc.isVisible().catch(() => false))) continue;
+
+    const beforeUrl = page.url();
+    try {
+      await loc.click({ timeout: ACTION_TIMEOUT });
+    } catch {
+      try { await loc.click({ timeout: ACTION_TIMEOUT, force: true }); }
+      catch { await loc.evaluate((el: HTMLElement) => el.click()).catch(() => {}); }
+    }
+    await page.waitForTimeout(RENDER_WAIT + 300);
+
+    if (page.url() !== beforeUrl) {
+      await page.goBack({ timeout: ACTION_TIMEOUT }).catch(() => {});
+      await page.waitForTimeout(500);
+      continue;
+    }
+
+    const isModal = await modalIsOpen(page);
+    const kind = isModal ? "Modal" : "Panel/etki";
+    await pushState(`${kind}: "${cand.label}"`, `buton tıklandı: ${cand.label}`, `${basePath}_btn_${cand.index}`);
+    log(`  ✓ ${kind} yakalandı: ${cand.label}${cand.priority === 2 ? " (öncelikli)" : ""}`);
+    captured++;
+
+    // Sub-explore: focus a field inside the open modal/panel
+    try {
+      const subInputs = page.locator(
+        'input[type="date"]:visible, input[type="datetime-local"]:visible, ' +
+        'input[type="text"]:not([disabled]):not([readonly]):visible, ' +
+        'input[type="search"]:visible, ' +
+        '[class*="DatePicker"]:visible, [role="combobox"]:visible'
+      );
+      if ((await subInputs.count()) > 0) {
+        const sub = subInputs.first();
+        await sub.focus({ timeout: 1500 }).catch(async () => {
+          await sub.click({ timeout: 1500, force: true }).catch(() => {});
+        });
+        await page.waitForTimeout(600);
+        await pushState(
+          `${kind} içi alan: "${cand.label}"`,
+          `${kind} açıkken alt alan focus`,
+          `${basePath}_btn_${cand.index}_inner`
+        );
+        log(`  ↳ ${kind} içi state yakalandı`);
+      }
+    } catch { /* noop */ }
+
+    if (isModal) {
+      await closeModal(page);
+    } else {
+      await page.keyboard.press("Escape").catch(() => {});
+    }
+    await page.waitForTimeout(300);
+  }
+}
+
 export async function exploreInteractiveStates(
   page: Page,
   basePath: string,
@@ -168,35 +307,42 @@ export async function exploreInteractiveStates(
     });
   };
 
-  // ── 0. PRE-PASS: open a Filters/Search panel first (more inputs visible) ──
-  let filtersBtnLabel: string | null = null;
+  // ── 0. PRE-PASS: open the Filters/Search panel first ─────────────
+  // The filter trigger is often NOT a <button> — it can be a div/span
+  // with an icon, a clickable header, or an [aria-expanded] toggle.
+  let filterOpened = false;
   for (const sel of [
-    'button:has-text("Filtreler")',
-    'button:has-text("Filtre")',
-    'button:has-text("Filters")',
-    'button:has-text("Filter")',
-    'button:has-text("Ara")',
-    'button:has-text("Search")',
-    'button[aria-label*="filter" i]',
-    'button[aria-label*="filtre" i]',
+    'button:has-text("Filtreler")', 'button:has-text("Filtre")',
+    'button:has-text("Filters")', 'button:has-text("Filter")',
+    'button:has-text("Ara")', 'button:has-text("Search")',
+    '[role="button"]:has-text("Filtre")', '[role="button"]:has-text("Filter")',
+    '[aria-label*="filter" i]', '[aria-label*="filtre" i]',
+    '[class*="filter" i][role="button"]',
+    '[class*="Filter"][class*="toggle" i]',
+    '[class*="filter-header" i]', '[class*="FilterHeader"]',
+    '[data-testid*="filter" i]',
+    // Clickable element directly containing the word "Filter(s)"
+    'div:has-text("Filters"):not(:has(div))',
   ]) {
     try {
-      const btn = page.locator(sel).first();
-      if (!(await btn.isVisible({ timeout: 400 }))) continue;
-      if (await isInNavOrSidebar(btn)) continue;
-      filtersBtnLabel = (await safeText(btn)) || "Filter";
-      log(`Pre-pass: Filtre paneli açılıyor (${filtersBtnLabel})`);
-      await btn.click({ timeout: ACTION_TIMEOUT });
+      const ctrl = page.locator(sel).first();
+      if (!(await ctrl.isVisible({ timeout: 400 }))) continue;
+      if (await isInNavOrSidebar(ctrl)) continue;
+      const lbl = (await safeText(ctrl)) || "Filter";
+      log(`Pre-pass: Filtre paneli açılıyor (${lbl}) — selector: ${sel}`);
+      await ctrl.click({ timeout: ACTION_TIMEOUT }).catch(async () => {
+        await ctrl.click({ timeout: ACTION_TIMEOUT, force: true });
+      });
       await page.waitForTimeout(900);
-      await pushState(
-        `Filtre paneli açık`,
-        `pre-pass: ${filtersBtnLabel} açıldı`,
-        `${basePath}_filters_open`
-      );
+      await pushState(`Filtre paneli açık`, `Filtre kontrolü tıklandı (${lbl})`, `${basePath}_filters_open`);
       log(`  ✓ Filtre paneli yakalandı`);
-      clickedLabels.add(filtersBtnLabel);
+      clickedLabels.add(lbl);
+      filterOpened = true;
       break;
     } catch { /* try next */ }
+  }
+  if (!filterOpened) {
+    log("  ⚠ Filtre paneli açan kontrol bulunamadı — filtre alanı zaten açık olabilir");
   }
 
   // ── 1. TABS ──────────────────────────────────────────────────────
@@ -255,84 +401,11 @@ export async function exploreInteractiveStates(
     }
   );
 
-  // ── 3. ACTION BUTTONS ────────────────────────────────────────────
-  // Click each unique-label button in main content. Capture state after
-  // each successful click (modal, panel, expansion — anything counts).
-  await forEachVisible(
-    page,
-    'button:not([disabled]), [role="button"]:not([aria-disabled="true"])',
-    MAX.modals, log, "Action-button", true,
-    async (loc, label, i) => {
-      if (!label || label.length < 2 || label.length > 35) return false;
-      if (clickedLabels.has(label)) return false;
-      clickedLabels.add(label);
-
-      const beforeUrl = page.url();
-
-      // Try a normal click; fall back to force: true if it fails (overlay, animation, etc.)
-      try {
-        await loc.click({ timeout: ACTION_TIMEOUT });
-      } catch {
-        try {
-          await loc.click({ timeout: ACTION_TIMEOUT, force: true });
-        } catch {
-          // Last resort: dispatch via JS
-          await loc.evaluate((el: HTMLElement) => el.click()).catch(() => {});
-        }
-      }
-      await page.waitForTimeout(RENDER_WAIT + 300);
-
-      // If we navigated away, go back and skip
-      if (page.url() !== beforeUrl) {
-        await page.goBack({ timeout: ACTION_TIMEOUT }).catch(() => {});
-        await page.waitForTimeout(500);
-        return false;
-      }
-
-      const isModal = await modalIsOpen(page);
-      const kind = isModal ? "Modal" : "Panel/etki";
-      await pushState(
-        `${kind}: "${label}"`,
-        `buton tıklandı: ${label}`,
-        `${basePath}_btn_${i}`
-      );
-      log(`  ✓ ${kind} yakalandı: ${label}`);
-
-      // Sub-explore: while the panel/modal is still open, focus any newly
-      // visible date input or text input so its label/options are revealed.
-      try {
-        const subInputs = page.locator(
-          'input[type="date"]:visible, input[type="datetime-local"]:visible, ' +
-          'input[type="text"]:not([disabled]):not([readonly]):visible, ' +
-          'input[type="search"]:visible, ' +
-          '[class*="DatePicker"]:visible, [role="combobox"]:visible'
-        );
-        const subCount = await subInputs.count();
-        if (subCount > 0) {
-          const sub = subInputs.first();
-          await sub.focus({ timeout: 1500 }).catch(async () => {
-            await sub.click({ timeout: 1500, force: true }).catch(() => {});
-          });
-          await page.waitForTimeout(700);
-          await pushState(
-            `${kind} içi alan focus: "${label}"`,
-            `${kind} açıkken alt input/date focus`,
-            `${basePath}_btn_${i}_inner`
-          );
-          log(`  ↳ ${kind} içi state yakalandı (${subCount} alt alan görünür)`);
-        }
-      } catch { /* noop */ }
-
-      if (isModal) {
-        await closeModal(page);
-        await page.waitForTimeout(300);
-      } else {
-        await page.keyboard.press("Escape").catch(() => {});
-        await page.waitForTimeout(200);
-      }
-      return true;
-    }
-  );
+  // ── 3. ACTION BUTTONS (priority-ordered) ─────────────────────────
+  // Modal-opening buttons (Add / Edit / Filter / Log / Info / +) are
+  // tried FIRST. Column headers and pagination are excluded — they're
+  // handled by their own passes and would otherwise eat all the slots.
+  await runActionButtonPass(page, basePath, log, clickedLabels, pushState);
 
   // ── 3.5. TABLE COLUMN HEADERS (click to sort) ─────────────────────
   await forEachVisible(
@@ -402,11 +475,64 @@ export async function exploreInteractiveStates(
         `${basePath}_rowaction_${i}`
       );
       log(`  ✓ Satır aksiyon menüsü yakalandı`);
+
+      // If clicking this row action itself opened a modal, capture it.
+      if (await modalIsOpen(page)) {
+        await pushState(
+          `Modal: satır işlemi`,
+          `satır aksiyon ikonu modal açtı`,
+          `${basePath}_rowmodal_${i}`
+        );
+        log(`  ✓ Satır işlemi modalı yakalandı`);
+        await closeModal(page);
+      }
+
       await page.keyboard.press("Escape").catch(() => {});
       await page.waitForTimeout(200);
       return true;
     }
   );
+
+  // ── 3.6b. ROW EDIT/DETAIL ICONS — drill into edit & detail modals ──
+  // This app puts inline icon buttons in each row's ACTIONS column
+  // instead of a kebab menu. Probe edit/detail-labelled icons on the
+  // first row so the edit & detail modals get documented.
+  for (const editSel of [
+    'tbody tr:first-child [aria-label*="edit" i]',
+    'tbody tr:first-child [aria-label*="düzenle" i]',
+    'tbody tr:first-child [aria-label*="detay" i]',
+    'tbody tr:first-child [aria-label*="detail" i]',
+    'tbody tr:first-child [title*="edit" i]',
+    'tbody tr:first-child [title*="düzenle" i]',
+    'tbody tr:first-child [title*="detay" i]',
+    'tbody tr:first-child a[href*="edit" i]',
+    'tbody tr:first-child [class*="edit" i]',
+  ]) {
+    try {
+      const icon = page.locator(editSel).first();
+      if (!(await icon.isVisible({ timeout: 400 }))) continue;
+      const lbl =
+        (await icon.getAttribute("aria-label").catch(() => null)) ||
+        (await icon.getAttribute("title").catch(() => null)) ||
+        "Düzenle";
+      if (isDestructive(lbl)) continue;
+      log(`Satır edit ikonu deneniyor: ${lbl} (${editSel})`);
+      await icon.click({ timeout: ACTION_TIMEOUT }).catch(async () => {
+        await icon.click({ timeout: ACTION_TIMEOUT, force: true });
+      });
+      await page.waitForTimeout(RENDER_WAIT + 400);
+      if (await modalIsOpen(page)) {
+        await pushState(
+          `Modal: "${lbl}" (satır düzenleme/detay)`,
+          `satır ${lbl} ikonu tıklandı`,
+          `${basePath}_rowedit`
+        );
+        log(`  ✓ Satır düzenleme/detay modalı yakalandı: ${lbl}`);
+        await closeModal(page);
+        break;
+      }
+    } catch { /* try next */ }
+  }
 
   // ── 4. DATE PICKERS ──────────────────────────────────────────────
   await forEachVisible(
