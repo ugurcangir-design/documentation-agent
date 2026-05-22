@@ -63,7 +63,10 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 /**
  * From ranked sections, prepare a diversity-aware set of chunks that
  * fits within `totalBudget` bytes. Drops chunks that are too similar
- * to ones already selected (Jaccard > 0.7 on title tokens).
+ * to ones already selected (Jaccard > 0.7 on title tokens) — but ONLY
+ * within the same sourceType. A BRD section and a Confluence page with
+ * the same title ("Prematch Program") are complementary, not duplicate,
+ * so both are kept.
  */
 export function prepareDocumentChunks(
   ranked: RankedDocumentSection[],
@@ -71,14 +74,19 @@ export function prepareDocumentChunks(
   perChunkMax = 2500
 ): PreparedChunk[] {
   const out: PreparedChunk[] = [];
-  const selectedTitleTokens: Array<Set<string>> = [];
+  const selected: Array<{ tokens: Set<string>; sourceType: string }> = [];
   let bytesLeft = totalBudget;
 
   for (const r of ranked) {
     if (bytesLeft <= 200) break;
 
     const titleTokens = new Set(tokenize(r.section.title));
-    const tooSimilar = selectedTitleTokens.some((prev) => jaccard(titleTokens, prev) > 0.7);
+    // Duplicate only if same sourceType AND high title overlap.
+    const tooSimilar = selected.some(
+      (prev) =>
+        prev.sourceType === r.section.sourceType &&
+        jaccard(titleTokens, prev.tokens) > 0.7
+    );
     if (tooSimilar) continue;
 
     const chunks = chunkSection(r.section, perChunkMax);
@@ -96,7 +104,7 @@ export function prepareDocumentChunks(
       content: trimmed,
       score: r.score,
     });
-    selectedTitleTokens.push(titleTokens);
+    selected.push({ tokens: titleTokens, sourceType: r.section.sourceType });
     bytesLeft -= trimmed.length;
   }
 

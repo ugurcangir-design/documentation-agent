@@ -7,6 +7,7 @@ import http from "http";
 
 import { referenceStore } from "../store/referenceStore";
 import { env } from "../../config/env";
+import { decodeHtmlEntities } from "../../quality/referenceTextCleaner";
 import {
   getValidAccessToken,
   getStoredTokens,
@@ -100,7 +101,9 @@ router.post("/confluence/fetch", async (req: Request, res: Response) => {
     }
 
     const htmlContent = page.body?.storage?.value ?? "";
-    const plainText = htmlContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const plainText = decodeHtmlEntities(htmlContent.replace(/<[^>]+>/g, " "))
+      .replace(/\s+/g, " ")
+      .trim();
 
     const dir = path.join(REFS_DIR, "confluence");
     fs.mkdirSync(dir, { recursive: true });

@@ -11,6 +11,37 @@
  * and the model never sees real prose to imitate.
  */
 
+// Common named HTML entities found in Confluence storage-format text.
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'",
+  uuml: "ü", Uuml: "Ü", ouml: "ö", Ouml: "Ö", auml: "ä", Auml: "Ä",
+  ccedil: "ç", Ccedil: "Ç", scaron: "ş", ntilde: "ñ",
+  iuml: "ï", euml: "ë", agrave: "à", eacute: "é", egrave: "è",
+  hellip: "…", mdash: "—", ndash: "–", rsquo: "'", lsquo: "'",
+  rdquo: "”", ldquo: "“", deg: "°", copy: "©", reg: "®",
+  trade: "™", middot: "·", bull: "•", laquo: "«", raquo: "»",
+};
+
+/**
+ * Decode HTML entities — named (&uuml;), decimal (&#252;) and hex
+ * (&#xFC;). Confluence storage-format text is full of these and they
+ * pollute both retrieval scoring and the LLM prompt if left raw.
+ */
+export function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
+      try { return String.fromCodePoint(parseInt(h, 16)); } catch { return " "; }
+    })
+    .replace(/&#(\d+);/g, (_, d) => {
+      try { return String.fromCodePoint(parseInt(d, 10)); } catch { return " "; }
+    })
+    .replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (m, name) => NAMED_ENTITIES[name] ?? m)
+    // Any entity still left after the named-entity pass is one we don't have
+    // a glyph for. Leaving raw "&xxx;" codes in the text pollutes retrieval
+    // scoring and the LLM prompt, so drop them entirely.
+    .replace(/&[a-zA-Z][a-zA-Z0-9]*;/g, " ");
+}
+
 /** A line is a TOC entry if it has a run of dot leaders. */
 function isTocLine(line: string): boolean {
   return /\.{5,}/.test(line);
