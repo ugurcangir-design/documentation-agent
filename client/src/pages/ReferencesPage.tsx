@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 
-type Tab = "confluence" | "swagger" | "documents" | "templates";
+type Tab = "sources" | "confluence" | "swagger" | "documents" | "templates";
 
 interface ConfluenceRef { id: string; url: string; title: string; spaceKey: string; syncedAt: string; wordCount: number; }
 interface SwaggerRef { id: string; url: string; name: string; fetchedAt: string; endpointCount: number; }
 interface DocumentRef { id: string; originalName: string; type: string; company?: string; description?: string; uploadedAt: string; wordCount: number; }
+interface SourceRef { id: string; kind: "confluence-space" | "jira-project"; key: string; name: string; lastSync: string | null; itemCount: number; }
 
 interface AllRefs {
   confluence: ConfluenceRef[];
@@ -13,10 +14,15 @@ interface AllRefs {
 }
 
 export default function ReferencesPage() {
-  const [tab, setTab] = useState<Tab>("confluence");
+  const [tab, setTab] = useState<Tab>("sources");
   const [refs, setRefs] = useState<AllRefs>({ confluence: [], swagger: [], documents: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Data sources (Confluence spaces / Jira projects)
+  const [confSpaces, setConfSpaces] = useState<SourceRef[]>([]);
+  const [jiraProjects, setJiraProjects] = useState<SourceRef[]>([]);
+  const [atlassianConnected, setAtlassianConnected] = useState(true);
 
   // Confluence
   const [confUrl, setConfUrl] = useState("");
@@ -38,7 +44,20 @@ export default function ReferencesPage() {
     setRefs(r);
   }
 
-  useEffect(() => { load(); }, []);
+  async function loadSources() {
+    try {
+      const s = await fetch("/api/sources").then((x) => x.json()) as {
+        confluenceSpaces: SourceRef[];
+        jiraProjects: SourceRef[];
+        connected: boolean;
+      };
+      setConfSpaces(s.confluenceSpaces ?? []);
+      setJiraProjects(s.jiraProjects ?? []);
+      setAtlassianConnected(s.connected);
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => { load(); loadSources(); }, []);
 
   async function fetchConfluence() {
     if (!confUrl.trim()) return;
@@ -93,7 +112,33 @@ export default function ReferencesPage() {
     await load();
   }
 
+  async function addSource(kind: "confluence" | "jira", key: string, name: string) {
+    setError(null);
+    const r = await fetch(`/api/sources/${kind}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, name }),
+    });
+    if (!r.ok) { setError((await r.json() as { error: string }).error); return; }
+    await loadSources();
+  }
+
+  async function removeSource(id: string) {
+    await fetch(`/api/sources/${id}`, { method: "DELETE" });
+    await loadSources();
+  }
+
+  async function syncSource(id: string): Promise<boolean> {
+    setError(null);
+    const r = await fetch(`/api/sources/${id}/sync`, { method: "POST" });
+    if (!r.ok) { setError((await r.json() as { error: string }).error); await loadSources(); return false; }
+    await loadSources();
+    await load();
+    return true;
+  }
+
   const TABS: { id: Tab; label: string; count: number }[] = [
+    { id: "sources", label: "Veri Kaynakları", count: confSpaces.length + jiraProjects.length },
     { id: "confluence", label: "Confluence", count: refs.confluence.length },
     { id: "swagger", label: "Swagger / API", count: refs.swagger.length },
     { id: "documents", label: "Dökümanlar", count: refs.documents.filter(d => d.type !== "template").length },
@@ -135,6 +180,18 @@ export default function ReferencesPage() {
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-[13px] text-red-700">
           {error}
         </div>
+      )}
+
+      {/* Data Sources Tab */}
+      {tab === "sources" && (
+        <SourcesTab
+          confSpaces={confSpaces}
+          jiraProjects={jiraProjects}
+          connected={atlassianConnected}
+          onAdd={addSource}
+          onRemove={removeSource}
+          onSync={syncSource}
+        />
       )}
 
       {/* Confluence Tab */}
@@ -473,6 +530,201 @@ function DocUploadTab({
       {refs.length === 0 && (
         <EmptyState text={isTemplate ? "Henüz şablon yüklenmedi." : "Henüz referans döküman yüklenmedi."} />
       )}
+    </div>
+  );
+}
+
+// ── Data Sources tab ───────────────────────────────────────────────
+function SourcesTab({
+  confSpaces, jiraProjects, connected, onAdd, onRemove, onSync,
+}: {
+  confSpaces: SourceRef[];
+  jiraProjects: SourceRef[];
+  connected: boolean;
+  onAdd: (kind: "confluence" | "jira", key: string, name: string) => Promise<void>;
+  onRemove: (id: string) => Promise<void>;
+  onSync: (id: string) => Promise<boolean>;
+}) {
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
+
+  const allSources = [...confSpaces, ...jiraProjects];
+
+  async function handleSync(id: string) {
+    setSyncingId(id);
+    try { await onSync(id); }
+    finally { setSyncingId(null); }
+  }
+
+  async function handleSyncAll() {
+    setSyncingAll(true);
+    try {
+      for (const s of allSources) {
+        setSyncingId(s.id);
+        await onSync(s.id);
+      }
+    } finally {
+      setSyncingId(null);
+      setSyncingAll(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {!connected && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-[12px] text-amber-700">
+          Atlassian bağlantısı yok. Confluence space ve Jira projelerini senkronize edebilmek için
+          önce <span className="font-medium">Ayarlar</span> sayfasından OAuth ile bağlanın.
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <p className="text-[12px] text-gray-400">
+          Confluence space veya Jira projesi ekleyin. Senkronizasyon, içindeki tüm sayfaları /
+          issue'ları çekerek döküman üretiminde bağlam olarak kullanılır.
+        </p>
+        {allSources.length > 0 && (
+          <button
+            onClick={handleSyncAll}
+            disabled={syncingAll || !connected}
+            className="flex-shrink-0 px-3 py-1.5 bg-blue-600 text-white text-[12px] font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 flex items-center gap-2"
+          >
+            {syncingAll && <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+            {syncingAll ? "Senkronize ediliyor..." : "Tümünü Güncelle"}
+          </button>
+        )}
+      </div>
+
+      <SourceSection
+        title="Confluence Spaces"
+        itemLabel="sayfa"
+        keyPlaceholder="Space Key (örn: DOCS, ~ugurcangir)"
+        sources={confSpaces}
+        connected={connected}
+        syncingId={syncingId}
+        onAdd={(key, name) => onAdd("confluence", key, name)}
+        onRemove={onRemove}
+        onSync={handleSync}
+      />
+
+      <SourceSection
+        title="Jira Projeleri"
+        itemLabel="issue"
+        keyPlaceholder="Proje Key (örn: MBS)"
+        uppercaseKey
+        sources={jiraProjects}
+        connected={connected}
+        syncingId={syncingId}
+        onAdd={(key, name) => onAdd("jira", key, name)}
+        onRemove={onRemove}
+        onSync={handleSync}
+      />
+    </div>
+  );
+}
+
+function SourceSection({
+  title, itemLabel, keyPlaceholder, uppercaseKey, sources, connected,
+  syncingId, onAdd, onRemove, onSync,
+}: {
+  title: string;
+  itemLabel: string;
+  keyPlaceholder: string;
+  uppercaseKey?: boolean;
+  sources: SourceRef[];
+  connected: boolean;
+  syncingId: string | null;
+  onAdd: (key: string, name: string) => Promise<void>;
+  onRemove: (id: string) => Promise<void>;
+  onSync: (id: string) => Promise<void>;
+}) {
+  const [key, setKey] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function handleAdd() {
+    if (!key.trim()) return;
+    setBusy(true);
+    try {
+      await onAdd(key.trim(), name.trim());
+      setKey(""); setName("");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <h3 className="text-[13px] font-semibold text-gray-700 mb-3">{title}</h3>
+
+      {sources.length > 0 && (
+        <div className="space-y-2 mb-3">
+          {sources.map((s) => {
+            const syncing = syncingId === s.id;
+            return (
+              <div
+                key={s.id}
+                className="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2.5"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[12px] font-semibold text-gray-800">{s.key}</span>
+                    {s.name && s.name !== s.key && (
+                      <span className="text-[12px] text-gray-500 truncate">· {s.name}</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    {s.lastSync
+                      ? `${new Date(s.lastSync).toLocaleString("tr-TR")} · ${s.itemCount} ${itemLabel}`
+                      : "Henüz senkronize edilmedi"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => onSync(s.id)}
+                  disabled={syncing || !connected}
+                  className="flex-shrink-0 px-2.5 py-1 text-[11px] font-medium rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40 flex items-center gap-1.5"
+                >
+                  {syncing && <span className="w-2.5 h-2.5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />}
+                  {syncing ? "Çekiliyor..." : "Senkronize Et"}
+                </button>
+                <button
+                  onClick={() => onRemove(s.id)}
+                  disabled={syncing}
+                  className="flex-shrink-0 text-red-400 hover:text-red-600 text-[11px] disabled:opacity-40"
+                >
+                  Kaldır
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {sources.length === 0 && (
+        <p className="text-[12px] text-gray-400 mb-3">Henüz eklenmedi.</p>
+      )}
+
+      <div className="flex gap-2">
+        <input
+          value={key}
+          onChange={(e) => setKey(uppercaseKey ? e.target.value.toUpperCase() : e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          placeholder={keyPlaceholder}
+          className="w-48 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+        />
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          placeholder="Açıklama (opsiyonel)"
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+        />
+        <button
+          onClick={handleAdd}
+          disabled={busy || !key.trim()}
+          className="px-4 py-2 bg-blue-600 text-white text-[13px] font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40"
+        >
+          Ekle
+        </button>
+      </div>
     </div>
   );
 }
