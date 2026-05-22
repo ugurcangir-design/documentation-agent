@@ -85,7 +85,7 @@ export async function runDocumentationJob(
     }
   }
 
-  const allSections: DocumentSection[] = [];
+  let allSections: DocumentSection[] = [];
 
   // 3. BRD docs (local markdown files)
   const brdDocs = loadDocuments({
@@ -163,12 +163,17 @@ export async function runDocumentationJob(
     }
   }
 
-  // 6. Legacy: live Confluence space scan (if configured)
-  try {
-    const confluenceSections = await readConfluencePages();
-    allSections.push(...confluenceSections);
-  } catch {
-    // skip if not configured
+  // 6. Legacy: live Confluence space scan via env.confluenceSpaceKey.
+  //    Superseded by the "Veri Kaynakları" feature. Only runs as a
+  //    fallback when no Confluence space source has been registered, so
+  //    a synced space is never also scanned live (no double read).
+  if (referenceStore.getSources("confluence-space").length === 0) {
+    try {
+      const confluenceSections = await readConfluencePages();
+      allSections.push(...confluenceSections);
+    } catch {
+      // skip if not configured
+    }
   }
 
   // 7. Load templates for style reference — cleaned so the model sees
@@ -181,6 +186,29 @@ export async function runDocumentationJob(
     }
   }
 
+  // De-duplicate synced sections by id. A Confluence page can reach
+  // `allSections` from both the synced space (step 5) and an individually
+  // added page URL (step 5) or the legacy env scan (step 6) — all share
+  // `confluence_<pageId>`. Reading it twice skews retrieval scoring and
+  // wastes prompt budget. Scoped to confluence_/jira_ ids (which we mint
+  // ourselves and know are stable); BRD sections are left untouched so
+  // two same-titled headings are never collapsed.
+  {
+    const seen = new Set<string>();
+    const before = allSections.length;
+    allSections = allSections.filter((s) => {
+      const isSynced = s.id.startsWith("confluence_") || s.id.startsWith("jira_");
+      if (!isSynced) return true;
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    });
+    const removed = before - allSections.length;
+    if (removed > 0) {
+      console.log(`[docjob ${jobId}] ${removed} yinelenen referans bölümü temizlendi (çift okuma engellendi)`);
+    }
+  }
+
   emitJobEvent(jobId, {
     type: "progress",
     message: `Bağlam hazır: ${allEndpoints.length} endpoint, ${allSections.length} döküman bölümü, ${templateContents.length} şablon`,
@@ -188,9 +216,16 @@ export async function runDocumentationJob(
     total,
   });
 
+  // Source-type inventory — proves every reference kind reached context.
+  const sectionsByType = allSections.reduce<Record<string, number>>((acc, s) => {
+    acc[s.sourceType] = (acc[s.sourceType] ?? 0) + 1;
+    return acc;
+  }, {});
+
   console.log(`[docjob ${jobId}] CONTEXT INVENTORY:`);
   console.log(`  - Endpoints: ${allEndpoints.length}`);
   console.log(`  - BRD/Confluence sections: ${allSections.length}`);
+  console.log(`  - Section types: ${JSON.stringify(sectionsByType)}`);
   console.log(`  - Templates: ${templateContents.length} (total chars: ${templateContents.reduce((s, t) => s + t.length, 0)})`);
   if (allSections.length > 0) {
     console.log(`  - First 3 sections: ${allSections.slice(0, 3).map(s => `'${s.title}'`).join(", ")}`);
@@ -365,11 +400,26 @@ export async function runDocumentationJob(
       // Append a retrieval-trace footer so the analyst sees exactly
       // which BRD chunks, API endpoints and templates fed the doc.
       const usedTemplates = referenceStore.getDocuments("template").map((t) => t.originalName);
+      const SOURCE_TYPE_LABELS: Record<string, string> = {
+        brd: "BRD",
+        confluence: "Confluence",
+        jira_task: "Jira",
+        process_analysis: "Süreç Analizi",
+        manual: "Manuel",
+      };
+      const chunkTypeBreakdown = Object.entries(
+        context.preparedChunks.reduce<Record<string, number>>((acc, c) => {
+          acc[c.sourceType] = (acc[c.sourceType] ?? 0) + 1;
+          return acc;
+        }, {})
+      )
+        .map(([t, n]) => `${SOURCE_TYPE_LABELS[t] ?? t} ${n}`)
+        .join(", ");
       const buildTrace = (cov: typeof umCoverage, fixUpAdded: number) => [
         `\n\n---`,
         `### Üretim Bilgisi`,
         `Bu döküman aşağıdaki kaynaklarla üretildi:`,
-        `- **BRD bölümleri** (${context.preparedChunks.length}): ${context.preparedChunks.map((c) => c.title).slice(0, 8).join(", ") || "(yok)"}`,
+        `- **Referans bölümleri** (${context.preparedChunks.length}${chunkTypeBreakdown ? ` — ${chunkTypeBreakdown}` : ""}): ${context.preparedChunks.map((c) => c.title).slice(0, 8).join(", ") || "(yok)"}`,
         `- **API endpoint** (${context.relatedEndpoints.length}): ${context.relatedEndpoints.slice(0, 5).map((e) => `\`${e.endpoint.method} ${e.endpoint.path}\``).join(", ") || "(yok)"}`,
         `- **Şablon** (${usedTemplates.length}): ${usedTemplates.join(", ") || "(yok)"}`,
         `- **Ekran state** (${(storedScreen.states?.length ?? 0) + 1}): 1 ana + ${storedScreen.states?.length ?? 0} test user simülasyon görüntüsü`,
