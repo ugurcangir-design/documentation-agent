@@ -127,6 +127,42 @@ export async function runDocumentationJob(
     }
   }
 
+  // 5b. Synced Jira issues (pulled via Veri Kaynakları). Each issue
+  //     becomes its own section so retrieval can pinpoint a single
+  //     ticket rather than drowning in a whole project dump.
+  for (const jira of referenceStore.getAllJira()) {
+    if (!fs.existsSync(jira.contentFile)) continue;
+    try {
+      const issues = JSON.parse(fs.readFileSync(jira.contentFile, "utf-8")) as Array<{
+        key: string;
+        summary?: string;
+        status?: string;
+        type?: string;
+        description?: string;
+      }>;
+      for (const issue of issues) {
+        const body = [
+          issue.type ? `Tip: ${issue.type}` : "",
+          issue.status ? `Durum: ${issue.status}` : "",
+          issue.description ?? "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        if (!body.trim()) continue;
+        allSections.push({
+          id: `jira_${issue.key}`,
+          sourceId: `jira_${jira.projectKey}`,
+          title: `${issue.key} — ${issue.summary ?? ""}`.trim(),
+          content: body,
+          sourceType: "jira_task",
+          sourceFile: `${jira.projectKey} (Jira)`,
+        });
+      }
+    } catch {
+      // skip malformed jira dump
+    }
+  }
+
   // 6. Legacy: live Confluence space scan (if configured)
   try {
     const confluenceSections = await readConfluencePages();

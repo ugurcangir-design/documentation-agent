@@ -36,16 +36,52 @@ export interface DocumentRef {
   wordCount: number;
 }
 
+/**
+ * A registered data source — a whole Confluence space or a whole Jira
+ * project. Unlike a single Confluence page, a source is *synced*: the
+ * sync pulls every page / issue and materialises them as references.
+ */
+export interface SourceRef {
+  id: string;
+  kind: "confluence-space" | "jira-project";
+  key: string;
+  name: string;
+  lastSync: string | null;
+  itemCount: number;
+}
+
+/** Synced Jira issues for one project, stored as a JSON array file. */
+export interface JiraRef {
+  id: string;
+  projectKey: string;
+  title: string;
+  contentFile: string;
+  syncedAt: string;
+  issueCount: number;
+}
+
 interface ReferenceDB {
   confluence: ConfluenceRef[];
   swagger: SwaggerRef[];
   documents: DocumentRef[];
+  sources: SourceRef[];
+  jira: JiraRef[];
 }
 
 import { writeJsonAtomic, readJsonSafe } from "./atomicJson";
 
 function load(): ReferenceDB {
-  return readJsonSafe<ReferenceDB>(DB_PATH, { confluence: [], swagger: [], documents: [] });
+  const db = readJsonSafe<ReferenceDB>(DB_PATH, {
+    confluence: [],
+    swagger: [],
+    documents: [],
+    sources: [],
+    jira: [],
+  });
+  // Back-fill arrays that may be absent in older DB files.
+  db.sources ??= [];
+  db.jira ??= [];
+  return db;
 }
 
 function save(db: ReferenceDB) {
@@ -126,6 +162,68 @@ export const referenceStore = {
     const ref = db.documents.find((d) => d.id === id);
     if (!ref || !fs.existsSync(ref.contentFile)) return null;
     return fs.readFileSync(ref.contentFile, "utf-8");
+  },
+
+  // ── Data sources (Confluence space / Jira project) ──────────────
+  addSource(data: Omit<SourceRef, "id" | "lastSync" | "itemCount">): SourceRef {
+    const db = load();
+    const existing = db.sources.find(
+      (s) => s.kind === data.kind && s.key.toLowerCase() === data.key.toLowerCase()
+    );
+    if (existing) return existing;
+    const ref: SourceRef = { id: uuid(), lastSync: null, itemCount: 0, ...data };
+    db.sources.push(ref);
+    save(db);
+    return ref;
+  },
+
+  updateSource(id: string, patch: Partial<Pick<SourceRef, "name" | "lastSync" | "itemCount">>) {
+    const db = load();
+    const ref = db.sources.find((s) => s.id === id);
+    if (!ref) return;
+    Object.assign(ref, patch);
+    save(db);
+  },
+
+  removeSource(id: string) {
+    const db = load();
+    db.sources = db.sources.filter((s) => s.id !== id);
+    save(db);
+  },
+
+  getSources(kind?: SourceRef["kind"]): SourceRef[] {
+    const list = load().sources;
+    return kind ? list.filter((s) => s.kind === kind) : list;
+  },
+
+  getSource(id: string): SourceRef | undefined {
+    return load().sources.find((s) => s.id === id);
+  },
+
+  // ── Jira issue dumps ────────────────────────────────────────────
+  addJira(data: Omit<JiraRef, "id">): JiraRef {
+    const db = load();
+    const existing = db.jira.findIndex((j) => j.projectKey === data.projectKey);
+    const ref: JiraRef = {
+      id: existing >= 0 ? (db.jira[existing]?.id ?? uuid()) : uuid(),
+      ...data,
+    };
+    if (existing >= 0) db.jira[existing] = ref;
+    else db.jira.push(ref);
+    save(db);
+    return ref;
+  },
+
+  removeJiraByProject(projectKey: string) {
+    const db = load();
+    const ref = db.jira.find((j) => j.projectKey === projectKey);
+    if (ref?.contentFile && fs.existsSync(ref.contentFile)) fs.unlinkSync(ref.contentFile);
+    db.jira = db.jira.filter((j) => j.projectKey !== projectKey);
+    save(db);
+  },
+
+  getAllJira(): JiraRef[] {
+    return load().jira;
   },
 
   getAll(): ReferenceDB {
