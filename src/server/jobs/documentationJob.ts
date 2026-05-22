@@ -20,7 +20,7 @@ import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
 import { computeCoverage } from "../../quality/coverageCheck";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
-import { cleanReferenceText } from "../../quality/referenceTextCleaner";
+import { cleanReferenceText, decodeHtmlEntities } from "../../quality/referenceTextCleaner";
 
 import type { Endpoint } from "../../types/endpoint";
 import type { DocumentSection } from "../../types/documentSource";
@@ -109,11 +109,16 @@ export async function runDocumentationJob(
     }
   }
 
-  // 5. Stored Confluence references (pulled via Referanslar)
+  // 5. Stored Confluence references (pulled via Referanslar).
+  //    Decode HTML entities (&uuml; etc.) + strip PDF/TOC noise so the
+  //    Confluence page is usable context, not entity soup.
   for (const conf of referenceStore.getAllConfluence()) {
     if (fs.existsSync(conf.contentFile)) {
-      const content = fs.readFileSync(conf.contentFile, "utf-8");
+      const raw = fs.readFileSync(conf.contentFile, "utf-8");
+      const content = cleanReferenceText(decodeHtmlEntities(raw));
       allSections.push({
+        id: `confluence_${conf.pageId}`,
+        sourceId: `confluence_${conf.pageId}`,
         title: conf.title,
         content,
         sourceType: "confluence",
