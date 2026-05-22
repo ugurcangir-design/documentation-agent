@@ -85,11 +85,42 @@ router.post("/atlassian/disconnect", (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-// GET /api/auth/atlassian/test — probe the connection.
-// Uses the Confluence v2 REST API (/wiki/api/v2/spaces) which the
-// granular OAuth scopes authorize. The v1 API is removed (HTTP 410).
+// GET /api/auth/atlassian/test — probe the connection + diagnose scopes.
 router.get("/atlassian/test", async (_req: Request, res: Response) => {
   try {
+    const tokens = getStoredTokens();
+    if (!tokens) {
+      res.json({ ok: false, hint: "Bağlantı yok — önce 'Atlassian'a Bağlan'." });
+      return;
+    }
+
+    // The scope string Atlassian actually granted (stored at auth time)
+    const grantedScopes = (tokens.scope || "").split(/\s+/).filter(Boolean);
+    const REQUIRED = [
+      "read:space:confluence",
+      "read:page:confluence",
+      "write:page:confluence",
+    ];
+    const missingScopes = REQUIRED.filter((s) => !grantedScopes.includes(s));
+
+    // If the token clearly lacks granular scopes, tell the user precisely
+    // — no point making the API call.
+    if (missingScopes.length > 0) {
+      res.json({
+        ok: false,
+        grantedScopes,
+        missingScopes,
+        hint:
+          `Token'ınızda granular scope yok. Mevcut: [${grantedScopes.join(", ") || "boş"}]. ` +
+          `Eksik: [${missingScopes.join(", ")}]. ` +
+          `ÇÖZÜM: 1) developer.atlassian.com/console → uygulamanız → Permissions → Confluence API → ` +
+          `'Granular scopes' sekmesinden ${REQUIRED.join(", ")} izinlerini ekleyin. ` +
+          `2) Burada 'Bağlantıyı Kes'. 3) 'Atlassian'a Bağlan'.`,
+      });
+      return;
+    }
+
+    // Scopes look right — make the real probe call
     const { accessToken, cloudId } = await getValidAccessToken();
     const url = `https://api.atlassian.com/ex/confluence/${cloudId}/wiki/api/v2/spaces?limit=1`;
     const resp = await fetch(url, {
@@ -98,24 +129,25 @@ router.get("/atlassian/test", async (_req: Request, res: Response) => {
 
     if (resp.ok) {
       const data = await resp.json() as { results?: unknown[] };
-      res.json({ ok: true, sampleSpaceCount: data.results?.length ?? 0 });
-      return;
-    }
-
-    // 401/403 here usually means the token was issued with the OLD
-    // classic scopes — the user must disconnect + reconnect so the
-    // new granular scopes are granted.
-    const body = await resp.text();
-    if (resp.status === 401 || resp.status === 403) {
       res.json({
-        ok: false,
-        status: resp.status,
-        body,
-        hint: "Token eski scope'larla alınmış. Ayarlar → Atlassian → 'Bağlantıyı Kes', sonra Developer Console'da granular izinleri ekleyip tekrar 'Atlassian'a Bağlan'.",
+        ok: true,
+        grantedScopes,
+        sampleSpaceCount: data.results?.length ?? 0,
       });
       return;
     }
-    res.json({ ok: false, status: resp.status, body });
+
+    const body = await resp.text();
+    res.json({
+      ok: false,
+      status: resp.status,
+      grantedScopes,
+      body,
+      hint:
+        resp.status === 401 || resp.status === 403
+          ? "Scope'lar görünüşte doğru ama API yine reddetti. Bağlantıyı kesip yeniden bağlanmayı deneyin."
+          : `Beklenmeyen HTTP ${resp.status}.`,
+    });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
