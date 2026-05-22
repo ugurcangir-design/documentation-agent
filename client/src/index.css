@@ -1,27 +1,374 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════════════════
+   Analyst Studio design system — slate + teal, light/dark
+   Ported from ugurcangir-design/Analysys_Agent. Runtime theme switch
+   via [data-theme] on <html>; all colour tokens are CSS variables so
+   the whole app re-themes without touching component markup.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root,
+[data-theme="dark"] {
+  --c-bg:            #080B12;
+  --c-surface:       #0E141E;
+  --c-surface2:      #131A26;
+  --c-surface3:      #1A2331;
+  --c-border:        #1E2735;
+  --c-border-strong: #2A3445;
+
+  --c-text:          #E5EAF1;
+  --c-text2:         #9CA7B8;
+  --c-text3:         #5F6B7E;
+
+  --c-sidebar-bg:    #0A0F18;
+  --c-sidebar-bd:    #171E2B;
+
+  --c-accent:        #2DD4BF;
+  --c-accent2:       #14B8A6;
+  --c-accent-soft:   #0E3530;
+  --c-on-accent:     #03201D;
+
+  --c-green:         #34D399;
+  --c-green-soft:    #0D3329;
+  --c-yellow:        #FBBF24;
+  --c-yellow-soft:   #3A2D08;
+  --c-red:           #F87171;
+  --c-red-soft:      #3A1414;
+  --c-blue:          #60A5FA;
+  --c-blue-soft:     #0E2447;
+
+  --shadow:          0 1px 0 rgba(0, 0, 0, .3);
+  --shadow-md:       0 8px 24px rgba(0, 0, 0, .4);
+  --focus-ring:      0 0 0 3px rgba(45, 212, 191, .18);
+}
+
+[data-theme="light"] {
+  --c-bg:            #F5F7FA;
+  --c-surface:       #FFFFFF;
+  --c-surface2:      #F0F3F7;
+  --c-surface3:      #E8ECF2;
+  --c-border:        #E1E6ED;
+  --c-border-strong: #CDD4DE;
+
+  --c-text:          #1A2233;
+  --c-text2:         #586375;
+  --c-text3:         #8A93A2;
+
+  --c-sidebar-bg:    #FFFFFF;
+  --c-sidebar-bd:    #E1E6ED;
+
+  --c-accent:        #0F766E;
+  --c-accent2:       #115E59;
+  --c-accent-soft:   #D1FAE5;
+  --c-on-accent:     #FFFFFF;
+
+  --c-green:         #16A34A;
+  --c-green-soft:    #DCFCE7;
+  --c-yellow:        #B45309;
+  --c-yellow-soft:   #FEF3C7;
+  --c-red:           #DC2626;
+  --c-red-soft:      #FEE2E2;
+  --c-blue:          #1D4ED8;
+  --c-blue-soft:     #DBEAFE;
+
+  --shadow:          0 1px 2px rgba(20, 30, 55, .04);
+  --shadow-md:       0 4px 12px rgba(20, 30, 55, .08);
+  --focus-ring:      0 0 0 3px rgba(15, 118, 110, .15);
+}
+
+/* ── Tailwind token map ──────────────────────────────────────────────
+   `inline` keeps the var() reference in generated utilities, so every
+   utility re-themes at runtime. The default gray / blue / red / green /
+   amber / violet ramps are remapped onto Analyst tokens — this lets the
+   existing pages adopt the palette without per-class rewrites.
+   ─────────────────────────────────────────────────────────────────── */
+@theme inline {
+  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* semantic tokens (used by Layout + new code) */
+  --color-app:          var(--c-bg);
+  --color-surface:      var(--c-surface);
+  --color-surface2:     var(--c-surface2);
+  --color-surface3:     var(--c-surface3);
+  --color-line:         var(--c-border);
+  --color-line-strong:  var(--c-border-strong);
+  --color-fg:           var(--c-text);
+  --color-fg2:          var(--c-text2);
+  --color-fg3:          var(--c-text3);
+  --color-sidebar:      var(--c-sidebar-bg);
+  --color-sidebar-line: var(--c-sidebar-bd);
+  --color-accent:       var(--c-accent);
+  --color-accent2:      var(--c-accent2);
+  --color-accent-soft:  var(--c-accent-soft);
+  --color-on-accent:    var(--c-on-accent);
+
+  /* base */
+  --color-white: var(--c-surface);
+  --color-black: var(--c-text);
+
+  /* neutral ramp → slate tokens */
+  --color-gray-50:  var(--c-bg);
+  --color-gray-100: var(--c-surface2);
+  --color-gray-200: var(--c-border);
+  --color-gray-300: var(--c-border-strong);
+  --color-gray-400: var(--c-text3);
+  --color-gray-500: var(--c-text3);
+  --color-gray-600: var(--c-text2);
+  --color-gray-700: var(--c-text2);
+  --color-gray-800: var(--c-text);
+  --color-gray-900: var(--c-text);
+  --color-gray-950: var(--c-text);
+
+  /* accent ramp → teal (covers blue / violet / purple) */
+  --color-blue-50:  var(--c-accent-soft);
+  --color-blue-100: var(--c-accent-soft);
+  --color-blue-200: var(--c-accent-soft);
+  --color-blue-300: var(--c-accent);
+  --color-blue-400: var(--c-accent);
+  --color-blue-500: var(--c-accent);
+  --color-blue-600: var(--c-accent);
+  --color-blue-700: var(--c-accent2);
+  --color-blue-800: var(--c-accent2);
+  --color-blue-900: var(--c-accent2);
+  --color-blue-950: var(--c-accent2);
+
+  --color-violet-50:  var(--c-accent-soft);
+  --color-violet-100: var(--c-accent-soft);
+  --color-violet-200: var(--c-accent-soft);
+  --color-violet-300: var(--c-accent);
+  --color-violet-400: var(--c-accent);
+  --color-violet-500: var(--c-accent);
+  --color-violet-600: var(--c-accent);
+  --color-violet-700: var(--c-accent2);
+  --color-violet-800: var(--c-accent2);
+  --color-violet-900: var(--c-accent2);
+
+  --color-purple-50:  var(--c-accent-soft);
+  --color-purple-100: var(--c-accent-soft);
+  --color-purple-500: var(--c-accent);
+  --color-purple-600: var(--c-accent);
+  --color-purple-700: var(--c-accent2);
+
+  /* status ramps */
+  --color-green-50:  var(--c-green-soft);
+  --color-green-100: var(--c-green-soft);
+  --color-green-200: var(--c-green-soft);
+  --color-green-300: var(--c-green);
+  --color-green-400: var(--c-green);
+  --color-green-500: var(--c-green);
+  --color-green-600: var(--c-green);
+  --color-green-700: var(--c-green);
+  --color-green-800: var(--c-green);
+  --color-green-900: var(--c-green);
+
+  --color-emerald-50:  var(--c-green-soft);
+  --color-emerald-100: var(--c-green-soft);
+  --color-emerald-500: var(--c-green);
+  --color-emerald-600: var(--c-green);
+
+  --color-red-50:  var(--c-red-soft);
+  --color-red-100: var(--c-red-soft);
+  --color-red-200: var(--c-red-soft);
+  --color-red-300: var(--c-red);
+  --color-red-400: var(--c-red);
+  --color-red-500: var(--c-red);
+  --color-red-600: var(--c-red);
+  --color-red-700: var(--c-red);
+  --color-red-800: var(--c-red);
+  --color-red-900: var(--c-red);
+
+  --color-rose-50:  var(--c-red-soft);
+  --color-rose-500: var(--c-red);
+  --color-rose-600: var(--c-red);
+
+  --color-amber-50:  var(--c-yellow-soft);
+  --color-amber-100: var(--c-yellow-soft);
+  --color-amber-200: var(--c-yellow-soft);
+  --color-amber-300: var(--c-yellow);
+  --color-amber-400: var(--c-yellow);
+  --color-amber-500: var(--c-yellow);
+  --color-amber-600: var(--c-yellow);
+  --color-amber-700: var(--c-yellow);
+  --color-amber-800: var(--c-yellow);
+  --color-amber-900: var(--c-yellow);
+
+  --color-yellow-50:  var(--c-yellow-soft);
+  --color-yellow-100: var(--c-yellow-soft);
+  --color-yellow-500: var(--c-yellow);
+  --color-yellow-600: var(--c-yellow);
+
+  --color-orange-50:  var(--c-yellow-soft);
+  --color-orange-500: var(--c-yellow);
+  --color-orange-600: var(--c-yellow);
+}
+
+/* ── Base ──────────────────────────────────────────────────────────── */
 @layer base {
+  html,
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    letter-spacing: -0.003em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     margin: 0;
-    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  code,
+  pre,
+  .mono {
+    font-family: var(--font-mono);
+  }
+
+  ::selection {
+    background: var(--c-accent);
+    color: var(--c-on-accent);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--c-border-strong);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--c-text3);
+    background-clip: padding-box;
   }
 }
 
-/* Markdown preview styles */
-.markdown-preview h1 { @apply text-2xl font-bold mt-6 mb-3 text-gray-900; }
-.markdown-preview h2 { @apply text-xl font-semibold mt-5 mb-2 text-gray-800; }
-.markdown-preview h3 { @apply text-lg font-semibold mt-4 mb-2 text-gray-700; }
-.markdown-preview p  { @apply mb-3 text-gray-700 leading-relaxed; }
-.markdown-preview ul { @apply list-disc pl-5 mb-3 space-y-1 text-gray-700; }
-.markdown-preview ol { @apply list-decimal pl-5 mb-3 space-y-1 text-gray-700; }
-.markdown-preview li { @apply leading-relaxed; }
-.markdown-preview code { @apply bg-gray-100 rounded px-1 py-0.5 text-sm font-mono text-gray-800; }
-.markdown-preview pre { @apply bg-gray-900 text-gray-100 rounded-lg p-4 mb-3 overflow-x-auto; }
-.markdown-preview pre code { @apply bg-transparent text-gray-100 p-0; }
-.markdown-preview table { @apply w-full border-collapse mb-4 text-sm; }
-.markdown-preview th { @apply bg-gray-100 border border-gray-200 px-3 py-2 text-left font-semibold; }
-.markdown-preview td { @apply border border-gray-200 px-3 py-2; }
-.markdown-preview hr  { @apply border-gray-200 my-4; }
-.markdown-preview blockquote { @apply border-l-4 border-blue-400 pl-4 italic text-gray-600 my-3; }
-.markdown-preview img { @apply rounded-lg border border-gray-200 shadow-sm my-4 max-w-full; }
+/* ── Reusable component classes (Analyst Studio) ────────────────────── */
+@layer components {
+  .panel {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background .12s, border-color .12s, color .12s, filter .12s;
+    white-space: nowrap;
+  }
+  .btn:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--c-accent);
+    color: var(--c-on-accent);
+    border-color: var(--c-accent);
+    font-weight: 600;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--c-accent2);
+    border-color: var(--c-accent2);
+  }
+  .btn-outline {
+    background: transparent;
+    color: var(--c-text);
+    border-color: var(--c-border-strong);
+  }
+  .btn-outline:hover:not(:disabled) {
+    background: var(--c-surface2);
+    border-color: var(--c-text3);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--c-text2);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--c-surface2);
+    color: var(--c-text);
+  }
+
+  .field-input {
+    width: 100%;
+    background: var(--c-surface2);
+    border: 1px solid var(--c-border);
+    border-radius: 5px;
+    padding: 7px 10px;
+    color: var(--c-text);
+    font-size: 12.5px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .field-input:focus {
+    border-color: var(--c-accent);
+    box-shadow: var(--focus-ring);
+  }
+}
+
+/* ── Markdown preview ───────────────────────────────────────────────── */
+.markdown-preview h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 0.75rem; color: var(--c-text); }
+.markdown-preview h2 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: var(--c-text); }
+.markdown-preview h3 { font-size: 1.075rem; font-weight: 600; margin: 1rem 0 0.5rem; color: var(--c-text); }
+.markdown-preview p  { margin-bottom: 0.75rem; color: var(--c-text2); line-height: 1.65; }
+.markdown-preview ul { list-style: disc; padding-left: 1.25rem; margin-bottom: 0.75rem; color: var(--c-text2); }
+.markdown-preview ol { list-style: decimal; padding-left: 1.25rem; margin-bottom: 0.75rem; color: var(--c-text2); }
+.markdown-preview li { line-height: 1.65; margin-bottom: 0.2rem; }
+.markdown-preview a  { color: var(--c-accent); }
+.markdown-preview code {
+  background: var(--c-surface2);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.85em;
+  font-family: var(--font-mono);
+  color: var(--c-text);
+}
+.markdown-preview pre {
+  background: var(--c-surface2);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  overflow-x: auto;
+}
+.markdown-preview pre code { background: transparent; border: 0; padding: 0; color: var(--c-text); }
+.markdown-preview table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-size: 0.875rem; }
+.markdown-preview th {
+  background: var(--c-surface2);
+  border: 1px solid var(--c-border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--c-text);
+}
+.markdown-preview td { border: 1px solid var(--c-border); padding: 0.5rem 0.75rem; color: var(--c-text2); }
+.markdown-preview hr { border: 0; border-top: 1px solid var(--c-border); margin: 1rem 0; }
+.markdown-preview blockquote {
+  border-left: 3px solid var(--c-accent);
+  padding-left: 1rem;
+  font-style: italic;
+  color: var(--c-text3);
+  margin: 0.75rem 0;
+}
+.markdown-preview img {
+  border-radius: 6px;
+  border: 1px solid var(--c-border);
+  box-shadow: var(--shadow);
+  margin: 1rem 0;
+  max-width: 100%;
+}
