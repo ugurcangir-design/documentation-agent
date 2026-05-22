@@ -238,66 +238,83 @@ export async function runDocumentationJob(
         `technicalDoc=${tdCoverage.coveragePct}% (${tdCoverage.coveredElements}/${tdCoverage.totalElements})`
       );
 
-      // ── Targeted fix-up when coverage < 70% ──────────────────────
-      const FIX_UP_THRESHOLD = 70;
+      // ── Targeted fix-up — loop up to 2 passes until coverage ≥90% ──
+      const FIX_UP_THRESHOLD = 90;
+      const MAX_FIX_UP_PASSES = 2;
       const labelToElement = new Map(inScopeForCoverage.map((el) => [el.label.toLowerCase(), el]));
       const missingAsElements = (missing: string[]) =>
         missing
           .map((m) => {
-            // missing strings look like "Sayfalama (other)" — strip parens
             const label = m.replace(/\s*\([^)]+\)\s*$/, "").trim();
             return labelToElement.get(label.toLowerCase());
           })
           .filter((el): el is NonNullable<typeof el> => Boolean(el));
 
-      if (umCoverage.coveragePct < FIX_UP_THRESHOLD && umCoverage.missing.length > 0) {
-        emitJobEvent(jobId, {
-          type: "progress",
-          message: `Kullanıcı kılavuzu kapsamı %${umCoverage.coveragePct} — eksik ${umCoverage.missing.length} öğe için fix-up uygulanıyor`,
-          current: completed,
-          total,
-        });
-        try {
-          const fix = await runCoverageFixUp({
-            docKind: "userManual",
-            currentContent: umContent,
-            missing: umCoverage.missing,
-            uiElementsMissing: missingAsElements(umCoverage.missing),
-            screenTitle,
+      // Run fix-up passes for a doc until coverage hits the threshold,
+      // it stops improving, or we hit the pass cap.
+      async function fixUpLoop(
+        docKind: "userManual" | "technicalDoc",
+        content: string,
+        coverage: ReturnType<typeof computeCoverage>
+      ): Promise<{ content: string; coverage: typeof coverage; addedTotal: number; tokensIn: number; tokensOut: number }> {
+        let curContent = content;
+        let curCov = coverage;
+        let addedTotal = 0;
+        let tokensIn = 0;
+        let tokensOut = 0;
+
+        for (let pass = 1; pass <= MAX_FIX_UP_PASSES; pass++) {
+          if (curCov.coveragePct >= FIX_UP_THRESHOLD || curCov.missing.length === 0) break;
+          emitJobEvent(jobId, {
+            type: "progress",
+            message: `${docKind === "userManual" ? "Kullanıcı kılavuzu" : "Teknik döküman"} kapsamı %${curCov.coveragePct} — eksik ${curCov.missing.length} öğe için fix-up (tur ${pass})`,
+            current: completed,
+            total,
           });
-          umContent = fix.content;
-          umExtraTokens = { input: fix.inputTokens, output: fix.outputTokens };
-          umFixUpAdded = fix.addedCount;
-          umCoverage = computeCoverage(inScopeForCoverage, umContent);
-          console.log(`[docjob ${jobId}] UM fix-up uygulandı → ${umCoverage.coveragePct}%`);
-        } catch (e) {
-          console.warn(`[docjob ${jobId}] UM fix-up başarısız:`, (e as Error).message);
+          try {
+            const fix = await runCoverageFixUp({
+              docKind,
+              currentContent: curContent,
+              missing: curCov.missing,
+              uiElementsMissing: missingAsElements(curCov.missing),
+              screenTitle,
+            });
+            const newCov = computeCoverage(inScopeForCoverage, fix.content);
+            tokensIn += fix.inputTokens;
+            tokensOut += fix.outputTokens;
+            // Accept the rewrite only if it didn't regress coverage
+            if (newCov.coveragePct >= curCov.coveragePct) {
+              curContent = fix.content;
+              addedTotal += fix.addedCount;
+              const prev = curCov.coveragePct;
+              curCov = newCov;
+              console.log(`[docjob ${jobId}] ${docKind} fix-up tur ${pass}: %${prev} → %${curCov.coveragePct}`);
+              if (curCov.coveragePct === prev) break; // no improvement → stop
+            } else {
+              console.log(`[docjob ${jobId}] ${docKind} fix-up tur ${pass} regresyon (%${newCov.coveragePct}) — atlandı`);
+              break;
+            }
+          } catch (e) {
+            console.warn(`[docjob ${jobId}] ${docKind} fix-up başarısız:`, (e as Error).message);
+            break;
+          }
         }
+        return { content: curContent, coverage: curCov, addedTotal, tokensIn, tokensOut };
       }
 
-      if (tdCoverage.coveragePct < FIX_UP_THRESHOLD && tdCoverage.missing.length > 0) {
-        emitJobEvent(jobId, {
-          type: "progress",
-          message: `Teknik döküman kapsamı %${tdCoverage.coveragePct} — fix-up uygulanıyor`,
-          current: completed,
-          total,
-        });
-        try {
-          const fix = await runCoverageFixUp({
-            docKind: "technicalDoc",
-            currentContent: tdContent,
-            missing: tdCoverage.missing,
-            uiElementsMissing: missingAsElements(tdCoverage.missing),
-            screenTitle,
-          });
-          tdContent = fix.content;
-          tdExtraTokens = { input: fix.inputTokens, output: fix.outputTokens };
-          tdFixUpAdded = fix.addedCount;
-          tdCoverage = computeCoverage(inScopeForCoverage, tdContent);
-          console.log(`[docjob ${jobId}] TD fix-up uygulandı → ${tdCoverage.coveragePct}%`);
-        } catch (e) {
-          console.warn(`[docjob ${jobId}] TD fix-up başarısız:`, (e as Error).message);
-        }
+      {
+        const r = await fixUpLoop("userManual", umContent, umCoverage);
+        umContent = r.content;
+        umCoverage = r.coverage;
+        umFixUpAdded = r.addedTotal;
+        umExtraTokens = { input: r.tokensIn, output: r.tokensOut };
+      }
+      {
+        const r = await fixUpLoop("technicalDoc", tdContent, tdCoverage);
+        tdContent = r.content;
+        tdCoverage = r.coverage;
+        tdFixUpAdded = r.addedTotal;
+        tdExtraTokens = { input: r.tokensIn, output: r.tokensOut };
       }
 
       if (umCoverage.missing.length > 0) {
