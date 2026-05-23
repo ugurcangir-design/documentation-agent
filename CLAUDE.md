@@ -1,0 +1,589 @@
+# documentation-agent — Claude Code Context
+
+## Proje Özeti
+Node.js + TypeScript. Express API **port 3000**, Vite client **port 5173**
+(prod build aynı sunucudan). Yerel masaüstü uygulaması — bir tarayıcı sekmesi
+açık olduğu sürece yaşar.
+
+```
+Hedef uygulama → Playwright ile ekran keşfi → BRD / Confluence / Jira / Swagger
+referansları ile RAG bağlamı → Claude → Türkçe Kullanıcı Kılavuzu + Teknik Döküman
+→ Confluence v2 API'sine yayım veya DOCX/MD/PDF/ZIP dışa aktarım
+```
+
+Başlat:
+```
+npm run dev               # server + vite paralel (concurrently)
+# veya
+npm run launcher          # macOS .app + supervisor
+```
+
+---
+
+## Dosya Yapısı & Anahtar Fonksiyonlar
+
+```
+src/
+  index.ts                       CLI giriş noktası (npm run cli)
+  llm/claudeClient.ts            Claude SDK + CLI iki backend (270 satır)
+  config/
+    env.ts                       Lazy env okuyucu (Settings'ten anında güncellenir)
+    promptConfig.ts              data/prompts/config.json'dan prompt cfg
+  browser/
+    browserSession.ts            Playwright Chromium oturumu + login
+    screenDiscovery.ts           URL → ekran graph keşfi
+    interactiveExplorer.ts       Filtre/modal/satır-aksiyon etkileşimli yakalama
+    screenshotCapture.ts         PNG ekran görüntüsü kaydetme
+  analysis/
+    screenAnalyzer.ts            Claude → screen analysis (UI öğeleri, akışlar)
+    screenContextBuilder.ts      RAG → preparedChunks + paragraphMatches
+  retrieval/
+    brdSectionParser.ts          Markdown'ı başlığa göre bölümlere ayır
+    documentSearch.ts            Skor × kaynak önceliği sıralama
+    paragraphSearch.ts           Paragraf düzeyinde uzun-kuyruk eşleşme
+    endpointSearch.ts            API endpoint eşleştirme
+    contextBudget.ts             Diversity-aware chunking + bütçe (chunkSection)
+  ingestion/
+    documentLoader.ts            data/brd/*.md okuyucu
+    confluenceReader.ts          Legacy: env-tabanlı space tarama (v2 API)
+    swaggerReader.ts             data/swagger/*.json
+    swaggerParser.ts             OpenAPI → Endpoint[] çıkarımı
+    sourceSync.ts                Yeni: space + Jira project senkronizasyonu
+  quality/
+    referenceTextCleaner.ts      cleanReferenceText + decodeHtmlEntities
+    confidenceScorer.ts          tokenize (Türkçe stopwords) + score
+    coverageCheck.ts             Her UI öğesi dokümanda geçiyor mu?
+    markdownCleaner.ts           LLM çıktısı temizleme
+    sourcePriority.ts            sourceType → ağırlık
+  generator/
+    userManualGenerator.ts       Kullanıcı kılavuzu prompt + üretim
+    technicalDocGenerator.ts     Teknik doc prompt + üretim
+    coverageFixUp.ts             Eksik UI öğeleri için hedefli ek üretim
+    selectStates.ts              Hangi state görselleri prompt'a girer
+    sectionRegenerator.ts        Tek bölümü Claude ile yeniden yaz
+    markdownGenerator.ts         Markdown formatlama yardımcısı
+    chunkedClaudeRefiner.ts      Uzun bağlamı parçalayarak refine
+    contextExporter.ts           Trace footer için bağlam dökümü
+    evidenceMapper.ts            Hangi referans hangi cümleyi besledi
+  publisher/
+    confluencePublisher.ts       v2 API + OAuth bearer (v1 410 Gone — kullanılmaz)
+  export/
+    wordExporter.ts              Markdown → DOCX (docx paketi)
+  server/
+    app.ts                       Express, heartbeat, watchdog, orphan-reap (183 satır)
+    auth/atlassianAuth.ts        OAuth 3LO + scope + token refresh + cloud_id (285)
+    jobs/
+      documentationJob.ts        Doküman üretim job'ı (447 satır)
+      discoveryJob.ts            Ekran keşfi job'ı (189 satır)
+    routes/
+      discoveryRoutes.ts         POST /api/discovery/start, GET /screens, /stream
+      jobRoutes.ts               start/cancel/pause/resume/delete/cleanup/stream
+      documentRoutes.ts          CRUD + sections/regenerate + versions/restore
+      confluenceRoutes.ts        pages/search + publish
+      exportRoutes.ts            docx | markdown | pdf | zip
+      referenceRoutes.ts         confluence/fetch + swagger/fetch + documents/upload
+      sourceRoutes.ts            Confluence space + Jira project sources
+      settingsRoutes.ts          .env okuma/yazma, mask
+      promptRoutes.ts            data/prompts/config.json CRUD
+      statsRoutes.ts             Dashboard sayaçları
+      authRoutes.ts              Atlassian OAuth start/callback/disconnect/test
+      maintenanceRoutes.ts       cleanup-screenshots, disk-usage
+      updateRoutes.ts            git pull + log
+    store/
+      atomicJson.ts              writeJsonAtomic + readJsonSafe
+      jobStore.ts                data/db/jobs.json
+      screenStore.ts             data/db/screens.json
+      documentStore.ts           data/db/documents.json (versions[] dahil)
+      referenceStore.ts          data/db/references.json (confluence/swagger/documents/sources/jira)
+      eventBus.ts                SSE event emitter (job ID → subscribers)
+      jobCancellation.ts         Cancel + pause/resume lock
+data/
+  brd/                           Yerel BRD .md
+  swagger/                       Yerel swagger .json
+  screenshots/                   Discovery PNG çıktıları
+  references/
+    confluence/                  pageId.txt (cleaned)
+    jira/                        PROJECT.json (issue dump)
+    documents/                   uploaded BRD/.docx/.pdf text
+    templates/                   örnek kılavuz şablonları
+    _tmp/                        multer upload temp
+  db/                            JSON persistence
+  exports/                       DOCX/PDF download geçici
+  prompts/config.json            promptConfig kaynağı
+  logs/                          supervisor + server logları
+client/                          React 19 + Vite + Tailwind v4 (slate+teal)
+scripts/
+  launch.sh                      AppleScript-safe launcher
+  supervisor.js                  Express+Vite parent süreç
+  create-launcher.sh             ~/Desktop/DocAgent.app üret
+electron/main.js                 Opsiyonel Electron paket
+```
+
+---
+
+## Job Durumları & Yaşam Döngüsü
+
+```
+pending → running → (paused ⇄ running) → completed
+                                       → failed
+                                       → cancelled (kullanıcı iptal)
+```
+
+- `jobStore.update(id, {status})` ile geçilir.
+- `jobCancellation.cancel(id)` → bir sonraki checkpoint'te kontrol edilir
+  (`isCancelled(jobId)` ve `waitIfPaused(jobId)` job içinde çağrılır).
+- Sunucu yeniden başladığında 'running'/'pending' kalmış job'lar `failed`
+  olarak işaretlenir (app.ts orphan-reap bloğu).
+
+---
+
+## app.ts — Kritik Bölümler
+
+### Route mount (satır 34-47)
+```
+/api/discovery   /api/jobs     /api/documents   /api/confluence
+/api/export      /api/settings /api/prompts     /api/references
+/api/sources     /api/stats    /api/auth        /api/maintenance
+/api/update
+/screenshots                                            (static)
+```
+
+### Heartbeat / auto-shutdown (satır 54-115)
+```ts
+LEAVE_GRACE        = 30_000           // sekme leave → exit grace
+HEARTBEAT_FALLBACK = 15 * 60_000      // çökme yedeği (background throttle dostu)
+CHECK_INTERVAL     = 30_000
+
+POST /api/heartbeat        → lastHeartbeat = now, leaveTimer iptal
+POST /api/heartbeat/leave  → leaveTimer başlat (varsa hiçbir şey yapma)
+```
+Sekme kapatınca `pagehide` → `sendBeacon('/api/heartbeat/leave')` → 30sn
+içinde reconnect yoksa `process.exit(0)`. Yenileme `pagehide` tetikler ama
+yeniden yüklenen sayfa heartbeat ile iptal eder.
+
+### Job runtime watchdog (satır 122-141)
+```ts
+JOB_MAX_AGE_MS = 30 * 60_000   // 30 dakikadan eski 'running' job → fail
+```
+
+### Orphan job reap (satır 162-177)
+Boot'ta running/pending job'lar `failed` olarak temizlenir.
+
+---
+
+## llm/claudeClient.ts — Claude Backend
+
+```ts
+MODEL_ANALIZ = "claude-sonnet-4-6"           // tüm üretim (satır 164)
+env.claudeBackend = 'cli' (varsayılan) | 'api'
+env.claudeCliBin  = 'claude'
+```
+
+İki yol:
+- **CLI**: `spawn(claude, [prompt, --output-format=json])` — Claude Code'un
+  yerel oturumunu kullanır, API key gerekmez. PATH sanitize edilmişse
+  `resolveClaudeBin()` `~/.local/bin`, `~/.claude/local`, `/usr/local/bin`,
+  `/opt/homebrew/bin` fallback'larını dener.
+- **API**: `@anthropic-ai/sdk` `messages.create` — `ANTHROPIC_API_KEY` gerekir.
+  `max_tokens` opsiyonel (default 3000). Görseller `base64` veya dosya path.
+
+```ts
+isPromptTooLong(err) → boolean   // generator backoff için
+```
+
+---
+
+## src/config — Ortam ve Promptlar
+
+### env.ts (lazy getters)
+```ts
+ANTHROPIC_API_KEY
+CONFLUENCE_BASE_URL  CONFLUENCE_EMAIL  CONFLUENCE_API_TOKEN
+CONFLUENCE_SPACE_KEY  CONFLUENCE_PARENT_PAGE_ID
+APP_BASE_URL  APP_USERNAME  APP_PASSWORD
+DOC_LANGUAGE = 'tr'
+MAX_DISCOVERY_DEPTH = 0           // 0 → tek ekran modu (interactive=true)
+CLAUDE_BACKEND = 'cli' | 'api'
+CLAUDE_CLI_BIN = 'claude'
+```
+Lazy getter — Ayarlar'dan değiştirilince sunucu restart gerekmez.
+
+### promptConfig.ts
+`data/prompts/config.json` → `{ userManual: {…}, technicalDoc: {…}, …}`. Her
+prompt için: `role`, `outputStructure`, `instructions`, `rules[]`, `language`,
+`maxTokens`. Boş ise generator kendi defaults'ı kullanır.
+
+---
+
+## Doküman Üretim Pipeline'ı (documentationJob.ts)
+
+`runDocumentationJob(jobId, selectedScreenPaths[])`, ekranları **3'lü
+paralel** işler:
+
+```ts
+CONCURRENCY = 3   // satır 28
+```
+
+### Bağlam yükleme adımları
+1. **Yerel swagger** dosyaları → `extractEndpoints`
+2. **Swagger referansları** (URL ile çekilenler)
+3. **BRD** `data/brd/*.md` → `parseBrdSections`
+4. **Yüklenen dökümanlar** (.docx/.pdf/.md/.txt) → `cleanReferenceText` →
+   `parseBrdSections`
+5. **Stored Confluence** (`referenceStore.getAllConfluence()`) →
+   `decodeHtmlEntities` + `cleanReferenceText` → bölüm
+6. **5b. Stored Jira** (`getAllJira()`) → her issue ayrı section
+   (`sourceType: 'jira_task'`)
+7. **Legacy Confluence env taraması** (`readConfluencePages`) →
+   **sadece kayıtlı space source yoksa** çalışır (yeni Veri Kaynakları
+   bunu kapsadığı için çift okuma engellendi)
+8. **Şablonlar** → `referenceStore.getDocuments('template')` →
+   `cleanReferenceText` → `templateContents[]`
+9. **Çift okuma temizliği** — `confluence_*` ve `jira_*` id'leri tekilleştirilir
+   (BRD bölümleri dokunulmaz; başlık çakışmasıyla yanlış birleşme olmasın diye)
+
+Log:
+```
+[docjob ID] CONTEXT INVENTORY:
+  - Endpoints: N
+  - BRD/Confluence sections: M
+  - Section types: {"brd":4,"confluence":2,"jira_task":3}
+  - Templates: K
+```
+
+### Ekran başına döngü (paralel)
+```ts
+analyzeScreen(screen)        // Claude görsel analiz
+buildScreenContext(screen, analysis, allSections, allEndpoints)
+   → preparedChunks (16KB bütçe, 2.2KB chunk)
+   → paragraphMatches (max 9, minHits 2)
+   → relatedEndpoints (top 12)
+
+await Promise.all([
+  generateUserManualSection(context, templates),
+  generateTechnicalDocSection(context, templates),
+])
+```
+
+### Coverage + Fix-up (satır 282-358)
+```ts
+FIX_UP_THRESHOLD     = 90    // % altıysa düzelt
+MAX_FIX_UP_PASSES    = 2     // en çok 2 tur
+
+inScopeForCoverage = uiElements
+   .filter(el => el.type !== "menu" && !isSidebarNav(el))
+
+computeCoverage(els, body) → { coveragePct, missing[] }
+```
+Her tur:
+- `runCoverageFixUp({docKind, currentContent, missing, uiElementsMissing})`
+- Yeni kapsam **eski kapsam ≥** ise kabul, gerileme reddedilir
+- İlerleme yoksa erken çık
+
+### Üretim Bilgisi dipnotu (trace)
+Doküman sonuna eklenir:
+- Referans bölümleri (kaynak tipi dökümü: BRD/Confluence/Jira/…)
+- API endpoint sayısı + ilk 5 path
+- Şablonlar
+- Ekran state sayısı
+- UI kapsamı % + eksikler (varsa ilk 5)
+- Fix-up uygulandı mı + kaç öğe eklendi
+- Üretim zamanı
+
+---
+
+## RAG Mekaniği
+
+### tokenize (confidenceScorer.ts)
+- Lower-case, harf+rakam dışı temizle, ≥3 char, Türkçe stopwords filtreli:
+  `ve, ile, için, bir, bu, şu, o, the, a, an, is, are, of, to, in, on, at, as,
+   by, or, var, yok, vardır, olur, kullanıcı, ekran, sayfa, tıkla, tıklayın,
+   tıklandığında, tıklanır, açılır`.
+
+### sourcePriority (numerik çarpan)
+```
+brd                 1.0
+process_analysis    0.95
+confluence          0.85
+jira_task           0.75
+manual              0.6
+default             0.5
+```
+
+### contextBudget.prepareDocumentChunks
+```ts
+totalBudget   = 16_000   (screenContextBuilder çağrısı)
+perChunkMax   =  2_200
+chunkSection: long content → split by ## / ### sub-heading then paragraph
+diversity dedup: Jaccard(title-tokens) > 0.7 AND same sourceType → atla
+firstChunk-only: uzun section için yalnız ilk chunk (giriş paragrafı)
+```
+
+### balanceBySourceType (screenContextBuilder.ts)
+```ts
+GUARANTEED_PER_TYPE = 2
+```
+Her ilgili `sourceType`'tan ilk 2'si önce sıralamaya alınır; geri kalan
+global skora göre. BRD'nin tüm bütçeyi yutması bu sayede engellenir.
+
+### paragraphSearch (yeniden buildScreenContext'te)
+```ts
+{ minHits: 2, maxPerSection: 2, maxTotal: 9 }
+// ≥4 char tokens (3 char paragraf düzeyinde fazla gürültü)
+// preparedChunks'taki başlıklarda olanlar elenir
+```
+
+---
+
+## Generators — Kullanıcı Kılavuzu
+
+`userManualGenerator.ts (188 satır)`:
+- `buildPrompt(ctx, templates)`:
+  - `brdContext`  = preparedChunks her biri `### Başlık (sourceType)` + içerik
+  - `paragraphContext` = paragraphMatches blockquote
+  - `apiContext` = `- [METHOD] /path — summary`
+  - `uiElementsBlock` = sidebar-nav filtrelenmiş öğeler numaralı liste
+  - `workflowsBlock` = isimli akış + adımlar
+  - `templateBlock` = ilk 7000 char (üslup taklidi — içerik kopyalama YASAK)
+  - `stateBlock` = ekran görselleri tablosu + yerleştirme kuralları,
+    min embed = `max(6, min(stateCount+1, 12))`
+- Backoff tier'ları:
+  - `runWithBudget(allStates, 7000)` → fail (`isPromptTooLong`) →
+  - `runWithBudget(max(5,half), 3500)` → fail →
+  - `runWithBudget(4, 1500)` (minimal)
+
+`technicalDocGenerator.ts (139 satır)`: aynı pattern; template ilk 4000 char.
+
+Sidebar-nav filtre listesi (jenerator + doc job kapsam hesabı):
+```
+sport base data, sports, categories, competitions, market setup, priority
+settings, venues, competitors, heroes, multi feed, sport mapping, market
+mapping, definitions, event management, outright program, live program,
+newspaper program, v-sport program, exported program, groups, outright,
+live program, settings, ürünler, users, settings, logout, çıkış
+```
+
+---
+
+## Discovery — Ekran Keşfi
+
+`browser/screenDiscovery.ts` + `interactiveExplorer.ts`. `env.maxDiscoveryDepth=0`
+→ tek ekran modu, `interactive=true`.
+
+### Limitler (interactiveExplorer.ts:31)
+```ts
+MAX = { tabs: 6, dropdowns: 5, modals: 10, dates: 4 }
+```
+
+### MODAL_KEYWORDS (yakalama önceliği)
+`add, yeni, ekle, edit, düzenle, filter, log, detay, info, +, manual, …`
+satır 141. Eşleşen butonların priority=2, diğerleri 1.
+
+### Akış
+- Filters pre-pass (13 farklı selector — `[role=button]:has-text`, `[aria-label*=filter]`, `[class*=FilterHeader]`, vb.)
+- Tabs (≤6) → Dropdowns (≤5) → Column headers → Row actions →
+  **Action button pass (priority-sorted, ≤10 modal)** →
+  Date pickers → Checkboxes → Toggles
+- Row-edit drill-down: `tbody tr:first-child [aria-label*=edit/...]`,
+  `[title*=...]`, `a[href*=edit]`, `[class*=edit]` → tıkla → modal yakala
+- Her durum için `screenshotCapture` ile PNG +
+  `StoredScreenState{ label, triggeredBy, screenshotPath }`
+
+---
+
+## Atlassian OAuth (server/auth/atlassianAuth.ts)
+
+```ts
+REDIRECT_URI = "http://localhost:3000/api/auth/atlassian/callback"
+AUTH_BASE    = "https://auth.atlassian.com"
+API_BASE     = "https://api.atlassian.com"
+
+ATLASSIAN_SCOPES = [
+  "read:space:confluence", "read:page:confluence",
+  "write:page:confluence", "read:attachment:confluence",
+  "write:attachment:confluence", "read:content-details:confluence",
+  "read:jira-work", "write:jira-work",
+  "offline_access"
+].join(" ")
+```
+
+Token rotasyonu:
+- `getValidAccessToken()` → `expiresAt - now < 60s` ise `refreshTokens`
+- `.env`'e `ATLASSIAN_ACCESS_TOKEN/REFRESH_TOKEN/EXPIRES_AT/CLOUD_ID/SITE_URL/SCOPE`
+  yazar (writeEnv hem dosyaya yazar hem `process.env`'i günceller).
+- `getConfluenceApiBase(cloudId)` → `…/ex/confluence/<id>` (v2 kullanırken
+  `…/wiki/api/v2` eklenir).
+- `getJiraApiBase(cloudId)` → `…/ex/jira/<id>`.
+
+---
+
+## referenceStore (server/store/referenceStore.ts)
+
+DB: `data/db/references.json` (atomik yazımlı).
+
+```ts
+ReferenceDB = {
+  confluence: ConfluenceRef[]   // pageId ile tekilleştirilir
+  swagger:    SwaggerRef[]       // url ile tekilleştirilir
+  documents:  DocumentRef[]      // type: 'brd' | 'reference' | 'template'
+  sources:    SourceRef[]        // kind: 'confluence-space' | 'jira-project'
+  jira:       JiraRef[]          // projectKey ile tekilleştirilir
+}
+```
+
+Eski DB dosyaları için `sources` + `jira` alanları boş diziyle back-fill edilir.
+
+---
+
+## sourceSync (ingestion/sourceSync.ts)
+
+```ts
+syncConfluenceSpace(spaceKey) → { count, log[] }
+   // v2 API: GET /spaces?keys=KEY → spaceId
+   //         GET /pages?space-id=… (cursor pagination) → her sayfa için
+   //         addConfluence({ url, pageId, title, spaceKey, contentFile,
+   //                          syncedAt, wordCount })
+   // htmlToText = decodeHtmlEntities(strip tags) + whitespace temizle
+
+syncJiraProject(projectKey) → { count, log[] }
+   // POST /rest/api/3/search/jql {jql, fields, maxResults:100, nextPageToken}
+   // description ADF ise adfToText() ile düzleştir
+   // → data/references/jira/<KEY>.json + addJira()
+```
+
+---
+
+## Confluence Publisher (publisher/confluencePublisher.ts)
+
+Sadece **v2 API + OAuth bearer**. v1 API HTTP 410 Gone → kullanılmıyor.
+
+```ts
+getSpaceId(spaceKey) → numeric id
+findPage(spaceId, title) → V2Page | null
+publishMarkdown(spaceKey, title, markdown, parentPageId?) →
+  - markdown → storage format dönüşümü
+  - findPage varsa update, yoksa create
+  - attachment upload **v1 multipart** kullanır (v2'de temiz endpoint yok)
+    → başarısızlık fatal değil
+```
+
+---
+
+## Export Routes (server/routes/exportRoutes.ts)
+
+```
+POST /api/export/docx       title + docs[] → .docx (docx paketi)
+POST /api/export/markdown   tek birleşik .md (TOC + her ekran)
+POST /api/export/pdf        marked → HTML → Playwright HTML→PDF
+POST /api/export/zip        bundle:
+                              <slug>.md (birleşik)
+                              <screen-slug>/kullanici-kilavuzu.md
+                              <screen-slug>/teknik-dokuman.md
+                              screenshots/*
+```
+
+---
+
+## Frontend (client/src)
+
+React 19 + Vite + Tailwind v4. Tema runtime'da `[data-theme]` ile
+geçişli (slate + teal). Default **dark**.
+
+### Sayfalar (App.tsx page state)
+```
+dashboard    → DashboardPage      sayaçlar + son jobs + son docs
+discovery    → DiscoveryPage      URL gir + Bağlam Filtresi + Başlat + ekran seç
+documents    → DocumentsPage      ekrana göre gruplu liste + sürüm + bölüm regen
+history      → HistoryPage        eski job arşivi
+references   → ReferencesPage     5 sekme: Veri Kaynakları | Confluence | Swagger
+                                    | Dökümanlar | Şablonlar
+settings     → SettingsPage       Claude backend + API key + Atlassian OAuth
+prompts      → PromptsPage        15 sistem prompt'u düzenle
+update       → UpdatePage         git pull info + run + log
+```
+
+### Üst çubuk: **Derin Analiz** anahtarı
+`App.tsx` `deepAnalysis` state, `DiscoveryPage`'e prop olarak iletilir
+(şu an analiz prompt'una derin akıl-yürütme talimatı eklemek için).
+
+---
+
+## Bu Belgenin Bakımı
+
+**Her commit'ten sonra bu dosyanın güncelliğini doğrula.** Bir commit;
+dosya yapısını, sabit/limitleri, route'ları, kalıcılık şemasını veya
+çekirdek davranışlardan birini değiştirdiyse, ilgili bölümü buraya
+yansıtıp **ayrı bir follow-up commit** at (CLAUDE.md değişikliğini
+kod commit'iyle birleştirme — diff küçük ve anlaşılır kalsın).
+
+Bu kuralı `.claude/settings.json` içindeki PostToolUse hook'u
+(`.claude/hooks/check-claude-md.sh`) otomatik olarak her `git commit`
+çağrısının ardından hatırlatır. Hook bozulursa veya farklı bir
+istemciden çalışılıyorsa kural buradadır — Claude oturum bağlamına
+CLAUDE.md'yi okur, kuralı görür, uygular.
+
+İlgisiz commit'lerde (yalnızca CLAUDE.md, doküman dosyaları,
+`.claude/`, README vb. değiştiyse) güncelleme yapmadan geç.
+
+---
+
+## Geliştirme Kuralları
+
+1. **Türkçe** — kullanıcıya gösterilen mesaj, log Türkçe; teknik
+   isim/sabit İngilizce.
+2. Yeni route → app.ts mount listesine ekle.
+3. Yeni job tipi → jobStore status enum'una ve orphan-reap'a uyumlu.
+4. Yeni source type (BRD/Confluence/Jira dışı) → `sourcePriority.ts` +
+   `documentSourceType` + dedupe id prefix politikası.
+5. `referenceStore` her zaman `writeJsonAtomic` ile yaz (yarım yazım yok).
+6. Claude çağrısı → her zaman `isPromptTooLong` backoff zincirine sar.
+7. `.env` **asla** commit edilmez (ATLASSIAN_*, ANTHROPIC_API_KEY dahil).
+8. Heartbeat sözleşmesini koru — `/api/heartbeat/leave` immediate exit
+   tetiklemez; refresh güvenliği oradan gelir.
+9. UI değişikliklerinde **renkler için semantic token** kullan
+   (`bg-surface`, `text-fg2`, `bg-accent` …) — `bg-blue-600` gibi
+   sabit renk yazma (Tailwind v4 `@theme inline` ile remap'lendi).
+
+---
+
+## Bilinen Kısıtlamalar
+
+- **Tek kullanıcı / yerel uygulama** — multi-user veya server deploy yok.
+- **JSON kalıcılık** — DB yok. `data/db/*.json` atomik yazım, fakat
+  binlerce kayıt ölçeğinde rerank.
+- **Yetkilendirme yok** — yerel kullanım varsayımıyla auth katmanı yok.
+- **Login arkası ekranlar** — `env.appUsername/Password` ile Playwright login
+  destekli; cookie/SSO senaryoları zayıf.
+- **PDF okuma** — `pdf-parse` v2 (PDFParse sınıfı), `require()` ile yüklenir.
+  Çok büyük PDF'lerde tüm metin belleğe alınır.
+- **Confluence attachment upload** v1 multipart kullanır (v2'de temiz
+  endpoint yok); attachment hatası fatal değil.
+- **Job watchdog 30 dakika** — büyük üretim işleri buna takılabilir
+  (CONCURRENCY=3 ile ~25-30 ekran sınırda).
+- **CLI backend** Claude Code oturumu açık olmalı; `resolveClaudeBin()`
+  AppleScript-sanitize PATH için fallback dener.
+
+---
+
+## Planlanan / Tamamlanan
+
+### Tamamlanan
+- ✅ Confluence v2 + granular OAuth scope migrasyonu (v1 410)
+- ✅ HTML entity decode + TOC/header/pagemarker temizleme
+- ✅ Source-type aware diversity dedup (BRD ↔ Confluence aynı başlık ayrı tutulur)
+- ✅ Coverage fix-up döngüsü (≤2 tur, regresyon reddi)
+- ✅ İnteraktif keşif: filtre paneli + modallar + row-edit drill-down
+- ✅ Veri Kaynakları: Confluence space + Jira project sync
+- ✅ Çift okuma temizliği (confluence_*/jira_* id dedupe + legacy scan conditional)
+- ✅ balanceBySourceType (her referans tipi prompt'a giriyor)
+- ✅ Analyst Studio tasarım dili port'u (slate+teal, light/dark)
+- ✅ Heartbeat: `pagehide` beacon + grace timer (refresh güvenli, tab close
+  ~30sn, background 15dk yedek)
+
+### Yapılacak (öneri)
+- ⏳ DB'ye geçiş (binlerce referans / doküman ölçeğinde)
+- ⏳ Çok kullanıcı + auth
+- ⏳ Confluence attachment v2 native yol (v1 multipart yerine)
+- ⏳ Otomatik regression test suite (jenerator + retrieval + RAG dedup)
+- ⏳ Login akışı için SSO/cookie aktarımı standardı
+- ⏳ Maliyet/karneleme — ekran başına token/maliyet kullanıcıya gösterilsin
