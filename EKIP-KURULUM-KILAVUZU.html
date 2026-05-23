@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>DocAgent — Kurulum ve Kullanım Kılavuzu</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #f6f8fb; --surface: #fff; --surface2: #eef2f7;
+    --text: #16202b; --text2: #4a5765; --text3: #7a8694;
+    --border: #dde3eb; --accent: #2da89a; --accent2: #16877a;
+    --warn-bg: #fff4e0; --warn-bd: #d48a1a; --warn-tx: #7a4a00;
+    --info-bg: #e6f1fa; --info-bd: #2b7fb6; --info-tx: #0f4a78;
+    --tip-bg: #eafaf3; --tip-bd: #1d9c70; --tip-tx: #0f6b48;
+    --err-bg: #fde6e6; --err-bd: #c63838; --err-tx: #8a1a1a;
+    --mono: 'SF Mono','Menlo','Consolas',monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background: var(--bg); color: var(--text);
+    font-size: 14.5px; line-height: 1.6;
+  }
+  .wrap { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+  aside {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    background: var(--surface); border-right: 1px solid var(--border);
+    padding: 22px 18px;
+  }
+  aside h1 { font-size: 16px; margin: 0 0 4px; color: var(--accent2); }
+  aside .sub { font-size: 11.5px; color: var(--text3); margin-bottom: 16px; }
+  aside nav a {
+    display: block; padding: 4px 8px; margin: 1px 0;
+    text-decoration: none; color: var(--text2); font-size: 12.5px;
+    border-radius: 4px;
+  }
+  aside nav a:hover { background: var(--surface2); color: var(--text); }
+  aside nav a.h1 { font-weight: 600; color: var(--text); margin-top: 10px; }
+  aside nav a.h2 { padding-left: 18px; font-size: 12px; }
+  main { padding: 36px 48px 80px; max-width: 1000px; }
+  h1.title { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .lede { font-size: 14.5px; color: var(--text2); margin-bottom: 32px; }
+  h2 {
+    font-size: 22px; margin: 44px 0 12px; padding-bottom: 6px;
+    border-bottom: 2px solid var(--accent); letter-spacing: -0.01em;
+  }
+  h3 { font-size: 17px; margin: 28px 0 10px; color: var(--accent2); }
+  h4 { font-size: 14.5px; margin: 18px 0 8px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 14px; padding-left: 24px; }
+  li { margin: 4px 0; }
+  code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--surface2); padding: 2px 6px; border-radius: 3px;
+    color: var(--accent2);
+  }
+  pre {
+    background: #0e1620; color: #d4e3f2;
+    padding: 14px 16px; border-radius: 6px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+    margin: 8px 0 14px;
+  }
+  pre code { background: transparent; padding: 0; color: inherit; }
+  .step {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 18px 12px; margin: 14px 0;
+    position: relative; padding-left: 56px;
+  }
+  .step .num {
+    position: absolute; left: 16px; top: 16px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-weight: 700; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step h4 { margin-top: 0; }
+  .box {
+    border-left: 4px solid; padding: 10px 14px; margin: 12px 0;
+    border-radius: 4px; font-size: 13.5px;
+  }
+  .box.info { background: var(--info-bg); border-color: var(--info-bd); color: var(--info-tx); }
+  .box.warn { background: var(--warn-bg); border-color: var(--warn-bd); color: var(--warn-tx); }
+  .box.tip  { background: var(--tip-bg);  border-color: var(--tip-bd);  color: var(--tip-tx); }
+  .box.err  { background: var(--err-bg);  border-color: var(--err-bd);  color: var(--err-tx); }
+  .box strong { display: block; margin-bottom: 3px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 8px 0 14px;
+    background: var(--surface); font-size: 13px;
+  }
+  th, td {
+    text-align: left; padding: 9px 12px;
+    border-bottom: 1px solid var(--border); vertical-align: top;
+  }
+  th { background: var(--surface2); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .03em;
+    text-transform: uppercase;
+  }
+  .pill.opt   { background: var(--surface2); color: var(--text3); }
+  .pill.rec   { background: rgba(45,168,154,.18); color: var(--accent2); }
+  .pill.adv   { background: rgba(168,85,247,.18); color: #6b21a8; }
+  kbd {
+    display: inline-block; background: var(--surface);
+    border: 1px solid var(--border); border-bottom-width: 2px;
+    border-radius: 4px; padding: 1px 6px;
+    font-size: 11.5px; font-family: var(--mono); color: var(--text);
+    vertical-align: 1px;
+  }
+  @media print {
+    aside { display: none; }
+    .wrap { grid-template-columns: 1fr; }
+    main { padding: 20px; }
+    .step { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <aside>
+    <h1>DocAgent</h1>
+    <div class="sub">Kurulum &amp; Kullanım Kılavuzu</div>
+    <nav>
+      <a href="#bakis" class="h1">1. Genel Bakış</a>
+      <a href="#kurulum" class="h1">2. Kurulum</a>
+      <a href="#k-gereksinim" class="h2">2.1 Sistem gereksinimleri</a>
+      <a href="#k-klonla" class="h2">2.2 Depoyu klonla</a>
+      <a href="#k-dep" class="h2">2.3 Bağımlılıklar</a>
+      <a href="#k-playwright" class="h2">2.4 Playwright</a>
+      <a href="#k-env" class="h2">2.5 .env dosyası</a>
+      <a href="#k-app" class="h2">2.6 Masaüstü ikonu</a>
+      <a href="#yapilandirma" class="h1">3. İlk Yapılandırma</a>
+      <a href="#y-baslat" class="h2">3.1 Başlatma</a>
+      <a href="#y-claude" class="h2">3.2 Claude backend</a>
+      <a href="#y-oauth" class="h2">3.3 Atlassian OAuth</a>
+      <a href="#referanslar" class="h1">4. Referansları Yükle</a>
+      <a href="#r-sirası" class="h2">4.1 Hangi sırayla?</a>
+      <a href="#r-veri" class="h2">4.2 Veri Kaynakları</a>
+      <a href="#r-conf" class="h2">4.3 Confluence sayfası</a>
+      <a href="#r-swagger" class="h2">4.4 Swagger / API</a>
+      <a href="#r-dok" class="h2">4.5 BRD &amp; dökümanlar</a>
+      <a href="#r-sablon" class="h2">4.6 Örnek şablonlar</a>
+      <a href="#kullanim" class="h1">5. Kullanım</a>
+      <a href="#u-arayuz" class="h2">5.1 Arayüz</a>
+      <a href="#u-kesif" class="h2">5.2 Ekran keşfi</a>
+      <a href="#u-uretim" class="h2">5.3 Doküman üretimi</a>
+      <a href="#u-inceleme" class="h2">5.4 İnceleme &amp; düzenleme</a>
+      <a href="#u-yayin" class="h2">5.5 Yayın &amp; dışa aktarım</a>
+      <a href="#ileri" class="h1">6. İleri Düzey</a>
+      <a href="#i-filtre" class="h2">6.1 Bağlam filtresi</a>
+      <a href="#i-prompt" class="h2">6.2 Prompt özelleştirme</a>
+      <a href="#i-derin" class="h2">6.3 Derin Analiz</a>
+      <a href="#i-gecmis" class="h2">6.4 Geçmiş</a>
+      <a href="#i-update" class="h2">6.5 Güncelleme</a>
+      <a href="#yasam" class="h1">7. Yaşam döngüsü</a>
+      <a href="#sorun" class="h1">8. Sorun Giderme</a>
+      <a href="#sss" class="h1">9. SSS</a>
+      <a href="#kontrol" class="h1">10. Hızlı kontrol listesi</a>
+    </nav>
+  </aside>
+
+  <main>
+    <h1 class="title">DocAgent — Kurulum ve Kullanım Kılavuzu</h1>
+    <p class="lede">
+      Bu kılavuz DocAgent'ı sıfırdan kurmaktan ilk dokümanın Confluence'a yayımlanmasına
+      kadar gereken her adımı <strong>öncelik ve işlem sırasına göre</strong> anlatır.
+      Her bölüm bir önceki tamamlandıktan sonra yapılacak adımları içerir.
+      Kurulumun tamamı 20–30 dakika sürer.
+    </p>
+
+    <!-- ============== 1 ============== -->
+    <h2 id="bakis">1. Genel Bakış</h2>
+    <p>
+      DocAgent, bir web uygulamasının ekranlarını <strong>Playwright</strong> ile
+      otomatik tarayıp; BRD, Confluence space'leri, Jira projeleri, Swagger
+      spec'leri ve örnek kılavuz şablonlarıyla harmanlayarak her ekran için
+      <strong>iki Türkçe doküman</strong> üreten yapay zeka destekli bir
+      masaüstü araçtır:
+    </p>
+    <ul>
+      <li>📘 <strong>Kullanıcı Kılavuzu</strong> — son kullanıcıya yönelik,
+        adım adım, ekran görüntüleri gömülü</li>
+      <li>⚙️ <strong>Teknik Döküman</strong> — geliştiriciye yönelik, API
+        endpoint'leri + iş kurallarıyla ilişkilendirilmiş</li>
+    </ul>
+
+    <div class="box info">
+      <strong>Akış özeti</strong>
+      Hedef URL → Ekran keşfi (Playwright) → Bağlam (RAG) → Claude analiz
+      → Kullanıcı kılavuzu + Teknik doc → Kapsam doğrulama → Confluence'a
+      yayım veya DOCX/MD/PDF/ZIP indirme.
+    </div>
+
+    <p>Çekirdek özellikler:</p>
+    <ul>
+      <li>Etkileşimli keşif — sadece statik sayfa değil; filtre paneli,
+        modallar (Ekle/Düzenle/Detay/Log), satır aksiyonları öncelik
+        sırasıyla yakalanır</li>
+      <li>Çok kaynaklı RAG — BRD, Confluence, Jira, Swagger, şablon aynı
+        bağlamda; çift okuma engelli, her kaynak tipi için bütçe garantili</li>
+      <li>Kapsam doğrulama — her UI öğesinin dokümanda geçtiği kontrol
+        edilir, eksik varsa Claude'a hedefli düzeltme turu attırılır
+        (≤2 tur, regresyon kabul edilmez)</li>
+      <li>İki Claude backend — Claude Code CLI veya Anthropic SDK</li>
+      <li>Yerel depolama — tüm referans &amp; çıktı yerel diskte;
+        ekibe açık sunucu yok</li>
+    </ul>
+
+    <!-- ============== 2 ============== -->
+    <h2 id="kurulum">2. Kurulum</h2>
+
+    <h3 id="k-gereksinim">2.1 Sistem gereksinimleri</h3>
+    <table>
+      <tr><th>Bileşen</th><th>Sürüm / Notlar</th></tr>
+      <tr><td>İşletim sistemi</td><td>macOS 13+ (önerilen), Linux, Windows (WSL)</td></tr>
+      <tr><td>Node.js</td><td>≥ 20 LTS &nbsp;<code>node --version</code></td></tr>
+      <tr><td>npm</td><td>≥ 10 &nbsp;<code>npm --version</code></td></tr>
+      <tr><td>Git</td><td>Güncel sürüm &nbsp;<code>git --version</code></td></tr>
+      <tr><td>Anthropic erişimi</td><td>Claude Code CLI <em>veya</em> Anthropic API anahtarı</td></tr>
+      <tr><td>Atlassian hesabı</td><td>Confluence + Jira kullanımı için (opsiyonel)</td></tr>
+      <tr><td>Disk alanı</td><td>~500 MB (Chromium ~150 MB dahil)</td></tr>
+      <tr><td>İnternet</td><td>Claude + Atlassian + hedef uygulamaya erişim</td></tr>
+    </table>
+
+    <h3 id="k-klonla">2.2 Depoyu klonla</h3>
+    <div class="step">
+      <div class="num">1</div>
+      <h4>GitHub'dan klonla</h4>
+<pre><code>cd ~
+mkdir -p projects &amp;&amp; cd projects
+git clone https://github.com/ugurcangir-design/documentation-agent.git
+cd documentation-agent</code></pre>
+      <div class="box tip">
+        <strong>İpucu</strong>
+        Bundan sonra tüm komutlar <code>~/projects/documentation-agent</code> içinde çalıştırılır.
+      </div>
+    </div>
+
+    <h3 id="k-dep">2.3 Bağımlılıkları yükle</h3>
+    <div class="step">
+      <div class="num">2</div>
+      <h4>Backend bağımlılıkları</h4>
+<pre><code>npm install</code></pre>
+      <p>~1-2 dk. Anahtar paketler: <code>express</code>, <code>playwright</code>,
+        <code>@anthropic-ai/sdk</code>, <code>axios</code>, <code>mammoth</code>,
+        <code>pdf-parse</code>, <code>docx</code>, <code>adm-zip</code>, <code>marked</code>.</p>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <h4>Frontend bağımlılıkları</h4>
+<pre><code>cd client
+npm install
+cd ..</code></pre>
+      <p>~30 sn. React 19 + Vite 8 + Tailwind v4.</p>
+    </div>
+
+    <h3 id="k-playwright">2.4 Playwright tarayıcısını kur</h3>
+    <div class="step">
+      <div class="num">4</div>
+      <h4>Chromium indir (ekran keşfi için zorunlu)</h4>
+<pre><code>npm run install:browsers</code></pre>
+      <p>~150 MB Chromium binary'sini <code>~/Library/Caches/ms-playwright/</code> altına indirir.</p>
+    </div>
+
+    <h3 id="k-env">2.5 <code>.env</code> dosyası</h3>
+    <div class="step">
+      <div class="num">5</div>
+      <h4>Asgari yapılandırma</h4>
+      <p>Proje kökünde <code>.env</code> oluşturun:</p>
+<pre><code>cat &gt; .env &lt;&lt;'EOF'
+PORT=3000
+CLAUDE_BACKEND=cli          # 'cli' veya 'api'
+DOC_LANGUAGE=tr
+MAX_DISCOVERY_DEPTH=0       # 0 → tek ekran modu (etkileşimli keşif)
+
+# Hedef uygulama login arkasındaysa:
+# APP_BASE_URL=https://...
+# APP_USERNAME=...
+# APP_PASSWORD=...
+
+# API modu kullanılacaksa:
+# ANTHROPIC_API_KEY=sk-ant-api03-...
+
+# Atlassian OAuth (arayüzden de doldurulabilir, Adım 3.3'e bakın):
+# ATLASSIAN_OAUTH_CLIENT_ID=
+# ATLASSIAN_OAUTH_CLIENT_SECRET=
+EOF
+chmod 600 .env</code></pre>
+      <div class="box warn">
+        <strong>Güvenlik</strong>
+        <code>.env</code> dosyası <code>.gitignore</code>'da, commit edilmez.
+        <code>ATLASSIAN_*</code> ve <code>ANTHROPIC_API_KEY</code> gibi sırları
+        ekip arkadaşlarınızla şifreli kanal dışında paylaşmayın.
+      </div>
+      <div class="box info">
+        <strong>Lazy okuma</strong>
+        <code>env.ts</code> her okumada güncel <code>process.env</code>'i
+        döndürür — Ayarlar arayüzünden değişiklik yapınca sunucu restart'a
+        gerek kalmaz.
+      </div>
+    </div>
+
+    <h3 id="k-app">2.6 Masaüstü ikonu <span class="pill opt">opsiyonel</span> · <span class="pill rec">macOS önerilir</span></h3>
+    <div class="step">
+      <div class="num">6</div>
+      <h4>Tek tıklamayla başlayacak <em>DocAgent.app</em> oluştur</h4>
+<pre><code>npm run launcher</code></pre>
+      <p>Masaüstü'nde <strong>DocAgent.app</strong> oluşur. Çift tıklayınca
+        <code>scripts/launch.sh</code> → <code>scripts/supervisor.js</code>
+        çalışır; <em>Express + Vite</em> birlikte başlar, varsayılan tarayıcı
+        otomatik açılır. Sekmeyi kapattığınızda her ikisi de kapanır.</p>
+      <p>İlk açılışta macOS güvenlik uyarısı verirse: Sistem Tercihleri →
+        Güvenlik &amp; Gizlilik → <em>Yine de aç</em>.</p>
+    </div>
+
+    <!-- ============== 3 ============== -->
+    <h2 id="yapilandirma">3. İlk Yapılandırma</h2>
+
+    <h3 id="y-baslat">3.1 Uygulamayı başlat</h3>
+    <p>İki seçenek:</p>
+    <ul>
+      <li><strong>Masaüstü:</strong> <em>DocAgent.app</em>'i çift tıkla.</li>
+      <li><strong>Terminal (önerilen, ilk kurulum):</strong>
+<pre><code>npm run dev</code></pre>
+        Konsolda iki süreç paralel başlar:
+        <ul>
+          <li><strong>API sunucusu</strong> → <code>http://localhost:3000</code></li>
+          <li><strong>Vite (arayüz)</strong> → <code>http://localhost:5173</code></li>
+        </ul>
+      </li>
+    </ul>
+    <p>Tarayıcıdan <code>http://localhost:5173</code> adresini açın. Doc Agent
+      Dashboard'u açılır (boş — henüz iş yapılmadı). Sol menüden sayfalar
+      arası geçebilirsiniz.</p>
+    <div class="box info">
+      <strong>İki port neden?</strong>
+      Geliştirici modu vite'ı 5173'te, API'yi 3000'de çalıştırır; vite
+      <code>/api</code> ve <code>/screenshots</code> isteklerini 3000'e proxy'ler.
+      Üretim build'inde her şey 3000'den servis edilir (<code>npm run build</code>).
+    </div>
+
+    <h3 id="y-claude">3.2 Claude backend ayarı</h3>
+    <p>DocAgent metin üretimi için <code>claude-sonnet-4-6</code> kullanır.
+      İki backend'den birini seçin:</p>
+
+    <table>
+      <tr><th>Backend</th><th>Avantaj</th><th>Dezavantaj</th><th>Kurulum</th></tr>
+      <tr>
+        <td><strong>Claude Code CLI</strong><br><span class="pill rec">önerilen</span></td>
+        <td>Kişisel Claude oturumunuzla çalışır; ekstra API anahtarı yok</td>
+        <td>Claude Code yüklü ve giriş yapılmış olmalı</td>
+        <td><code>npm i -g @anthropic-ai/claude-code</code> → <code>claude login</code></td>
+      </tr>
+      <tr>
+        <td><strong>Anthropic API</strong></td>
+        <td>Kurumsal API anahtarıyla doğrudan; CLI gerekmez</td>
+        <td>Anahtar yönetimi sizde, kullanım maliyeti ayrı</td>
+        <td><code>console.anthropic.com</code> → API Keys → <code>sk-ant-…</code></td>
+      </tr>
+    </table>
+
+    <div class="step">
+      <div class="num">1</div>
+      <h4>Arayüzden seç</h4>
+      <p>Sol menüden <strong>Ayarlar</strong> → <em>Claude</em> bölümü →
+        <strong>Backend</strong> alanından "Claude Code (CLI)" veya
+        "Anthropic API"yı seçin. API modunu seçtiyseniz altta açılan
+        <strong>Anthropic API Key</strong> alanına <code>sk-ant-...</code>
+        anahtarını yapıştırın → <em>Kaydet</em>.</p>
+      <div class="box tip">
+        <strong>Hangisini seçmeli?</strong>
+        Kişisel deneme &amp; düşük maliyet → <strong>CLI</strong>.<br>
+        Kurumsal kullanım, faturalama ekibe → <strong>API</strong>.
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <h4>CLI kullanıyorsanız PATH'i doğrula</h4>
+      <p>Terminal'den:</p>
+<pre><code>which claude
+claude --version</code></pre>
+      <p>macOS .app olarak başlatıyorsanız PATH sanitize edilebilir; DocAgent
+        bunu telafi etmek için <code>resolveClaudeBin()</code> ile
+        <code>~/.local/bin</code>, <code>~/.claude/local</code>,
+        <code>/usr/local/bin</code>, <code>/opt/homebrew/bin</code>
+        fallback'larını tarar.</p>
+    </div>
+
+    <h3 id="y-oauth">3.3 Atlassian OAuth <span class="pill opt">opsiyonel</span></h3>
+    <p>
+      Confluence space / sayfa veya Jira projelerini bağlam olarak kullanmak
+      ve Confluence'a yayımlamak için OAuth bağlantısı gerekir. Klasik
+      Confluence v1 API <strong>HTTP 410 Gone</strong> döndürdüğü için
+      DocAgent yalnızca <strong>v2 API + granular OAuth scope'ları</strong>
+      kullanır.
+    </p>
+
+    <div class="step">
+      <div class="num">1</div>
+      <h4>Atlassian Developer Console'da uygulama oluştur (bir kez)</h4>
+      <p>
+        <a href="https://developer.atlassian.com/console/myapps/">developer.atlassian.com/console/myapps</a>
+        → <em>Create</em> → <strong>OAuth 2.0 integration</strong>.
+      </p>
+      <p>Permissions'a şu scope'ları ekleyin (tam liste):</p>
+<pre><code>read:space:confluence
+read:page:confluence
+write:page:confluence
+read:attachment:confluence
+write:attachment:confluence
+read:content-details:confluence
+read:jira-work
+write:jira-work
+offline_access</code></pre>
+      <p>Authorization → <strong>Callback URL</strong>:</p>
+<pre><code>http://localhost:3000/api/auth/atlassian/callback</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <h4>Client ID + Secret'ı Ayarlar'a yapıştır</h4>
+      <p><strong>Ayarlar</strong> → <em>Atlassian (Confluence + Jira)</em>:
+        OAuth Client ID + Secret → <em>Kaydet</em>.</p>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <h4>Bağlan</h4>
+      <p><strong>Atlassian'a Bağlan</strong> → tarayıcı Atlassian onay
+        ekranına yönlenir → siteyi seçin, izinleri onaylayın → DocAgent'a
+        geri döner. Token'lar <code>.env</code>'e yazılır
+        (<code>ATLASSIAN_ACCESS_TOKEN / REFRESH_TOKEN / EXPIRES_AT /
+        CLOUD_ID / SITE_URL / SCOPE</code>).</p>
+    </div>
+
+    <div class="step">
+      <div class="num">4</div>
+      <h4>Test</h4>
+      <p>Aynı bölümde <strong>Test</strong> butonu — yeşil "OK" görmelisiniz.
+        Hata alıyorsanız <em>Sorun Giderme</em> bölümüne bakın.</p>
+    </div>
+
+    <div class="box warn">
+      <strong>Scope güncellemesi</strong>
+      Daha sonra OAuth uygulamasına scope ekler/çıkarırsanız, mevcut token
+      yeni scope'ları içermez. Çözüm: <em>Bağlantıyı Kes</em> →
+      <em>Yeniden Bağlan</em>.
+    </div>
+
+    <!-- ============== 4 ============== -->
+    <h2 id="referanslar">4. Referansları Yükle</h2>
+
+    <h3 id="r-sirası">4.1 Hangi sırayla yüklemeli?</h3>
+    <p>Üretilen dokümanın kalitesi tamamen referansların kalitesine bağlıdır.
+      <strong>Doküman üretmeden ÖNCE</strong> aşağıdaki sırayla yükleyin:</p>
+    <table>
+      <tr><th>#</th><th>Kaynak</th><th>Neden öncelikli?</th></tr>
+      <tr><td>1</td><td><strong>BRD doküman(lar)ı</strong> (.docx/.pdf)</td>
+        <td>RAG'da en yüksek kaynak önceliği (1.0) — iş kuralının ana kaynağı</td></tr>
+      <tr><td>2</td><td>Confluence space (varsa) <em>veya</em> tek sayfalar</td>
+        <td>Süreç anlatımı, takım jargonu (öncelik 0.85)</td></tr>
+      <tr><td>3</td><td>Swagger / OpenAPI</td>
+        <td>API endpoint'leri teknik dökümana eşleştirilir</td></tr>
+      <tr><td>4</td><td>Jira projesi</td>
+        <td>Tarihsel kararlar, ticket geçmişi (öncelik 0.75)</td></tr>
+      <tr><td>5</td><td>Örnek kılavuz şablonu</td>
+        <td>Üretilen kılavuzun üslubu ve formatı buna benzetilir</td></tr>
+    </table>
+    <div class="box info">
+      <strong>Kaynak önceliği nasıl çalışır?</strong>
+      DocAgent retrieval skorunu kaynak tipine göre çarpar:
+      BRD ×1.0, Süreç Analizi ×0.95, Confluence ×0.85, Jira ×0.75, Manuel ×0.6.
+      Ayrıca <em>her kaynak tipinden en az 2 bölümün</em> prompt'a girmesi
+      garanti altına alınır (<code>balanceBySourceType</code>), yani BRD bağlam
+      bütçesini tek başına yutmaz.
+    </div>
+
+    <h3 id="r-veri">4.2 Veri Kaynakları (toplu Confluence / Jira)</h3>
+    <p>Sol menüden <strong>Referanslar</strong> → ilk sekme
+      <strong>Veri Kaynakları</strong>.</p>
+    <div class="step">
+      <div class="num">1</div>
+      <h4>Confluence Space ekle</h4>
+      <p><em>Space Key</em> girin (örn. <code>DOCS</code>) — Atlassian
+        space URL'sinde <code>/spaces/<strong>DOCS</strong>/</code> kısmı.
+        Opsiyonel açıklama → <strong>Ekle</strong>.</p>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <h4>Jira Projesi ekle</h4>
+      <p><em>Proje Key</em> girin (örn. <code>MBS</code> veya <code>PROJ</code>).
+        Otomatik büyük harfe çevrilir. <strong>Ekle</strong>.</p>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <h4>Senkronize Et</h4>
+      <p>Her satırın yanındaki <strong>Senkronize Et</strong> butonu o
+        kaynağı çeker:</p>
+      <ul>
+        <li>Confluence space → her sayfa
+          <code>data/references/confluence/&lt;pageId&gt;.txt</code>
+          olarak kaydedilir (Confluence v2 API,
+          <code>body-format=storage</code> + entity decode +
+          PDF-style TOC/header temizliği).</li>
+        <li>Jira projesi → tüm issue'lar tek dosyada
+          <code>data/references/jira/&lt;KEY&gt;.json</code> (ADF
+          description'lar düz metne çevrilir).</li>
+      </ul>
+      <p>Üstte <strong>Tümünü Güncelle</strong> butonu kayıtlı tüm
+        kaynakları sırayla senkronize eder.</p>
+      <div class="box tip">
+        <strong>İpucu</strong>
+        Senkron büyük space'lerde 1-2 dk sürebilir. Tek seferlik;
+        veriler değişince yeniden çalıştırın.
+      </div>
+    </div>
+
+    <h3 id="r-conf">4.3 Tek Confluence sayfası</h3>
+    <p><em>Confluence</em> sekmesi. Sayfa URL'sini yapıştırın → <strong>Ekle</strong>.
+      Sadece o sayfa çekilir (URL'den pageId çıkarılır, içerik
+      <code>storage</code> formatta indirilir).</p>
+
+    <h3 id="r-swagger">4.4 Swagger / API</h3>
+    <p><em>Swagger / API</em> sekmesi. Üç alan var:</p>
+    <ul>
+      <li><strong>Servis Adı:</strong> liste için ad (örn. <code>payment-service</code>)</li>
+      <li><strong>Swagger URL:</strong> OpenAPI JSON URL'si</li>
+      <li><strong>Authorization</strong> <span class="pill opt">opsiyonel</span> —
+        korumalı spec için <code>Bearer ...</code> veya
+        <code>Basic ...</code> başlığı</li>
+      <li><strong>SSL doğrulamasını atla</strong> — self-signed iç
+        sertifikalı sunucular için</li>
+    </ul>
+    <p>Çekilen spec <code>data/swagger/</code> altına timestamp'li bir
+      JSON olarak iner; endpoint sayısı listede gösterilir.</p>
+
+    <h3 id="r-dok">4.5 BRD &amp; referans dökümanlar</h3>
+    <p><em>Dökümanlar</em> sekmesi.
+      <code>.docx</code> / <code>.pdf</code> / <code>.md</code> /
+      <code>.txt</code> yüklenebilir.</p>
+    <ul>
+      <li><strong>Tip:</strong> <em>BRD</em> veya <em>Genel Referans</em></li>
+      <li><strong>Kaynak / Açıklama:</strong> liste için meta veri</li>
+    </ul>
+    <p>Yükleme sırasında:</p>
+    <ul>
+      <li><code>.docx</code> → <code>mammoth.extractRawText</code></li>
+      <li><code>.pdf</code> → <code>pdf-parse</code> (<code>PDFParse.getText</code>)</li>
+      <li>İçerik <code>cleanReferenceText</code> ile temizlenir:
+        TOC dot-leader, sayfa numarası, tekrar eden header/footer ayıklanır</li>
+    </ul>
+    <div class="box warn">
+      <strong>PDF kalitesi</strong>
+      Taranmış / OCR'sız PDF'ler okunamaz — kaynak olarak işlevsizdir.
+      Metin tabanlı PDF kullanın veya önce OCR'dan geçirin.
+    </div>
+
+    <h3 id="r-sablon">4.6 Örnek kılavuz şablonu</h3>
+    <p><em>Şablonlar</em> sekmesi. Daha önce yazılmış örnek kullanıcı
+      kılavuzlarını yükleyin. DocAgent bunların ilk 7000 karakterini
+      <strong>üslup ve format referansı</strong> olarak Claude'a verir
+      (paragraf yapısı, başlık tarzı, hitap tonu).</p>
+    <div class="box info">
+      <strong>İçerik vs. format ayrımı</strong>
+      Şablonun <strong>içeriği KOPYALANMAZ</strong> — sadece anlatım üslubu,
+      adım numaralandırma, "sen/siz" hitabı taklit edilir. Bu kural prompt'ta
+      açıkça yazılı.
+    </div>
+
+    <!-- ============== 5 ============== -->
+    <h2 id="kullanim">5. Kullanım</h2>
+
+    <h3 id="u-arayuz">5.1 Arayüz</h3>
+    <p>Sol kenar menüsündeki sayfalar:</p>
+    <table>
+      <tr><th>Sayfa</th><th>Ne işe yarar?</th></tr>
+      <tr><td><strong>Dashboard</strong></td>
+        <td>Sayaçlar, son job'lar, son dokümanlar, bağlam kaynağı özeti</td></tr>
+      <tr><td><strong>Ekran Keşfi</strong></td>
+        <td>Hedef URL gir, isteğe bağlı bağlam filtresi, keşfi başlat,
+            ekranları seç → doküman üretimini başlat</td></tr>
+      <tr><td><strong>Dökümanlar</strong></td>
+        <td>Üretilen dokümanları görüntüle / düzenle / yayımla / dışa aktar;
+            bölüm bazında yeniden üretme + sürüm geçmişi</td></tr>
+      <tr><td><strong>Geçmiş</strong></td>
+        <td>Eski job'lar (keşif + üretim) — durum, süre, ekran sayısı</td></tr>
+      <tr><td><strong>Referanslar</strong></td>
+        <td>5 sekme: Veri Kaynakları, Confluence, Swagger, Dökümanlar, Şablonlar</td></tr>
+      <tr><td><strong>Ayarlar</strong></td>
+        <td>Claude backend, Anthropic API key, Atlassian OAuth</td></tr>
+      <tr><td><strong>Sistem Promptları</strong></td>
+        <td>Üretim ve düzeltme prompt'larını arayüzden düzenle</td></tr>
+      <tr><td><strong>Güncelleme</strong></td>
+        <td>GitHub'dan son sürüm; <code>git pull</code> + log</td></tr>
+    </table>
+    <p>Üst çubukta global kontroller: breadcrumb, durum noktası (Hazır /
+      Çalışıyor / Hata), <strong>Derin Analiz</strong> anahtarı (6.3),
+      tema değiştirme (güneş/ay), kullanıcı avatarı.</p>
+
+    <h3 id="u-kesif">5.2 Ekran keşfi</h3>
+    <div class="step">
+      <div class="num">1</div>
+      <h4>URL gir</h4>
+      <p><strong>Ekran Keşfi</strong> → <em>Hedef Uygulama</em> alanına
+        taranacak ekranın <strong>direkt URL'sini</strong> girin (örn.
+        <code>https://app.firma.com/event-management/prematch-program</code>).
+        İsterseniz <em>Ek URL</em> butonuyla birden fazla ekran kuyruğa alabilirsiniz.</p>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <h4>Bağlam Filtresi <span class="pill opt">opsiyonel</span></h4>
+      <p>Referans havuzunuz çok büyükse (yüzlerce Confluence sayfası,
+        binlerce Jira issue'su) <em>Anahtar Kelimeler</em> ve <em>Confluence
+        Sayfa Adları</em> alanlarıyla yalnızca konuyla ilgili olanları
+        bağlama dahil edebilirsiniz. Boş bırakırsanız tüm ilgili referanslar
+        skoru &gt; 0 olduğu sürece değerlendirilir.</p>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <h4>Başlat</h4>
+      <p><strong>Başlat</strong> → arka planda bir <code>discovery</code>
+        job'ı tetiklenir. İlerleme SSE üzerinden canlı akar:</p>
+      <ul>
+        <li>Tarayıcı başlatılıyor → giriş yapılıyor (env'deki USERNAME/PASSWORD ile)</li>
+        <li>Ana ekran yükleniyor → analiz</li>
+        <li>Etkileşimli keşif (sırayla):
+          <ul>
+            <li>Filtre paneli pre-pass (13 farklı selector)</li>
+            <li>Sekmeler (≤6), açılır menüler (≤5)</li>
+            <li>Kolon header'ları → satır aksiyonları → satır-edit ikonları</li>
+            <li>Aksiyon butonları (öncelik: <em>add, yeni, ekle, edit, düzenle,
+              filter, log, detay, info, manual</em> — toplam ≤10 modal)</li>
+            <li>Tarih seçiciler (≤4), checkbox, toggle</li>
+          </ul>
+        </li>
+      </ul>
+      <p>Süre: tek ekran için <strong>30-90 saniye</strong>. Bir ekran için
+        20-30 state görüntüsü tipiktir.</p>
+    </div>
+    <div class="step">
+      <div class="num">4</div>
+      <h4>Ekranları seç</h4>
+      <p>Keşfedilen ekranlar listesinden dokümante edileceklerini işaretle
+        (veya "Tümünü Seç"). Her satır: başlık + ana görsel + state sayısı.</p>
+    </div>
+    <div class="box warn">
+      <strong>Login arkası ekran</strong>
+      Hedef uygulama login ardındaysa <code>.env</code>'de <code>APP_BASE_URL /
+      APP_USERNAME / APP_PASSWORD</code> ayarlı olmalı. SSO/cookie tabanlı
+      sistemlerde Playwright otomatik giriş zayıf — geliştirme/test ortamı
+      tercih edin.
+    </div>
+
+    <h3 id="u-uretim">5.3 Doküman üretimi</h3>
+    <div class="step">
+      <div class="num">1</div>
+      <h4>Derin Analiz seçimi</h4>
+      <p>Üst çubukta <strong>Derin Analiz</strong> anahtarı:</p>
+      <ul>
+        <li><strong>Kapalı</strong> (varsayılan) — hızlı, ucuz, çoğu ekran için yeterli</li>
+        <li><strong>Açık</strong> — Claude'a daha derin akıl-yürütme talimatı; karmaşık ekran ve süreçler için</li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <h4>Üretimi başlat</h4>
+      <p>Seçili ekranlarla <strong>Doküman Üret</strong>. İlerleme sayfası açılır.</p>
+      <p>Arka planda her ekran için sırayla:</p>
+      <ol>
+        <li><strong>Bağlam yükleme</strong> — referans envanteri loglanır
+          (örn. <code>"Section types: {brd:4,confluence:2,jira_task:3}"</code>)</li>
+        <li><strong>Ekran analizi</strong> — Claude görselleri okur, UI öğeleri + akışlar çıkarır</li>
+        <li><strong>RAG seçimi</strong> — ilgili bölümler skor ×kaynak önceliği ile sıralanır;
+          16KB bütçeye, her kaynak tipinden en az 2 bölüm garantili</li>
+        <li><strong>İki paralel üretim:</strong> Kullanıcı Kılavuzu +
+          Teknik Döküman (her biri 3000 token tavanı + image-dolu prompt)</li>
+        <li><strong>Kapsam kontrolü</strong> — her UI öğesinin (sidebar
+          nav hariç) dokümanda geçtiği fuzzy-match ile sayılır</li>
+        <li><strong>Düzeltme turu</strong> — kapsam &lt; %90 ise eksikler
+          için 2 turlu hedefli fix-up; her tur regresyon yapmıyorsa kabul</li>
+        <li>Doküman sonuna <em>Üretim Bilgisi</em> izi eklenir</li>
+      </ol>
+      <p>Job paralel 3 ekran işler (<code>CONCURRENCY=3</code>). Tipik
+        süre: ekran başına 1–3 dk; 10 ekranlık iş ~15-30 dk.</p>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <h4>İlerlemeyi izle</h4>
+      <p>İlerleme sayfasında SSE ile canlı log + her ekran için "✓" işareti
+        görürsünüz. Kontroller:</p>
+      <ul>
+        <li><strong>Duraklat</strong> — checkpoint'te bekler (cancel'lık değil)</li>
+        <li><strong>Devam</strong> — duraklatılmış işi sürdürür</li>
+        <li><strong>İptal</strong> — soft cancel (bir sonraki checkpoint'te durur);
+          tamamlanmış ekranların dökümanları korunur</li>
+      </ul>
+    </div>
+    <div class="box info">
+      <strong>"Prompt too long" hatası</strong>
+      Otomatik 3 kademeli geri çekilme: <em>tam bağlam (7000 char şablon)</em>
+      → <em>yarı state (3500 char şablon)</em> → <em>4 state (1500 char
+      şablon)</em>. Manuel müdahale gerekmez. Çok sık alıyorsanız bağlam
+      filtresi (6.1) kullanın.
+    </div>
+    <div class="box warn">
+      <strong>Job watchdog 30 dk</strong>
+      30 dakikadan uzun süren bir job otomatik <em>failed</em> işaretlenir.
+      Çok büyük iş kuyruğu için iki parçaya bölün.
+    </div>
+
+    <h3 id="u-inceleme">5.4 İnceleme &amp; düzenleme</h3>
+    <p>Üretim bitince <strong>Dökümanlar</strong> sayfası açılır. Her doküman için iki sekme:</p>
+    <ul>
+      <li><strong>Kullanıcı Kılavuzu</strong> — son kullanıcıya yönelik (Türkçe, ekran görselleri gömülü)</li>
+      <li><strong>Teknik Döküman</strong> — geliştiriciye yönelik (API endpoint eşleştirmeli)</li>
+    </ul>
+
+    <h4>Sol panel: Markdown editör · Sağ panel: canlı önizleme</h4>
+
+    <table>
+      <tr><th>İşlem</th><th>Ne yapar?</th></tr>
+      <tr><td><strong>Düzenle</strong></td>
+        <td>Markdown'ı doğrudan editle. Kaydedince sürüm geçmişine yazılır.</td></tr>
+      <tr><td><strong>Bölüm Yeniden Üret</strong></td>
+        <td>Beğenmediğin tek bölümü işaretleyip Claude'a yeniden yazdır
+          (tüm dokümanı baştan üretmek yerine cerrahi). Format ve diğer
+          bölümler bozulmaz.</td></tr>
+      <tr><td><strong>Sürüm Geçmişi</strong></td>
+        <td>Her kayıt edilen değişiklik tutulur; eskiye geri dönebilirsin
+          (versions[] documentStore'da).</td></tr>
+      <tr><td><strong>Durum</strong></td>
+        <td><em>Taslak</em> / <em>Onaylı</em> / <em>Yayınlandı</em> —
+          dashboard sayaçlarına yansır.</td></tr>
+    </table>
+
+    <div class="box tip">
+      <strong>Üretim Bilgisi dipnotu</strong>
+      Dokümanın altındaki kutu hangi referansların prompt'a girdiğini
+      kaynak tipi dökümüyle gösterir (örn.
+      <em>"Referans bölümleri (6 — BRD 3, Confluence 2, Jira 1)"</em>),
+      ayrıca kapsam % ve eksik kalan öğeler.
+    </div>
+
+    <h3 id="u-yayin">5.5 Yayın &amp; dışa aktarım</h3>
+
+    <h4>Confluence'a yayımlama</h4>
+    <div class="step">
+      <div class="num">1</div>
+      <h4>Hedef seç</h4>
+      <p>Doküman üstte sağdaki <strong>Yayımla</strong> butonu →
+        modal açılır. <em>Hedef Space</em> dropdown'undan space seçin,
+        opsiyonel <em>üst sayfa</em> belirleyin.</p>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <h4>Yayımla</h4>
+      <p>Markdown → Confluence storage formatına çevrilir. Aynı başlıkta sayfa
+        varsa güncellenir, yoksa oluşturulur. Ekran görüntüleri attachment
+        olarak yüklenir (v1 multipart endpoint; başarısız attachment fatal değil).</p>
+      <p>Sonuçta yeni sayfanın Confluence linki gösterilir; doküman
+        durumu otomatik <em>Yayınlandı</em> olur.</p>
+    </div>
+
+    <h4>Dışa aktarım</h4>
+    <p><strong>Dışa Aktar</strong> menüsü dört format sunar:</p>
+    <table>
+      <tr><th>Format</th><th>İçerik</th></tr>
+      <tr><td><code>.docx</code></td>
+        <td>Word — gömülü görseller; ekibe e-postayla göndermek için ideal</td></tr>
+      <tr><td><code>.md</code></td>
+        <td>Tüm dokümanların birleştiği tek markdown (TOC + her ekran)</td></tr>
+      <tr><td><code>.pdf</code></td>
+        <td>Markdown → HTML → Playwright HTML→PDF; print-hazır</td></tr>
+      <tr><td><code>.zip</code></td>
+        <td>
+<pre style="background:transparent;color:inherit;padding:0;margin:0">&lt;başlık&gt;.md                  (birleşik)
+&lt;ekran-1-slug&gt;/kullanici-kilavuzu.md
+&lt;ekran-1-slug&gt;/teknik-dokuman.md
+screenshots/*.png</pre>
+        </td></tr>
+    </table>
+
+    <!-- ============== 6 ============== -->
+    <h2 id="ileri">6. İleri Düzey</h2>
+
+    <h3 id="i-filtre">6.1 Bağlam filtresi</h3>
+    <p>Büyük referans havuzlarında (yüzlerce sayfa, binlerce issue) her
+      analizde tüm bağlamı taramak hem yavaş hem maliyetli olabilir. Ekran
+      Keşfi sayfasındaki <strong>Bağlam Filtresi</strong> ile odaklayın:</p>
+    <ul>
+      <li><strong>Anahtar Kelimeler:</strong> "ödeme, tahsilat" → bu
+        kelimeleri içeren bölümler önceliklenir</li>
+      <li><strong>Confluence Sayfa Adları:</strong> başlığın bir kısmı →
+        sadece o sayfalar</li>
+    </ul>
+    <p>Filtre yokken bile sistem zaten skor=0 olan (alakasız) bölümleri
+      otomatik atar; filtre bunu sıkılaştırır.</p>
+
+    <h3 id="i-prompt">6.2 Prompt özelleştirme <span class="pill adv">deneyimli</span></h3>
+    <p>DocAgent'ın üretim davranışı <strong>Sistem Promptları</strong>
+      sayfasında düzenlenebilir. Anahtarlar:</p>
+    <ul>
+      <li><code>userManual</code> — kullanıcı kılavuzu prompt'u (role,
+        outputStructure, instructions, rules[], maxTokens)</li>
+      <li><code>technicalDoc</code> — teknik döküman prompt'u</li>
+      <li>Fix-up, bölüm rejenerasyonu, ekran analizi promptları</li>
+    </ul>
+    <p>Yapılandırma <code>data/prompts/config.json</code>'da tutulur.
+      Bozulursa dosyayı silip uygulamayı yeniden başlatmak varsayılana döner.</p>
+    <div class="box warn">
+      <strong>Dikkat</strong>
+      Promptlar AI'nın tüm çıkartı belirler. Büyük değişiklikten önce
+      <code>config.json</code>'u yedekleyin.
+    </div>
+
+    <h3 id="i-derin">6.3 Derin Analiz anahtarı</h3>
+    <p>Üst çubuktaki toggle. Açıkken Claude'a daha kapsamlı akıl-yürütme
+      talimatı verir; karmaşık iş kuralları, çok sayfalı modallar veya
+      çapraz referans gereken ekranlarda kullanın. Kapalı modda hız ve
+      maliyet öne çıkar.</p>
+
+    <h3 id="i-gecmis">6.4 Geçmiş</h3>
+    <p><strong>Geçmiş</strong> sayfası tüm job kayıtlarını listeler
+      (keşif + üretim). Her satır: tarih, durum (<em>completed/failed/
+      cancelled</em>), süre, ekran sayısı, üretilen doküman sayısı.
+      <code>data/db/jobs.json</code>'da saklanır.</p>
+
+    <h3 id="i-update">6.5 Güncelleme</h3>
+    <p>İki yol var:</p>
+    <ul>
+      <li><strong>Arayüzden:</strong> Güncelleme sayfası → <em>Bilgi</em>
+        ile uzaktaki son sürümü gör → <em>Güncelle</em> → uygulama
+        <code>git pull --ff-only</code> yapar, log gösterir.</li>
+      <li><strong>Terminal:</strong>
+<pre><code>cd ~/projects/documentation-agent
+git pull
+npm install                  # gerekirse
+(cd client &amp;&amp; npm install)</code></pre>
+      </li>
+    </ul>
+    <div class="box info">
+      <strong>Yeniden başlatma</strong>
+      Sunucu kodu değişimi için uygulamayı tamamen kapatıp yeniden açın
+      (sekmeyi yenilemek yetmez — sunucu süreci hâlâ eski kodla çalışır).
+    </div>
+
+    <!-- ============== 7 ============== -->
+    <h2 id="yasam">7. Yaşam Döngüsü / Kapatma</h2>
+    <p>DocAgent yerel masaüstü uygulamasıdır. Yaşam döngüsü kuralları:</p>
+    <table>
+      <tr><th>Eylem</th><th>Sonuç</th></tr>
+      <tr>
+        <td>Sekmeyi <strong>kapat</strong> (tek sekme açıksa)</td>
+        <td><code>pagehide</code> → 30sn grace → reconnect yoksa
+          <code>process.exit(0)</code> → supervisor vite'ı kapatır</td>
+      </tr>
+      <tr>
+        <td><kbd>⌘</kbd>+<kbd>R</kbd> veya <kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> ile <strong>yenile</strong></td>
+        <td><code>pagehide</code> tetiklenir ama yeniden yüklenen sayfa
+          1-3sn'de heartbeat gönderip grace sayacını iptal eder → uygulama açık kalır</td>
+      </tr>
+      <tr>
+        <td>Sekmeyi <strong>arka plana al</strong></td>
+        <td><code>pagehide</code> tetiklenmez. Heartbeat throttle olur
+          ama 15 dk fallback hiç tetiklenmez → uygulama açık kalır</td>
+      </tr>
+      <tr>
+        <td><strong>Tarayıcı çöker</strong> / makineyi uyut</td>
+        <td>15 dakika heartbeat yoksa <em>crash fallback</em> tetiklenir
+          ve sunucu kapanır (kalıntı süreç bırakmamak için)</td>
+      </tr>
+      <tr>
+        <td>Birden fazla sekme açık, birini kapat</td>
+        <td>Diğer sekmenin heartbeat'i grace sayacını iptal eder → açık kalır</td>
+      </tr>
+    </table>
+    <p>Yeniden açmak için: <code>npm run dev</code> ya da masaüstü ikonu.</p>
+
+    <!-- ============== 8 ============== -->
+    <h2 id="sorun">8. Sorun Giderme</h2>
+    <table>
+      <tr><th>Belirti</th><th>Olası neden ve çözüm</th></tr>
+      <tr>
+        <td>"Claude komutu bulunamadı"</td>
+        <td>CLI modu seçili ama Claude Code yüklü değil. <code>npm i -g
+          @anthropic-ai/claude-code</code>; ya da Ayarlar'dan API moduna geçin.</td>
+      </tr>
+      <tr>
+        <td><code>resolveClaudeBin</code> yine PATH'i bulamıyor</td>
+        <td>.env'e tam yol verin: <code>CLAUDE_CLI_BIN=/Users/&lt;you&gt;/.local/bin/claude</code></td>
+      </tr>
+      <tr>
+        <td>Atlassian 401 / 403 / scope hatası</td>
+        <td>OAuth scope eksik veya token eski. Ayarlar →
+          <em>Bağlantıyı Kes</em> → Developer Console'da scope'ları doğrula
+          → <em>Yeniden Bağlan</em>.</td>
+      </tr>
+      <tr>
+        <td>Confluence "HTTP 410 Gone"</td>
+        <td>v1 API kullanılıyor. DocAgent zaten v2 kullanır; bu hata
+          tipik olarak güncel olmayan branch'te kalmış kullanıcı.
+          <code>git pull</code> yapın.</td>
+      </tr>
+      <tr>
+        <td>"Prompt is too long"</td>
+        <td>Otomatik 3 kademeli backoff devreye girer ve üretim tamamlanır.
+          Sürekli görüyorsanız bağlam filtresi kullanın veya gereksiz
+          referansları kaldırın.</td>
+      </tr>
+      <tr>
+        <td>Port 3000 veya 5173 dolu</td>
+        <td><code>lsof -ti tcp:3000 tcp:5173 | xargs kill -9</code>
+          → <code>npm run dev</code></td>
+      </tr>
+      <tr>
+        <td>Keşif boş geliyor / "Ekran bulunamadı"</td>
+        <td>Login arkasında. <code>.env</code>'de APP_BASE_URL/USERNAME/PASSWORD
+          ayarlayın veya public erişimli bir URL test edin.</td>
+      </tr>
+      <tr>
+        <td>"Confluence space bulunamadı: KEY"</td>
+        <td>Space key yanlış veya OAuth kullanıcısının o space'e erişimi yok.
+          Atlassian'da space URL'inden key'i doğrulayın
+          (<code>/wiki/spaces/<strong>KEY</strong>/</code>).</td>
+      </tr>
+      <tr>
+        <td>Doküman üretimi <em>failed (watchdog)</em></td>
+        <td>30dk job sınırı aşıldı. İş kuyruğunu yarıya bölün veya
+          Derin Analiz'i kapatıp tekrar deneyin.</td>
+      </tr>
+      <tr>
+        <td>"Orphan job" mesajı boot'ta</td>
+        <td>Önceki sunucu süreci doğru kapanmamış; tamamlanmamış job'lar
+          <em>failed</em> işaretlendi (kalıntı spinner olmasın diye).
+          Normal davranış.</td>
+      </tr>
+      <tr>
+        <td>PDF okunamıyor / boş çıkıyor</td>
+        <td>Taranmış/OCR'sız PDF. Önce OCR'dan geçirin veya kaynağın .docx
+          versiyonunu kullanın.</td>
+      </tr>
+      <tr>
+        <td>Sekmeyi yeniledim, uygulama kapandı</td>
+        <td>Eski sürümde bilinen sorun, düzeltildi (Adım 7).
+          <code>git pull</code> yapın.</td>
+      </tr>
+      <tr>
+        <td>Loglar nerede?</td>
+        <td><code>data/logs/server.log</code> + <code>client.log</code>
+          (launcher kullanılırsa <code>data/logs/supervisor.log</code> da).</td>
+      </tr>
+      <tr>
+        <td>Disk doluyor</td>
+        <td>Ekran görüntüleri birikiyor. Ayarlar → <em>Bakım</em> bölümü
+          (veya <code>POST /api/maintenance/cleanup-screenshots</code>).
+          Disk durumu: <code>GET /api/maintenance/disk-usage</code>.</td>
+      </tr>
+    </table>
+
+    <!-- ============== 9 ============== -->
+    <h2 id="sss">9. Sıkça Sorulanlar</h2>
+
+    <h4>Veriler buluta gönderilir mi?</h4>
+    <p>Hayır. Tüm referanslar, ekran görüntüleri ve üretilen dokümanlar
+      yerel diskte (<code>data/</code>) tutulur. Yalnızca Claude API
+      çağrılarında prompt + görseller Anthropic'e gider (CLI modunda
+      Claude Code'un veri politikası, API modunda Anthropic API politikası
+      geçerlidir).</p>
+
+    <h4>Hangi modeli kullanıyor?</h4>
+    <p><code>claude-sonnet-4-6</code> (text + vision). Her iki backend de
+      aynı modeli kullanır.</p>
+
+    <h4>10 ekranlık bir iş ne kadar tutar?</h4>
+    <p>Kabaca her ekran 1-3 dk + 2 doküman + olası 0-2 düzeltme turu.
+      Tipik 10 ekran ~15-30 dk. Maliyet tarafı backend seçimine bağlı —
+      CLI modunda Claude Code aboneliğiniz kapsamında; API modunda
+      <code>console.anthropic.com → Usage</code>'da ölçülür.</p>
+
+    <h4>Birden fazla ekran aynı anda işlenir mi?</h4>
+    <p>Evet. <code>CONCURRENCY=3</code> ekran paralel işlenir (her biri
+      kendi Claude çağrılarını yapar; toplam 3x üretim teorik). Daha fazla
+      paralel için <code>src/server/jobs/documentationJob.ts</code>'i
+      düzenleyebilirsiniz, ancak Claude rate-limit'ine dikkat.</p>
+
+    <h4>Bir doküman ne kadar uzun olur?</h4>
+    <p>Kullanıcı kılavuzu için tipik 15-25 KB markdown; 8-12 ekran görseli
+      gömülü, ekran başına 3-5 ana iş akışı + her UI öğesi anlatımı.
+      Teknik döküman benzer boyutta, daha az görsel.</p>
+
+    <h4>Aynı ekranı tekrar tekrar üretebilir miyim?</h4>
+    <p>Evet. Her üretim yeni bir doküman olarak Dökümanlar sayfasında durur;
+      eski olanlar Geçmiş'ten erişilebilir. Tek bölümü yenilemek için
+      "Bölüm Yeniden Üret" daha ucuz.</p>
+
+    <h4>BRD ne kadar büyük olabilir?</h4>
+    <p>Pratikte 100-200 sayfa BRD'ler sorunsuz işlenir. Çok büyük BRD'lerde
+      retrieval doğal olarak yalnız ilgili bölümleri seçer; bütçe
+      <code>16KB</code> bölüm + 9 paragraf — gerisi ihtiyaç olursa
+      ekrana özel bağlam filtresiyle daraltılabilir.</p>
+
+    <h4>Confluence'a yayımlarken ekran görüntüleri gidiyor mu?</h4>
+    <p>Evet. Yayım sırasında attachment olarak yüklenir (v1 multipart
+      endpoint; v2'de henüz multipart yok). Attachment hatası fatal değil
+      — sayfa yine oluşur, görseller eksik gelir; ekibe duyurun.</p>
+
+    <h4>Doküman kalitesi düşükse?</h4>
+    <p>Sırayla:</p>
+    <ol>
+      <li>BRD ve örnek şablon yüklü mü? Yoksa kalite kayda değer düşer.</li>
+      <li>Üretim Bilgisi dipnotunda hangi referansların kullanıldığını
+        inceleyin — beklediğiniz kaynak orada yoksa filtre veya
+        ad uyumsuzluğu vardır.</li>
+      <li>Tek bölümü "Bölüm Yeniden Üret" ile düzeltmeyi deneyin.</li>
+      <li>Sistemli problem varsa <code>userManual</code> prompt'unu
+        Sistem Promptları'ndan düzenleyin.</li>
+    </ol>
+
+    <h4>Multi-user / sunucu deploy mümkün mü?</h4>
+    <p>Şu an hayır — DocAgent tek kullanıcılı yerel uygulama olarak
+      tasarlandı (JSON tabanlı kalıcılık, auth katmanı yok). Yol haritasında
+      DB + auth + sunucu deploy var.</p>
+
+    <!-- ============== 10 ============== -->
+    <h2 id="kontrol">10. Hızlı Kontrol Listesi</h2>
+    <p>İlk doküman üretiminden önce her madde <strong>✓</strong> olmalı:</p>
+    <table>
+      <tr><th style="width: 40px">✓</th><th>Adım</th></tr>
+      <tr><td>☐</td><td>Node.js ≥20, npm ≥10, git kurulu (<code>node --version</code>)</td></tr>
+      <tr><td>☐</td><td>Repo klonlandı: <code>git clone … &amp;&amp; cd documentation-agent</code></td></tr>
+      <tr><td>☐</td><td><code>npm install</code> + <code>(cd client &amp;&amp; npm install)</code> tamamlandı</td></tr>
+      <tr><td>☐</td><td><code>npm run install:browsers</code> ile Chromium kuruldu</td></tr>
+      <tr><td>☐</td><td>Proje kökünde <code>.env</code> dosyası var, izinler <code>chmod 600</code></td></tr>
+      <tr><td>☐</td><td><code>npm run dev</code> hatasız çalıştı, <code>localhost:5173</code> Dashboard açıldı</td></tr>
+      <tr><td>☐</td><td>Ayarlar → Claude backend seçildi (CLI veya API)</td></tr>
+      <tr><td>☐</td><td>CLI modunda <code>claude --version</code> çalışıyor; API modunda <code>sk-ant-…</code> girildi</td></tr>
+      <tr><td>☐</td><td>Atlassian OAuth uygulaması oluşturuldu, scope'lar tam, callback URL doğru</td></tr>
+      <tr><td>☐</td><td>Ayarlar → Atlassian → Client ID/Secret girildi, <em>Bağlan</em> yeşil "OK" döndü</td></tr>
+      <tr><td>☐</td><td>En az 1 BRD veya şablon yüklendi</td></tr>
+      <tr><td>☐</td><td>İlgili Confluence space veya sayfa(lar) referanslara eklendi ve senkronize edildi</td></tr>
+      <tr><td>☐</td><td>(Varsa) Swagger spec'i, (varsa) Jira projesi eklendi ve senkronize edildi</td></tr>
+      <tr><td>☐</td><td>Ekran Keşfi → bir test URL'si ile en az 1 ekran taranabildi</td></tr>
+      <tr><td>☐</td><td>İlk doküman üretildi, Dökümanlar sayfasında görünüyor, Üretim Bilgisi dipnotunda her kaynak tipi temsil edilmiş</td></tr>
+    </table>
+
+    <div style="margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:12px; color:var(--text3); text-align:center;">
+      DocAgent — ekip içi kullanım kılavuzu ·
+      Bu döküman <strong>EKIP-KURULUM-KILAVUZU.html</strong> ·
+      <em>Güncelleme: <code>git pull</code></em> ·
+      Sorularınız için ekip kanalını kullanın.
+    </div>
+
+  </main>
+</div>
+</body>
+</html>
