@@ -251,5 +251,3 @@ main().catch((err) => {
   console.error("\nFatal error:", err.message);
   process.exit(1);
 });
-
-// test: hook doğrulama satırı — 2026-05-23
