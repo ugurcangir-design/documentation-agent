@@ -219,6 +219,3 @@ motoru** olarak kullanan, çok adımlı (keşif → bağlam → üretim → doğ
 ajansal bir uygulamadır. Olgunluk seviyesi "çalışan pilot / iç araç"
 düzeyindedir; teknik mimari sağlam, kurumsal ölçek için sertleştirme
 (veritabanı, çok kullanıcı, test kapsamı, maliyet kontrolü) sonraki adımdır.
-
-<!-- TEST: hook doğrulama satırı — bir sonraki commit'te silinecek -->
-
