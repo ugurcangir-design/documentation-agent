@@ -52,12 +52,23 @@ export interface ClaudeCallOptions {
    *  with its label as a preceding text block. */
   images?: ClaudeImage[];
   maxTokens?: number;
+  /** Job-stable prefix (örn. rol + output structure + kurallar + şablonlar).
+   *  API backend bu bloğu `cache_control: ephemeral` ile işaretler — aynı
+   *  job içinde N ekran için aynı prefix tekrar gönderildiğinde Anthropic
+   *  cache hit verir (input token maliyeti ~%90 düşer). CLI backend
+   *  cache desteklemediği için prompt'a basitçe önceler. Min ~1024 token
+   *  olmadığında cache aktive olmaz (Anthropic limiti). */
+  cachedPrefix?: string;
 }
 
 export interface ClaudeResult {
   text: string;
   inputTokens: number;
   outputTokens: number;
+  /** True when model hit max_tokens and output is truncated. Caller
+   *  decides whether to surface a warning or retry with a higher cap. */
+  truncated?: boolean;
+  stopReason?: string;
 }
 
 function isTransientError(err: unknown): boolean {
@@ -129,6 +140,18 @@ async function callApi(opts: ClaudeCallOptions): Promise<ClaudeResult> {
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
   const content: Anthropic.Messages.ContentBlockParam[] = [];
 
+  // Job-stable prefix — marked for ephemeral caching. Anthropic caches the
+  // prefix for ~5 min; subsequent requests with the same prefix pay ~10%
+  // input cost on the cached portion. Must come before the per-screen
+  // content (cache breakpoint requires stable bytes at the front).
+  if (opts.cachedPrefix && opts.cachedPrefix.trim().length > 0) {
+    content.push({
+      type: "text",
+      text: opts.cachedPrefix,
+      cache_control: { type: "ephemeral" },
+    });
+  }
+
   // Primary image (backwards-compat single-image API)
   let b64 = opts.imageBase64;
   if (!b64 && opts.imagePath && fs.existsSync(opts.imagePath)) {
@@ -160,20 +183,42 @@ async function callApi(opts: ClaudeCallOptions): Promise<ClaudeResult> {
 
   content.push({ type: "text", text: opts.prompt });
 
+  const maxTokens = opts.maxTokens ?? 8000;
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: opts.maxTokens ?? 3000,
+    max_tokens: maxTokens,
     messages: [{ role: "user", content }],
   });
 
   const firstBlock = response.content[0];
   const text = firstBlock?.type === "text" ? firstBlock.text : "";
+  const truncated = response.stop_reason === "max_tokens";
+  if (truncated) {
+    console.warn(
+      `[claude] ÇIKTI KESİLDİ: stop_reason=max_tokens (max_tokens=${maxTokens}, ` +
+      `output_tokens=${response.usage.output_tokens}). Üretilen doküman yarım kalmış olabilir.`
+    );
+  }
 
-  return {
+  // Cache görünürlüğü — kullanıcı tasarrufu görsün.
+  const usage = response.usage as Anthropic.Messages.Usage & {
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+  if (usage.cache_creation_input_tokens || usage.cache_read_input_tokens) {
+    console.log(
+      `[claude] cache: read=${usage.cache_read_input_tokens ?? 0} create=${usage.cache_creation_input_tokens ?? 0} input=${response.usage.input_tokens}`
+    );
+  }
+
+  const result: ClaudeResult = {
     text,
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
+    truncated,
   };
+  if (response.stop_reason) result.stopReason = response.stop_reason;
+  return result;
 }
 
 // ── CLI backend ─────────────────────────────────────────────────
@@ -201,7 +246,11 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     if (p) imagePaths.push({ label: img.label ?? "State", path: p });
   }
 
-  let prompt = opts.prompt;
+  // CLI backend prompt caching desteklemiyor — cachedPrefix'i prompt'un
+  // başına ekleyerek aynı metinsel akışı korur (cache kazancı yok).
+  let prompt = opts.cachedPrefix && opts.cachedPrefix.trim().length > 0
+    ? `${opts.cachedPrefix}\n\n${opts.prompt}`
+    : opts.prompt;
   if (imagePaths.length > 0) {
     const list = imagePaths.map((i, idx) => `${idx + 1}. [${i.label}] ${i.path}`).join("\n");
     prompt =
@@ -255,13 +304,23 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
       try {
         const parsed = JSON.parse(out) as {
           result?: string;
+          stop_reason?: string;
           usage?: { input_tokens?: number; output_tokens?: number };
         };
-        resolve({
+        const truncated = parsed.stop_reason === "max_tokens";
+        if (truncated) {
+          console.warn(
+            `[claude] ÇIKTI KESİLDİ (CLI): stop_reason=max_tokens. Üretilen doküman yarım kalmış olabilir.`
+          );
+        }
+        const cliResult: ClaudeResult = {
           text: parsed.result ?? out.trim(),
           inputTokens: parsed.usage?.input_tokens ?? 0,
           outputTokens: parsed.usage?.output_tokens ?? 0,
-        });
+          truncated,
+        };
+        if (parsed.stop_reason) cliResult.stopReason = parsed.stop_reason;
+        resolve(cliResult);
       } catch {
         resolve({ text: out.trim(), inputTokens: 0, outputTokens: 0 });
       }
