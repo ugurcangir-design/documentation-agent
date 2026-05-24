@@ -19,6 +19,21 @@ export const env = {
   get docLanguage() { return process.env.DOC_LANGUAGE || "tr"; },
   get maxDiscoveryDepth() { return parseInt(process.env.MAX_DISCOVERY_DEPTH || "0", 10); },
 
+  // Coverage fix-up: üretilen doküman bu eşiğin altındaysa eksik UI
+  // öğeleri için ek üretim turu tetiklenir. 0-100 arası; varsayılan 90.
+  // Kullanıcı "%80 yetsin, hızlı bitsin" diyebilir; 100'e yaklaşınca
+  // daha fazla LLM çağrısı + maliyet artar.
+  get fixUpThreshold(): number {
+    const n = parseInt(process.env.FIX_UP_THRESHOLD || "90", 10);
+    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 90;
+  },
+  // Fix-up döngüsü kaç tur deneyebilir (varsayılan 2; her tur ekstra
+  // LLM çağrısı demektir, eşik karşılanmadan önce vazgeç).
+  get fixUpMaxPasses(): number {
+    const n = parseInt(process.env.FIX_UP_MAX_PASSES || "2", 10);
+    return Number.isFinite(n) ? Math.min(5, Math.max(0, n)) : 2;
+  },
+
   // Express server portu — tüm yerel URL'ler (OAuth redirect, frontend
   // fetch BASE, screenshots) bu değerden türer. Atlassian developer
   // konsoluna kayıtlı redirect URI'nin bu portla eşleşmesi gerektiğini

@@ -39,9 +39,11 @@ export function searchParagraphs(
   const tokens = tokenize(query).filter((t) => t.length >= 4);
   if (tokens.length === 0) return [];
 
-  // Build a single OR-regex for fast scanning
+  // Suffix-toleranslı OR-regex: Türkçe çekim ekleri (-ler, -leri, -nin,
+  // -dan vb.) absorbe edilir; "filtre" sorgu token'ı "filtrelerimizden"
+  // gibi formları da yakalar. confidenceScorer ile aynı patern.
   const pattern = new RegExp(
-    `\\b(${tokens.map(escapeRegExp).join("|")})\\b`,
+    `\\b(${tokens.map(escapeRegExp).join("|")})\\w{0,8}\\b`,
     "gi"
   );
 
