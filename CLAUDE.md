@@ -153,7 +153,9 @@ pending → running → (paused ⇄ running) → completed
   `X-DocAgent: 1` header'ı şart. Cross-origin kötü niyetli sitelerin
   preflight'sız mutasyon endpoint'lerini tetiklemesini engeller.
   Frontend `client/src/lib/api.ts` (`DOCAGENT_HEADER`) ve tüm doğrudan
-  fetch çağrıları header'ı zaten gönderir.
+  fetch çağrıları header'ı zaten gönderir. 403 dönerse `request()`
+  helper'ı `CsrfBlockedError` fırlatır + `docagent:csrf-blocked` window
+  event emit eder; `App.tsx` global toast gösterir (4sn debounce).
 
 ### Route mount (satır 34-47)
 ```
@@ -308,16 +310,19 @@ await Promise.all([
 ])
 ```
 
-### Coverage + Fix-up (satır 282-358)
+### Coverage + Fix-up
 ```ts
-FIX_UP_THRESHOLD     = 90    // % altıysa düzelt
-MAX_FIX_UP_PASSES    = 2     // en çok 2 tur
+env.fixUpThreshold     // FIX_UP_THRESHOLD (.env, 0-100, varsayılan 90)
+env.fixUpMaxPasses     // FIX_UP_MAX_PASSES (.env, 0-5, varsayılan 2)
 
 inScopeForCoverage = uiElements
    .filter(el => el.type !== "menu" && !isSidebarNav(el))
 
 computeCoverage(els, body) → { coveragePct, missing[] }
 ```
+**Early-stop:** kapsam % aynı kaldığında bile **eksik öğe set'i**
+değiştiyse bir sonraki tur denenir (farklı eksiklere yönelinme şansı).
+Yalnızca set birebir aynı olduğunda durulur.
 Her tur:
 - `runCoverageFixUp({docKind, currentContent, missing, uiElementsMissing})`
 - Yeni kapsam **eski kapsam ≥** ise kabul, gerileme reddedilir
@@ -339,10 +344,15 @@ Doküman sonuna eklenir:
 ## RAG Mekaniği
 
 ### tokenize (confidenceScorer.ts)
-- Lower-case, harf+rakam dışı temizle, ≥3 char, Türkçe stopwords filtreli:
-  `ve, ile, için, bir, bu, şu, o, the, a, an, is, are, of, to, in, on, at, as,
-   by, or, var, yok, vardır, olur, kullanıcı, ekran, sayfa, tıkla, tıklayın,
-   tıklandığında, tıklanır, açılır`.
+- Lower-case, harf+rakam dışı temizle, ≥3 char, **yalnızca dilbilgisel
+  dolgu** stopword'leri filtreli: `ve, ile, için, bir, bu, şu, o, the,
+  a, an, is, are, of, to, in, on, at, as, by, or, var, yok, vardır,
+  olur, ise, de, da`. (Eskiden burada olan "kullanıcı, ekran, sayfa,
+  tıkla*, açılır" çıkarıldı — bunlar gerçek sorgu token'ı olabilir.)
+- **Suffix toleransı (Türkçe çekim):** `buildTokenRegex(token)` =
+  `/\\b<token>\\w{0,8}\\b/gi`. "filtre" sorgusu "filtreler",
+  "filtreyi", "filtrelerin" gibi formları yakalar. confidenceScorer
+  ve paragraphSearch aynı kalıbı kullanır.
 
 ### sourcePriority (numerik çarpan)
 ```
