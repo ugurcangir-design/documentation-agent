@@ -21,7 +21,11 @@ import { useEffect } from "react";
 export function useHeartbeat() {
   useEffect(() => {
     const send = () => {
-      fetch("/api/heartbeat", { method: "POST", keepalive: true }).catch(() => {});
+      fetch("/api/heartbeat", {
+        method: "POST",
+        keepalive: true,
+        headers: { "X-DocAgent": "1" },
+      }).catch(() => {});
     };
 
     send();

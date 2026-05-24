@@ -79,7 +79,7 @@ export default function UpdatePage() {
     setUpdating(true);
     setLog([]);
     try {
-      const r = await fetch("/api/update/run", { method: "POST" });
+      const r = await fetch("/api/update/run", { method: "POST", headers: { "X-DocAgent": "1" } });
       const d = await r.json() as { ok?: boolean; error?: string };
       if (!d.ok) {
         setError(d.error ?? "Bilinmeyen hata");

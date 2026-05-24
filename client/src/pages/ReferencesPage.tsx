@@ -65,7 +65,7 @@ export default function ReferencesPage() {
     try {
       const r = await fetch("/api/references/confluence/fetch", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
         body: JSON.stringify({ url: confUrl }),
       });
       if (!r.ok) throw new Error((await r.json() as { error: string }).error);
@@ -81,7 +81,7 @@ export default function ReferencesPage() {
     try {
       const r = await fetch("/api/references/swagger/fetch", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
         body: JSON.stringify({ url: swagUrl, name: swagName, authorization: swagAuth, insecure: swagInsecure }),
       });
       if (!r.ok) throw new Error((await r.json() as { error: string }).error);
@@ -99,7 +99,7 @@ export default function ReferencesPage() {
       fd.append("type", type);
       fd.append("company", docCompany);
       fd.append("description", docDesc);
-      const r = await fetch("/api/references/documents/upload", { method: "POST", body: fd });
+      const r = await fetch("/api/references/documents/upload", { method: "POST", body: fd, headers: { "X-DocAgent": "1" } });
       if (!r.ok) throw new Error((await r.json() as { error: string }).error);
       setDocCompany(""); setDocDesc("");
       await load();
@@ -108,7 +108,7 @@ export default function ReferencesPage() {
   }
 
   async function remove(type: "confluence" | "swagger" | "documents", id: string) {
-    await fetch(`/api/references/${type}/${id}`, { method: "DELETE" });
+    await fetch(`/api/references/${type}/${id}`, { method: "DELETE", headers: { "X-DocAgent": "1" } });
     await load();
   }
 
@@ -116,7 +116,7 @@ export default function ReferencesPage() {
     setError(null);
     const r = await fetch(`/api/sources/${kind}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
       body: JSON.stringify({ key, name }),
     });
     if (!r.ok) { setError((await r.json() as { error: string }).error); return; }
@@ -124,13 +124,13 @@ export default function ReferencesPage() {
   }
 
   async function removeSource(id: string) {
-    await fetch(`/api/sources/${id}`, { method: "DELETE" });
+    await fetch(`/api/sources/${id}`, { method: "DELETE", headers: { "X-DocAgent": "1" } });
     await loadSources();
   }
 
   async function syncSource(id: string): Promise<boolean> {
     setError(null);
-    const r = await fetch(`/api/sources/${id}/sync`, { method: "POST" });
+    const r = await fetch(`/api/sources/${id}/sync`, { method: "POST", headers: { "X-DocAgent": "1" } });
     if (!r.ok) { setError((await r.json() as { error: string }).error); await loadSources(); return false; }
     await loadSources();
     await load();

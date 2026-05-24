@@ -76,14 +76,14 @@ export default function SettingsPage() {
     // Save credentials first so they're available server-side
     await fetch("/api/settings", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
       body: JSON.stringify(values),
     });
     window.open("/api/auth/atlassian/start", "_blank", "width=620,height=720");
   }
 
   async function disconnectAtlassian() {
-    await fetch("/api/auth/atlassian/disconnect", { method: "POST" });
+    await fetch("/api/auth/atlassian/disconnect", { method: "POST", headers: { "X-DocAgent": "1" } });
     refreshOauth();
   }
 
@@ -109,7 +109,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
         body: JSON.stringify(values),
       });
       if (!res.ok) throw new Error("Kayıt başarısız");
@@ -426,7 +426,7 @@ function MaintenanceSection() {
     if (!confirm("Kullanılmayan ekran görüntüleri silinecek. Devam edilsin mi?")) return;
     setBusy(true);
     try {
-      const r = await fetch("/api/maintenance/cleanup-screenshots", { method: "POST" });
+      const r = await fetch("/api/maintenance/cleanup-screenshots", { method: "POST", headers: { "X-DocAgent": "1" } });
       const d = await r.json() as { removed: number; bytesFreed: number };
       setLastCleanup(d);
       loadUsage();

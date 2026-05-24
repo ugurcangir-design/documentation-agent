@@ -34,7 +34,7 @@ export default function VersionHistoryPanel({ documentId, onClose, onRestored }:
     if (!confirm("Bu versiyona geri dön? Mevcut içerik geçmişe eklenir.")) return;
     setRestoring(true);
     try {
-      await fetch(`/api/documents/${documentId}/restore/${selected.id}`, { method: "POST" });
+      await fetch(`/api/documents/${documentId}/restore/${selected.id}`, { method: "POST", headers: { "X-DocAgent": "1" } });
       onRestored();
     } finally {
       setRestoring(false);
