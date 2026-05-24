@@ -16,6 +16,7 @@ Başlat:
 npm run dev               # server + vite paralel (concurrently)
 # veya
 npm run launcher          # macOS .app + supervisor
+npm test                  # vitest birim testleri (tests/*.test.ts)
 ```
 
 ---
@@ -55,6 +56,7 @@ src/
     coverageCheck.ts             Her UI öğesi dokümanda geçiyor mu?
     markdownCleaner.ts           LLM çıktısı temizleme
     sourcePriority.ts            sourceType → ağırlık
+    sidebarNav.ts                SIDEBAR_NAV_HINTS + isSidebarNav (tek kaynak)
   generator/
     userManualGenerator.ts       Kullanıcı kılavuzu prompt + üretim
     technicalDocGenerator.ts     Teknik doc prompt + üretim
@@ -73,8 +75,13 @@ src/
     app.ts                       Express, heartbeat, watchdog, orphan-reap (183 satır)
     auth/atlassianAuth.ts        OAuth 3LO + scope + token refresh + cloud_id (285)
     jobs/
-      documentationJob.ts        Doküman üretim job'ı (447 satır)
+      documentationJob.ts        Orchestrator (slim ~100 satır)
+      contextLoader.ts           Job-stable bağlam (BRD/Confluence/Jira/Swagger/şablon)
+      screenProcessor.ts         Ekran başına analyze+generate+fixup+persist
+      traceBuilder.ts            Doküman footer "Üretim Bilgisi"
       discoveryJob.ts            Ekran keşfi job'ı (189 satır)
+    middleware/
+      csrfGuard.ts               Mutating endpoint'lere X-DocAgent header şartı
     routes/
       discoveryRoutes.ts         POST /api/discovery/start, GET /screens, /stream
       jobRoutes.ts               start/cancel/pause/resume/delete/cleanup/stream
@@ -139,6 +146,15 @@ pending → running → (paused ⇄ running) → completed
 
 ## app.ts — Kritik Bölümler
 
+### Middleware
+- `cors()` (origin'siz, yerel kullanım varsayımı)
+- `express.json({ limit: "10mb" })`
+- **`csrfGuard`** — non-GET ve OAuth/beacon dışı her istekte
+  `X-DocAgent: 1` header'ı şart. Cross-origin kötü niyetli sitelerin
+  preflight'sız mutasyon endpoint'lerini tetiklemesini engeller.
+  Frontend `client/src/lib/api.ts` (`DOCAGENT_HEADER`) ve tüm doğrudan
+  fetch çağrıları header'ı zaten gönderir.
+
 ### Route mount (satır 34-47)
 ```
 /api/discovery   /api/jobs     /api/documents   /api/confluence
@@ -185,11 +201,29 @@ env.claudeCliBin  = 'claude'
   `resolveClaudeBin()` `~/.local/bin`, `~/.claude/local`, `/usr/local/bin`,
   `/opt/homebrew/bin` fallback'larını dener.
 - **API**: `@anthropic-ai/sdk` `messages.create` — `ANTHROPIC_API_KEY` gerekir.
-  `max_tokens` opsiyonel (default 3000). Görseller `base64` veya dosya path.
+  `max_tokens` opsiyonel (default **8000**). Görseller `base64` veya dosya path.
 
 ```ts
-isPromptTooLong(err) → boolean   // generator backoff için
+isPromptTooLong(err) → boolean         // generator backoff için
+ClaudeResult.truncated                 // stop_reason === 'max_tokens' → true
+ClaudeResult.stopReason                // Claude'un duruş nedeni (opsiyonel)
+ClaudeCallOptions.cachedPrefix         // job-stable text block → ephemeral cache
 ```
+
+**Prompt caching:** `callApi` `cachedPrefix`'i ilk content bloğu olarak
+`cache_control: { type: "ephemeral" }` ile gönderir. Generator'lar
+`buildPrompt` çıktısını `{ cachedPrefix, prompt }` olarak ikiye böler;
+cachedPrefix = role + outputStructure + kurallar + şablonlar (aynı job
+için byte-byte aynı). Aynı job içinde N ekran üretiminde 2. ekrandan
+itibaren cache hit → input token maliyeti ~%10'a düşer. Cache kazancı
+console'da `[claude] cache: read=... create=...` olarak loglanır.
+CLI backend caching desteklemediği için prefix prompt'a önceler (eşit
+metin akışı, kazançsız). Cache eşiği ~1024 token; şablon yoksa devreye
+girmeyebilir (zararı yok).
+Truncation: API & CLI backend `stop_reason === 'max_tokens'` durumunu
+algılar; `[claude] ÇIKTI KESİLDİ` warning'i loglanır, `GenerationResult.
+truncated` üretilen dökümana taşınır ve `documentationJob` trace
+footer'ına ⚠️ uyarısı eklenir.
 
 ---
 
@@ -203,6 +237,7 @@ CONFLUENCE_SPACE_KEY  CONFLUENCE_PARENT_PAGE_ID
 APP_BASE_URL  APP_USERNAME  APP_PASSWORD
 DOC_LANGUAGE = 'tr'
 MAX_DISCOVERY_DEPTH = 0           // 0 → tek ekran modu (interactive=true)
+PORT = 3000                       // tüm yerel URL'lerin tek kaynağı
 CLAUDE_BACKEND = 'cli' | 'api'
 CLAUDE_CLI_BIN = 'claude'
 ```
@@ -215,13 +250,21 @@ prompt için: `role`, `outputStructure`, `instructions`, `rules[]`, `language`,
 
 ---
 
-## Doküman Üretim Pipeline'ı (documentationJob.ts)
+## Doküman Üretim Pipeline'ı
 
-`runDocumentationJob(jobId, selectedScreenPaths[])`, ekranları **3'lü
-paralel** işler:
+`runDocumentationJob(jobId, selectedScreenPaths[])` üç modülden oluşur:
+
+| Modül | Rol |
+|---|---|
+| `documentationJob.ts` | Orchestrator — context load + paralel worker + finalize |
+| `contextLoader.ts` | Tüm referans kaynaklarını okur, dedupe eder, döndürür |
+| `screenProcessor.ts` | Tek ekran için analyze + generate + fixup + persist |
+| `traceBuilder.ts` | "Üretim Bilgisi" footer'ı oluşturur |
+
+Ekranlar **3'lü paralel** işlenir:
 
 ```ts
-CONCURRENCY = 3   // satır 28
+CONCURRENCY = 3   // documentationJob.ts
 ```
 
 ### Bağlam yükleme adımları
@@ -288,6 +331,7 @@ Doküman sonuna eklenir:
 - Ekran state sayısı
 - UI kapsamı % + eksikler (varsa ilk 5)
 - Fix-up uygulandı mı + kaç öğe eklendi
+- ⚠️ Çıktı kesildi uyarısı (Claude `max_tokens` limitine takıldıysa)
 - Üretim zamanı
 
 ---
@@ -354,14 +398,13 @@ global skora göre. BRD'nin tüm bütçeyi yutması bu sayede engellenir.
 
 `technicalDocGenerator.ts (139 satır)`: aynı pattern; template ilk 4000 char.
 
-Sidebar-nav filtre listesi (jenerator + doc job kapsam hesabı):
-```
-sport base data, sports, categories, competitions, market setup, priority
-settings, venues, competitors, heroes, multi feed, sport mapping, market
-mapping, definitions, event management, outright program, live program,
-newspaper program, v-sport program, exported program, groups, outright,
-live program, settings, ürünler, users, settings, logout, çıkış
-```
+Sidebar-nav filtre listesi tek kaynaktan gelir: `src/quality/sidebarNav.ts`
+(`SIDEBAR_NAV_HINTS` + `isSidebarNav(el)`). `documentationJob` (kapsam
+hesabı), `userManualGenerator` ve `technicalDocGenerator` (prompt UI
+listesi) bu helper'ı import eder. **Liste hedef uygulamaya özgüdür**
+(sports betting / Analyst Studio); yeni hedef uygulama eklenince ya bu
+liste güncellenmeli ya da `analyzeScreen` çıktısına `isGlobalNav`
+alanı eklenip LLM kararına bırakılmalıdır.
 
 ---
 
@@ -394,7 +437,7 @@ satır 141. Eşleşen butonların priority=2, diğerleri 1.
 ## Atlassian OAuth (server/auth/atlassianAuth.ts)
 
 ```ts
-REDIRECT_URI = "http://localhost:3000/api/auth/atlassian/callback"
+getRedirectUri() = `http://localhost:${env.port}/api/auth/atlassian/callback`
 AUTH_BASE    = "https://auth.atlassian.com"
 API_BASE     = "https://api.atlassian.com"
 
@@ -538,6 +581,9 @@ CLAUDE.md'yi okur, kuralı görür, uygular.
 5. `referenceStore` her zaman `writeJsonAtomic` ile yaz (yarım yazım yok).
 6. Claude çağrısı → her zaman `isPromptTooLong` backoff zincirine sar.
 7. `.env` **asla** commit edilmez (ATLASSIAN_*, ANTHROPIC_API_KEY dahil).
+   Yeni mutating endpoint (POST/PUT/PATCH/DELETE) eklediğinde frontend
+   tarafında `lib/api.ts`'in `request()` helper'ı veya `DOCAGENT_HEADER`
+   sabitiyle çağır — `csrfGuard` middleware aksi halde 403 döner.
 8. Heartbeat sözleşmesini koru — `/api/heartbeat/leave` immediate exit
    tetiklemez; refresh güvenliği oradan gelir.
 9. UI değişikliklerinde **renkler için semantic token** kullan
@@ -560,6 +606,10 @@ CLAUDE.md'yi okur, kuralı görür, uygular.
   endpoint yok); attachment hatası fatal değil.
 - **Job watchdog 30 dakika** — büyük üretim işleri buna takılabilir
   (CONCURRENCY=3 ile ~25-30 ekran sınırda).
+- **Test kapsamı sınırlı** — `tests/` altında vitest ile 24 birim test
+  (BRD parser, sourcePriority, sidebar nav, coverage, section dedup,
+  paragraph search). Üretim job'ı, generator prompt'u, OAuth flow,
+  Playwright keşif kısımları henüz test edilmedi.
 - **CLI backend** Claude Code oturumu açık olmalı; `resolveClaudeBin()`
   AppleScript-sanitize PATH için fallback dener.
 
@@ -584,6 +634,6 @@ CLAUDE.md'yi okur, kuralı görür, uygular.
 - ⏳ DB'ye geçiş (binlerce referans / doküman ölçeğinde)
 - ⏳ Çok kullanıcı + auth
 - ⏳ Confluence attachment v2 native yol (v1 multipart yerine)
-- ⏳ Otomatik regression test suite (jenerator + retrieval + RAG dedup)
+- ⏳ Test kapsamını genişlet (jenerator prompt builder, OAuth, Playwright)
 - ⏳ Login akışı için SSO/cookie aktarımı standardı
 - ⏳ Maliyet/karneleme — ekran başına token/maliyet kullanıcıya gösterilsin
