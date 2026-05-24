@@ -22,12 +22,10 @@ import { referenceStore } from "../store/referenceStore";
 import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
 import { buildTrace } from "./traceBuilder";
+import { env } from "../../config/env";
 
 import type { Endpoint } from "../../types/endpoint";
 import type { DocumentSection } from "../../types/documentSource";
-
-const FIX_UP_THRESHOLD = 90;
-const MAX_FIX_UP_PASSES = 2;
 
 export interface ProcessArgs {
   jobId: string;
@@ -129,8 +127,10 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       let tokensIn = 0;
       let tokensOut = 0;
 
-      for (let pass = 1; pass <= MAX_FIX_UP_PASSES; pass++) {
-        if (curCov.coveragePct >= FIX_UP_THRESHOLD || curCov.missing.length === 0) break;
+      const maxPasses = env.fixUpMaxPasses;
+      const threshold = env.fixUpThreshold;
+      for (let pass = 1; pass <= maxPasses; pass++) {
+        if (curCov.coveragePct >= threshold || curCov.missing.length === 0) break;
         emitJobEvent(jobId, {
           type: "progress",
           message: `${docKind === "userManual" ? "Kullanıcı kılavuzu" : "Teknik döküman"} kapsamı %${curCov.coveragePct} — eksik ${curCov.missing.length} öğe için fix-up (tur ${pass})`,
@@ -149,12 +149,23 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
           tokensIn += fix.inputTokens;
           tokensOut += fix.outputTokens;
           if (newCov.coveragePct >= curCov.coveragePct) {
+            const prev = curCov.coveragePct;
+            const prevMissingSet = new Set(curCov.missing);
+            const newMissingSet = new Set(newCov.missing);
+            // Aynı eksik set tekrarlıyorsa (sadece sayısal eşitlik değil,
+            // birebir aynı öğeler), bir sonraki turun da farklı sonuç
+            // vermeyeceği kabul edilir → dur. Eksik **set'i değiştiyse**
+            // (örn. bazı öğeler eklendi, başkaları çıktı; coverage % aynı
+            // kalmış ama farklı öğelere yönelinmiş) tura devam ederek
+            // yeni eksiklere fırsat tanı.
+            const missingUnchanged =
+              prevMissingSet.size === newMissingSet.size &&
+              [...prevMissingSet].every((m) => newMissingSet.has(m));
             curContent = fix.content;
             addedTotal += fix.addedCount;
-            const prev = curCov.coveragePct;
             curCov = newCov;
-            console.log(`[docjob ${jobId}] ${docKind} fix-up tur ${pass}: %${prev} → %${curCov.coveragePct}`);
-            if (curCov.coveragePct === prev) break;
+            console.log(`[docjob ${jobId}] ${docKind} fix-up tur ${pass}: %${prev} → %${curCov.coveragePct}${missingUnchanged ? " (eksik set sabit)" : ""}`);
+            if (missingUnchanged) break;
           } else {
             console.log(`[docjob ${jobId}] ${docKind} fix-up tur ${pass} regresyon (%${newCov.coveragePct}) — atlandı`);
             break;

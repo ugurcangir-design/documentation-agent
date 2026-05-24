@@ -16,6 +16,22 @@ const BASE = "/api";
  */
 export const DOCAGENT_HEADER = { "X-DocAgent": "1" } as const;
 
+export class CsrfBlockedError extends Error {
+  constructor() {
+    super(
+      "İstek sunucu tarafından engellendi (CSRF guard). " +
+      "DocAgent'a yalnızca kendi sekmesinden çağrı yapılabilir. " +
+      "Sayfayı yenileyip tekrar deneyin; sorun sürerse sunucu yeniden başlatılması gerekebilir."
+    );
+    this.name = "CsrfBlockedError";
+  }
+}
+
+/** Tüm sayfaların dinleyip global bir banner/toast gösterebilmesi için. */
+function emitCsrfBlocked(): void {
+  window.dispatchEvent(new CustomEvent("docagent:csrf-blocked"));
+}
+
 async function request<T>(
   path: string,
   options?: RequestInit
@@ -30,6 +46,10 @@ async function request<T>(
   });
 
   if (!res.ok) {
+    if (res.status === 403) {
+      emitCsrfBlocked();
+      throw new CsrfBlockedError();
+    }
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error((err as { error?: string }).error ?? res.statusText);
   }
@@ -119,6 +139,10 @@ async function downloadAs(endpoint: string, body: unknown, filename: string): Pr
     headers: { "Content-Type": "application/json", ...DOCAGENT_HEADER },
     body: JSON.stringify(body),
   });
+  if (res.status === 403) {
+    emitCsrfBlocked();
+    throw new CsrfBlockedError();
+  }
   if (!res.ok) throw new Error(`Export failed: ${endpoint}`);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

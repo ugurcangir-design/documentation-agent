@@ -2,11 +2,17 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Stopword listesi — yalnızca **dilbilgisel** dolgu kelimeleri.
+ * Önceki sürümde "kullanıcı, ekran, sayfa, tıkla, açılır" gibi domain
+ * sözcükleri de buradaydı; ama bunlar gerçek sorgu token'ı olabilir
+ * (örn. "kullanıcı yönetimi", "ekran kilidi"). Stopword'e alınınca
+ * BRD/Confluence başlıklarındaki eşleşmeler kaçıyordu. Geri çıkarıldı.
+ */
 const STOPWORDS = new Set([
   "ve", "ile", "için", "bir", "bu", "şu", "o", "the", "a", "an",
   "is", "are", "of", "to", "in", "on", "at", "as", "by", "or",
-  "var", "yok", "vardır", "olur", "kullanıcı", "ekran", "sayfa",
-  "tıkla", "tıklayın", "tıklandığında", "tıklanır", "açılır",
+  "var", "yok", "vardır", "olur", "ise", "de", "da",
 ]);
 
 /** Extract distinct keyword tokens from a free-text query, normalized
@@ -20,12 +26,24 @@ export function tokenize(query: string): string[] {
     .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
 }
 
+/**
+ * Türkçe için suffix-toleranslı regex: `etkinlik` token'ı `etkinlikler`,
+ * `etkinliği`, `etkinliklerin` gibi formları yakalar. 6 karaktere kadar
+ * ek (suffix) chain'ini absorbe eder; bu Türkçe'nin tipik ek kombinasyon
+ * uzunluğunu (–lerimizden, –larındaki, …) kapsar.
+ *
+ * Aynı semantik, eski exact `\b<token>\b` ile çalışan content'i de
+ * geriye dönük olarak yakalar (suffix'siz form da uzunluk 0 ile match'lenir).
+ */
+export function buildTokenRegex(token: string): RegExp {
+  return new RegExp(`\\b${escapeRegExp(token)}\\w{0,8}\\b`, "gi");
+}
+
 function countAny(text: string, tokens: string[]): number {
   let n = 0;
   for (const t of tokens) {
     if (!t) continue;
-    const re = new RegExp(`\\b${escapeRegExp(t)}\\b`, "gi");
-    n += (text.match(re) || []).length;
+    n += (text.match(buildTokenRegex(t)) || []).length;
   }
   return n;
 }

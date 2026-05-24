@@ -31,6 +31,23 @@ function AppInner() {
     return () => window.removeEventListener("navigate", handler);
   }, []);
 
+  // CSRF guard 403 → tüm sayfalarda tutarlı, anlamlı bir toast.
+  // Birden çok yerden tetiklense bile spam olmasın diye 4sn debounce.
+  useEffect(() => {
+    let lastShown = 0;
+    const handler = () => {
+      const now = Date.now();
+      if (now - lastShown < 4000) return;
+      lastShown = now;
+      toast.show(
+        "İstek engellendi (CSRF guard). DocAgent sekmesini yenileyip tekrar deneyin.",
+        "error"
+      );
+    };
+    window.addEventListener("docagent:csrf-blocked", handler);
+    return () => window.removeEventListener("docagent:csrf-blocked", handler);
+  }, [toast]);
+
   function handleDocJobComplete() {
     if (activeJobId) {
       setLastCompletedDocJobId(activeJobId);
