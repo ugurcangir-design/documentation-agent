@@ -53,7 +53,7 @@ export default function PromptsPage() {
     try {
       await fetch(`/api/prompts/${activeKey}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
         body: JSON.stringify(editing),
       });
       setPrompts((prev) => ({ ...prev, [activeKey]: editing }));

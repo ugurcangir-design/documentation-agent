@@ -9,13 +9,24 @@ import type {
 
 const BASE = "/api";
 
+/**
+ * Yerel DocAgent server'ının CSRF guard'ı (X-DocAgent: 1) için ortak
+ * header. Cross-origin saldırılarda tarayıcı bu custom header için
+ * preflight ister; sunucu izin vermediği için istek bloklanır.
+ */
+export const DOCAGENT_HEADER = { "X-DocAgent": "1" } as const;
+
 async function request<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...DOCAGENT_HEADER,
+      ...(options?.headers ?? {}),
+    },
   });
 
   if (!res.ok) {
@@ -105,7 +116,7 @@ export const confluence = {
 async function downloadAs(endpoint: string, body: unknown, filename: string): Promise<void> {
   const res = await fetch(`${BASE}/export/${endpoint}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...DOCAGENT_HEADER },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Export failed: ${endpoint}`);
@@ -132,11 +143,11 @@ export const exportApi = {
 // ── Job control ──────────────────────────────────────────────────
 export const jobControl = {
   cancel: (jobId: string) =>
-    fetch(`${BASE}/jobs/${jobId}/cancel`, { method: "POST" }).then((r) => r.json()) as Promise<{ ok: boolean }>,
+    fetch(`${BASE}/jobs/${jobId}/cancel`, { method: "POST", headers: DOCAGENT_HEADER }).then((r) => r.json()) as Promise<{ ok: boolean }>,
   pause: (jobId: string) =>
-    fetch(`${BASE}/jobs/${jobId}/pause`, { method: "POST" }).then((r) => r.json()) as Promise<{ ok: boolean }>,
+    fetch(`${BASE}/jobs/${jobId}/pause`, { method: "POST", headers: DOCAGENT_HEADER }).then((r) => r.json()) as Promise<{ ok: boolean }>,
   resume: (jobId: string) =>
-    fetch(`${BASE}/jobs/${jobId}/resume`, { method: "POST" }).then((r) => r.json()) as Promise<{ ok: boolean }>,
+    fetch(`${BASE}/jobs/${jobId}/resume`, { method: "POST", headers: DOCAGENT_HEADER }).then((r) => r.json()) as Promise<{ ok: boolean }>,
 };
 
 // ── Section regeneration ─────────────────────────────────────────

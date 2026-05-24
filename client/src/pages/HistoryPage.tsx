@@ -42,7 +42,7 @@ export default function HistoryPage() {
   async function deleteOne(id: string) {
     if (!confirm("Bu job kaydını silmek istediğinden emin misin?")) return;
     try {
-      await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+      await fetch(`/api/jobs/${id}`, { method: "DELETE", headers: { "X-DocAgent": "1" } });
       load();
       toast.show("Job silindi", "success");
     } catch (e) {
@@ -56,7 +56,7 @@ export default function HistoryPage() {
     try {
       const r = await fetch("/api/jobs/cleanup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
         body: JSON.stringify({ status: ["completed", "failed"] }),
       });
       const d = await r.json() as { removed: number };
@@ -75,7 +75,7 @@ export default function HistoryPage() {
     try {
       const r = await fetch("/api/jobs/cleanup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
         body: JSON.stringify({ status: ["completed", "failed", "running", "pending"] }),
       });
       const d = await r.json() as { removed: number };

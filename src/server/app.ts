@@ -18,12 +18,15 @@ import { jobStore } from "./store/jobStore";
 import { jobCancellation } from "./store/jobCancellation";
 import maintenanceRoutes from "./routes/maintenanceRoutes";
 import updateRoutes from "./routes/updateRoutes";
+import { env } from "../config/env";
+import { csrfGuard } from "./middleware/csrfGuard";
 
 const app = express();
-const PORT = process.env["PORT"] || 3000;
+const PORT = env.port;
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
+app.use(csrfGuard);
 
 // Serve screenshots as static files
 app.use(
