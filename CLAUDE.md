@@ -631,6 +631,12 @@ CLAUDE.md'yi okur, kuralı görür, uygular.
   ~30sn, background 15dk yedek)
 
 ### Yapılacak (öneri)
+- ⏳ **Hybrid (keyword + embedding) retrieval** — şu an saf keyword
+  (Türkçe çekim/eş anlamlı/dil karışımı kaçar). Plan: opt-in env var
+  (`EMBEDDING_PROVIDER=voyage|openai|cohere`), keyword top-30 → semantic
+  re-rank top-12, `data/embeddings/<sourceId>.json` cache (content
+  hash'le invalidate). Maliyet pratik olarak sıfır. Quality guard:
+  pure semantic değil hybrid; embedding kapalıyken mevcut davranış aynen.
 - ⏳ DB'ye geçiş (binlerce referans / doküman ölçeğinde)
 - ⏳ Çok kullanıcı + auth
 - ⏳ Confluence attachment v2 native yol (v1 multipart yerine)
