@@ -3,9 +3,10 @@ import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
 import { loadPromptConfig, buildPromptHeader, buildPromptFooter } from "../config/promptConfig";
 import { callClaude, isPromptTooLong } from "../llm/claudeClient";
 import { selectRepresentativeStates } from "./selectStates";
+import { isSidebarNav } from "../quality/sidebarNav";
 import type { GenerationResult } from "./userManualGenerator";
 
-function buildPrompt(ctx: ScreenContext, templates: string[]): string {
+function buildPrompt(ctx: ScreenContext, templates: string[]): { cachedPrefix: string; prompt: string } {
   const cfg = loadPromptConfig("technicalDoc");
 
   const brdContext = ctx.preparedChunks
@@ -21,20 +22,7 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .map((r) => `- [${r.endpoint.method}] ${r.endpoint.path} — ${r.endpoint.summary || ""} (service: ${r.endpoint.serviceName})`)
     .join("\n");
 
-  // Same sidebar/nav filter as the user manual generator — these point
-  // to other screens and must not appear in this screen's tech doc.
-  const SIDEBAR_NAV_HINTS = [
-    "sport base data", "sports", "categories", "competitions", "market setup",
-    "priority settings", "venues", "competitors", "heroes", "multi feed",
-    "sport mapping", "market mapping", "definitions", "event management",
-    "outright program", "live program", "newspaper program", "v-sport program",
-    "exported program", "groups", "outright", "settings", "logout", "çıkış",
-  ];
-  const isSidebarNav = (el: { label: string; type: string }) => {
-    const lbl = el.label.toLowerCase().trim();
-    if (el.type === "menu") return true;
-    return SIDEBAR_NAV_HINTS.some((h) => lbl === h || lbl.startsWith(h + " "));
-  };
+  // Sidebar/global nav filter — tek kaynak: quality/sidebarNav.
   const inScopeElements = ctx.analysis.uiElements.filter((el) => !isSidebarNav(el));
 
   // Single consolidated UI elements block (replaces duplicate detail
@@ -63,9 +51,14 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
       `Kullanıcı kılavuzundaki akışları TEKRAR YAZMA — sadece teknik spec.\n`
     : "";
 
-  return `${buildPromptHeader(cfg)}
+  // Job-stable prefix (aynı job içinde tüm ekranlarda byte-byte aynı → cache hit).
+  const cachedPrefix = [
+    buildPromptHeader(cfg),
+    templateBlock,
+    buildPromptFooter(cfg),
+  ].filter((s) => s && s.trim().length > 0).join("\n\n");
 
-**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}
+  const prompt = `**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}
 **Amaç:** ${ctx.analysis.purpose}
 **Veriler:** ${ctx.analysis.dataDisplayed.join(", ")}
 
@@ -80,14 +73,14 @@ ${brdContext || "_(yok)_"}${paragraphContext}
 # API ENDPOINT'LERİ
 
 ${apiContext || "_(yok)_"}
-${stateBlock}${templateBlock}
+${stateBlock}
 ---
 
 **Yasak:** Görsellerde sol sidebar'da 'Sport Base Data', 'Sports' vb. global nav öğeleri görebilirsin — bu ekranın parçası DEĞİL. Bahsetme. Yalnızca URL'i ${ctx.screen.path} olan ekrana özgü bileşenleri spec'leme.
 
-Bu ekran için TEKNİK DÖKÜMAN yaz. Geliştirici sayfayı sıfırdan inşa edebilsin, QA test case çıkarabilsin.
+Bu ekran için TEKNİK DÖKÜMAN yaz. Geliştirici sayfayı sıfırdan inşa edebilsin, QA test case çıkarabilsin.`;
 
-${buildPromptFooter(cfg)}`;
+  return { cachedPrefix, prompt };
 }
 
 export async function generateTechnicalDocSection(
@@ -109,18 +102,22 @@ export async function generateTechnicalDocSection(
       path: s.screenshotPath,
       label: s.label,
     }));
+    const { cachedPrefix, prompt } = buildPrompt(trimmedCtx, useTemplates);
     const result = await callClaude({
-      prompt: buildPrompt(trimmedCtx, useTemplates),
+      prompt,
+      cachedPrefix,
       imageBase64: ctx.screen.screenshotBase64,
       imagePath: ctx.screen.screenshotPath,
       images: stateImages,
-      maxTokens: cfg.maxTokens ?? 3000,
+      maxTokens: cfg.maxTokens ?? 8000,
     });
-    return {
+    const out: GenerationResult = {
       content: cleanGeneratedMarkdown(result.text),
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
     };
+    if (result.truncated) out.truncated = true;
+    return out;
   }
 
   try {

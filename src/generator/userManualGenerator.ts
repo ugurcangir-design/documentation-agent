@@ -3,14 +3,27 @@ import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
 import { loadPromptConfig, buildPromptHeader, buildPromptFooter } from "../config/promptConfig";
 import { callClaude, isPromptTooLong } from "../llm/claudeClient";
 import { selectRepresentativeStates } from "./selectStates";
+import { isSidebarNav } from "../quality/sidebarNav";
 
 export interface GenerationResult {
   content: string;
   inputTokens: number;
   outputTokens: number;
+  /** True when Claude hit max_tokens — doküman muhtemelen yarım kaldı. */
+  truncated?: boolean;
 }
 
-function buildPrompt(ctx: ScreenContext, templates: string[]): string {
+/**
+ * Prompt'u iki parçaya böler — `cachedPrefix` (rol + output structure +
+ * kurallar + şablonlar; aynı job içinde tüm ekranlarda byte-byte aynı,
+ * Anthropic ephemeral cache ile %~90 input token tasarrufu sağlar) ve
+ * `prompt` (ekran-spesifik retrieve sonuçları, UI öğeleri, akışlar,
+ * state görsel tablosu, son talimat).
+ *
+ * Cache hit minimum ~1024 token gerektirir; şablonlar yoksa prefix
+ * küçük kalır ve cache devreye girmeyebilir (zararı yoktur).
+ */
+function buildPrompt(ctx: ScreenContext, templates: string[]): { cachedPrefix: string; prompt: string } {
   const cfg = loadPromptConfig("userManual");
 
   const brdContext = ctx.preparedChunks
@@ -28,23 +41,8 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
     .map((r) => `- [${r.endpoint.method}] ${r.endpoint.path} — ${r.endpoint.summary || ""}`)
     .join("\n");
 
-  // Filter out sidebar/header navigation menu items even if the analyzer
-  // accidentally included them. These point to other screens and must
-  // not appear in this screen's manual.
-  const SIDEBAR_NAV_HINTS = [
-    "sport base data", "sports", "categories", "competitions", "market setup",
-    "priority settings", "venues", "competitors", "heroes", "multi feed",
-    "sport mapping", "market mapping", "definitions", "event management",
-    "outright program", "live program", "newspaper program", "v-sport program",
-    "exported program", "groups", "outright", "live program", "settings",
-    "ürünler", "users", "settings", "logout", "çıkış",
-  ];
-  const isSidebarNav = (el: { label: string; type: string }) => {
-    const lbl = el.label.toLowerCase().trim();
-    if (el.type === "menu") return true;
-    return SIDEBAR_NAV_HINTS.some((h) => lbl === h || lbl.startsWith(h + " ") || lbl === `${h}`);
-  };
-
+  // Sidebar/global nav öğeleri başka ekranlara gider — bu ekranın
+  // parçası değil. Tek kaynak: quality/sidebarNav.
   const inScopeElements = ctx.analysis.uiElements.filter((el) => !isSidebarNav(el));
 
   // Single numbered list that serves BOTH as context AND as the
@@ -107,9 +105,17 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): string {
       `**Yasak:** Görsellerde sol sidebar'da 'Sport Base Data', 'Sports', 'Categories', 'Multi Feed Settings' vb. olabilir — bunlar GLOBAL NAV, başka sayfalara gider. URL'i ${ctx.screen.path} olan bu ekranın parçası DEĞİL. Bahsetme, listeleme.\n`
     : "";
 
-  return `${buildPromptHeader(cfg)}
+  // Job-stable prefix — bu metin aynı job içinde her ekran için byte-byte
+  // aynıdır → cache hit. Header + (varsa) şablon bloğu + output structure
+  // + kurallar burada.
+  const cachedPrefix = [
+    buildPromptHeader(cfg),
+    templateBlock,
+    buildPromptFooter(cfg),
+  ].filter((s) => s && s.trim().length > 0).join("\n\n");
 
-**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}
+  // Per-screen dynamic prompt — retrieval + ekran-spesifik içerik.
+  const prompt = `**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}
 **Amaç:** ${ctx.analysis.purpose}
 **Hedef kullanıcı:** ${ctx.analysis.targetAudience || "Genel kullanıcı"}
 
@@ -128,12 +134,12 @@ ${brdContext || "_(yok)_"}${paragraphContext}
 # API ENDPOINT'LERİ
 
 ${apiContext || "_(yok)_"}
-${stateBlock}${templateBlock}
+${stateBlock}
 ---
 
-Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.
+Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.`;
 
-${buildPromptFooter(cfg)}`;
+  return { cachedPrefix, prompt };
 }
 
 export async function generateUserManualSection(
@@ -156,18 +162,22 @@ export async function generateUserManualSection(
       path: s.screenshotPath,
       label: s.label,
     }));
+    const { cachedPrefix, prompt } = buildPrompt(trimmedCtx, useTemplates);
     const result = await callClaude({
-      prompt: buildPrompt(trimmedCtx, useTemplates),
+      prompt,
+      cachedPrefix,
       imageBase64: ctx.screen.screenshotBase64,
       imagePath: ctx.screen.screenshotPath,
       images: stateImages,
-      maxTokens: cfg.maxTokens ?? 3000,
+      maxTokens: cfg.maxTokens ?? 8000,
     });
-    return {
+    const out: GenerationResult = {
       content: cleanGeneratedMarkdown(result.text),
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
     };
+    if (result.truncated) out.truncated = true;
+    return out;
   }
 
   // First try with full budget; if Claude rejects with 'prompt too long',
