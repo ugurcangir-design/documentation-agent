@@ -19,6 +19,12 @@ export const env = {
   get docLanguage() { return process.env.DOC_LANGUAGE || "tr"; },
   get maxDiscoveryDepth() { return parseInt(process.env.MAX_DISCOVERY_DEPTH || "0", 10); },
 
+  // Express server portu — tüm yerel URL'ler (OAuth redirect, frontend
+  // fetch BASE, screenshots) bu değerden türer. Atlassian developer
+  // konsoluna kayıtlı redirect URI'nin bu portla eşleşmesi gerektiğini
+  // unutma — değiştirirsen Atlassian tarafında da güncelle.
+  get port() { return parseInt(process.env.PORT || "3000", 10); },
+
   // 'cli'  → shell out to `claude` (Claude Code CLI), uses local Claude Code auth
   // 'api'  → Anthropic SDK with ANTHROPIC_API_KEY
   get claudeBackend(): "cli" | "api" {

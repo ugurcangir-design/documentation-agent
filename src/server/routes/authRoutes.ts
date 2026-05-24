@@ -8,7 +8,7 @@ import {
   getClientCredentials,
   clearTokens,
   getValidAccessToken,
-  REDIRECT_URI,
+  getRedirectUri,
   ATLASSIAN_SCOPES,
 } from "../auth/atlassianAuth";
 
@@ -37,7 +37,7 @@ router.get("/atlassian/status", async (_req: Request, res: Response) => {
     cloudId: tokens?.cloudId ?? null,
     scope: tokens?.scope ?? null,
     expiresAt: tokens?.expiresAt ?? null,
-    redirectUri: REDIRECT_URI,
+    redirectUri: getRedirectUri(),
     scopes: ATLASSIAN_SCOPES,
   });
 });

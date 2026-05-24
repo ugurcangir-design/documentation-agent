@@ -13,6 +13,7 @@ import fs from "fs";
 import path from "path";
 import https from "https";
 import { URLSearchParams } from "url";
+import { env } from "../../config/env";
 
 const ENV_PATH = path.join(process.cwd(), ".env");
 
@@ -43,7 +44,12 @@ export const ATLASSIAN_SCOPES = [
   "offline_access",
 ].join(" ");
 
-export const REDIRECT_URI = "http://localhost:3000/api/auth/atlassian/callback";
+// Lazy — env.port runtime'da Ayarlar'dan değişebildiği için her okumada
+// güncel portu yansıtır. Atlassian developer konsoluna kayıtlı URI ile
+// eşleşmek zorundadır; port değişirse orayı da güncelle.
+export function getRedirectUri(): string {
+  return `http://localhost:${env.port}/api/auth/atlassian/callback`;
+}
 const AUTH_BASE = "https://auth.atlassian.com";
 const API_BASE = "https://api.atlassian.com";
 
@@ -139,7 +145,7 @@ export function buildAuthorizeUrl(state: string): string {
     audience: "api.atlassian.com",
     client_id: creds.clientId,
     scope: ATLASSIAN_SCOPES,
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: getRedirectUri(),
     state,
     response_type: "code",
     prompt: "consent",
@@ -167,7 +173,7 @@ export async function exchangeCodeForTokens(code: string): Promise<AtlassianToke
       client_id: creds.clientId,
       client_secret: creds.clientSecret,
       code,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: getRedirectUri(),
     }),
   });
 

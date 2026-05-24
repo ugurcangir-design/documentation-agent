@@ -44,6 +44,12 @@ function save(docs: StoredDocument[]): void {
   writeJsonAtomic(DB_PATH, docs);
 }
 
+// NOT: Tüm mutasyonlar (create/update/delete/restoreVersion) **tamamen
+// senkron** kalmalı. Node tek-thread'li; load → modify → save zinciri
+// içinde await olmadığı sürece event loop araya giremez ve concurrent
+// worker'lar arasında race oluşmaz (documentationJob CONCURRENCY=3'te
+// güvenli). Bu fonksiyonların ortasına bir `await` eklenirse açık bir
+// in-memory mutex (örn. `p-limit(1)`) zorunlu olur.
 export const documentStore = {
   getAll(): StoredDocument[] {
     return load();
