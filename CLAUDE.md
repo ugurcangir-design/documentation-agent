@@ -351,10 +351,15 @@ Doküman sonuna eklenir:
   a, an, is, are, of, to, in, on, at, as, by, or, var, yok, vardır,
   olur, ise, de, da`. (Eskiden burada olan "kullanıcı, ekran, sayfa,
   tıkla*, açılır" çıkarıldı — bunlar gerçek sorgu token'ı olabilir.)
-- **Suffix toleransı (Türkçe çekim):** `buildTokenRegex(token)` =
-  `/\\b<token>\\w{0,8}\\b/gi`. "filtre" sorgusu "filtreler",
-  "filtreyi", "filtrelerin" gibi formları yakalar. confidenceScorer
-  ve paragraphSearch aynı kalıbı kullanır.
+- **Suffix toleransı (Türkçe çekim, Unicode-aware):** `buildTokenRegex(token)`
+  = `(?<![\\p{L}\\p{N}])<token>[\\p{L}\\p{N}]{0,8}(?![\\p{L}\\p{N}])`
+  flags `giu`. "filtre" sorgusu "filtreler", "filtreyi", "filtreyı",
+  "süzgeçleri" gibi formları yakalar. `\\w` ASCII-only olduğu için
+  `\\p{L}\\p{N}` + `u` flag şart; aksi halde ı/ş/ğ/ç/ö/ü harfleri
+  kaçardı. **Sınırlama:** ünsüz yumuşaması (k→ğ, p→b, t→d, ç→c) stem'i
+  değiştirir; "etkinlik" → "etkinliği" eşleşmez (tam morfolojik
+  stemmer gerekir, kapsam dışı). confidenceScorer ve paragraphSearch
+  aynı kalıbı kullanır.
 
 ### sourcePriority (numerik çarpan)
 ```
