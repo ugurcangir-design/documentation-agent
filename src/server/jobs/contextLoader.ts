@@ -21,6 +21,7 @@ import { extractEndpoints } from "../../ingestion/swaggerParser";
 import { loadDocuments } from "../../ingestion/documentLoader";
 import { readConfluencePages } from "../../ingestion/confluenceReader";
 import { parseBrdSections } from "../../retrieval/brdSectionParser";
+import { parseDocumentSections } from "../../retrieval/flatTextSectionParser";
 import { cleanReferenceText, decodeHtmlEntities } from "../../quality/referenceTextCleaner";
 import { referenceStore } from "../store/referenceStore";
 
@@ -61,13 +62,22 @@ export async function loadJobContext(jobId: string): Promise<LoadedContext> {
     allSections.push(...parseBrdSections(doc.content, doc.fileName));
   }
 
-  // 4. Uploaded reference documents (.docx/.pdf → text)
+  // 4. Uploaded reference documents (.docx/.pdf → text). İki düzeltme:
+  //    (a) parseDocumentSections dispatcher kullan — flat text doc'larda
+  //        (mammoth/pdf-parse çıktısı `#` heading taşımaz) numbered ve
+  //        ALL-CAPS heading'leri sezgisel tespit eder. Eski parseBrdSections
+  //        bu doc'ları tek "Introduction" bloğuna sıkıştırıyordu.
+  //    (b) docRef.type === "reference" doc'larını "process_analysis"
+  //        sourceType ile etiketle — süreç analizi / proses doc'ları
+  //        priority sisteminde 0.95 ağırlık alır (BRD 1.0'a yakın);
+  //        eskiden "brd" olarak etiketleniyordu (priority tanımı ölü kod'du).
   for (const docRef of referenceStore.getDocuments()) {
     if (docRef.type === "template") continue;
     if (fs.existsSync(docRef.contentFile)) {
       const raw = fs.readFileSync(docRef.contentFile, "utf-8");
       const content = cleanReferenceText(raw);
-      allSections.push(...parseBrdSections(content, docRef.originalName));
+      const sourceType = docRef.type === "reference" ? "process_analysis" : "brd";
+      allSections.push(...parseDocumentSections(content, docRef.originalName, sourceType));
     }
   }
 
