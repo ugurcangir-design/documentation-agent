@@ -17,7 +17,30 @@ import {
 const router = Router();
 
 const REFS_DIR = path.join(process.cwd(), "data", "references");
-const upload = multer({ dest: path.join(REFS_DIR, "_tmp") });
+// 25MB ve tek dosya — kazara büyük dosya sürüklenirse disk dolup
+// sunucu çökmesin. BRD/şablon doc'ları pratikte 1-5 MB civarı.
+// Uzantı allowlist'i: parser'ların gerçekten desteklediği formatlar.
+const ALLOWED_UPLOAD_EXT = new Set([".docx", ".pdf", ".md", ".txt"]);
+const upload = multer({
+  dest: path.join(REFS_DIR, "_tmp"),
+  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_UPLOAD_EXT.has(ext)) cb(null, true);
+    else cb(new Error(`Desteklenmeyen dosya türü: ${ext}. Yalnız ${[...ALLOWED_UPLOAD_EXT].join(", ")} kabul edilir.`));
+  },
+});
+
+/** Multer hatalarını anlamlı HTTP status'a çevir (limit aşımı → 413,
+ *  diğer validation → 400). Aksi halde Express default 500 + stack döner. */
+function uploadOrJsonError(req: Request, res: Response, next: () => void): void {
+  upload.single("file")(req, res, (err: unknown) => {
+    if (!err) return next();
+    const e = err as { code?: string; message?: string };
+    const status = e.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+    res.status(status).json({ error: e.message ?? "upload reddedildi" });
+  });
+}
 
 // ── Helpers ──────────────────────────────────────────────────────
 function fetchUrl(url: string): Promise<string> {
@@ -87,13 +110,23 @@ router.post("/confluence/fetch", async (req: Request, res: Response) => {
       }).on("error", reject);
     });
 
-    const page = JSON.parse(pageResp) as {
+    let page: {
       id?: string;
       title?: string;
       spaceId?: string;
       body?: { storage?: { value?: string } };
       message?: string;
     };
+    try {
+      page = JSON.parse(pageResp);
+    } catch {
+      // Atlassian zaman zaman 5xx'te HTML hata sayfası döner;
+      // JSON.parse exception fırlatıp 500'le çökmek yerine anlamlı mesaj ver.
+      res.status(502).json({
+        error: `Confluence yanıtı JSON değil (ilk 200 char): ${pageResp.slice(0, 200)}`,
+      });
+      return;
+    }
 
     if (!page.id) {
       res.status(400).json({ error: page.message ?? "Sayfa bulunamadı veya erişim yok." });
@@ -298,7 +331,7 @@ router.delete("/swagger/:id", (req: Request, res: Response) => {
 // ── Documents: upload (Word .docx / plain text) ──────────────────
 router.post(
   "/documents/upload",
-  upload.single("file"),
+  uploadOrJsonError,
   async (req: Request, res: Response) => {
     if (!req.file) {
       res.status(400).json({ error: "file required" });

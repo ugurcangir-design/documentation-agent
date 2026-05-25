@@ -70,9 +70,15 @@ function readEnv(): Record<string, string> {
 function writeEnv(updates: Record<string, string>): void {
   const existing = readEnv();
   const merged = { ...existing, ...updates };
-  const lines = Object.entries(merged).map(([k, v]) => `${k}=${v}`);
-  fs.writeFileSync(ENV_PATH, lines.join("\n") + "\n", "utf-8");
-  // Reflect into current process.env so callers see fresh values
+  // Newline injection guard — token vb. değer içinde \n olursa env
+  // parser yeni bir KEY=val satırı olarak yorumlar.
+  const lines = Object.entries(merged).map(([k, v]) => {
+    const safe = String(v).replace(/[\r\n]+/g, " ");
+    return `${k}=${safe}`;
+  });
+  // 0o600 — sahip-only; Atlassian token'ları credential.
+  fs.writeFileSync(ENV_PATH, lines.join("\n") + "\n", { encoding: "utf-8", mode: 0o600 });
+  try { fs.chmodSync(ENV_PATH, 0o600); } catch { /* best effort */ }
   for (const [k, v] of Object.entries(updates)) {
     if (v) process.env[k] = v;
   }
