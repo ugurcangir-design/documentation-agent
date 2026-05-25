@@ -147,7 +147,9 @@ pending → running → (paused ⇄ running) → completed
 ## app.ts — Kritik Bölümler
 
 ### Middleware
-- `cors()` (origin'siz, yerel kullanım varsayımı)
+- `cors({ origin: localhost-only })` — sadece `localhost/127.0.0.1/::1`
+  origin'leri yansıtılır; origin'siz istekler (curl/Postman) geçerli.
+  Cross-origin sitenin `/api/references`'ten metadata sızdırmasını engeller.
 - `express.json({ limit: "10mb" })`
 - **`csrfGuard`** — non-GET ve OAuth/beacon dışı her istekte
   `X-DocAgent: 1` header'ı şart. Cross-origin kötü niyetli sitelerin
@@ -470,6 +472,30 @@ Token rotasyonu:
 
 ---
 
+## Upload Güvenliği (referenceRoutes.ts)
+
+Multer şu kısıtlarla yapılandırılmıştır:
+```ts
+limits: { fileSize: 25MB, files: 1 }
+fileFilter: .docx | .pdf | .md | .txt allowlist
+```
+`uploadOrJsonError` wrapper multer reject'ini 400/413 JSON yanıtına
+çevirir (default 500 stack-trace yerine).
+
+## Settings Yazma Güvenliği (settingsRoutes.ts)
+
+```ts
+ALLOWED_SETTINGS_KEYS = { CLAUDE_*, APP_*, ATLASSIAN_OAUTH_*,
+   CONFLUENCE_*, MAX_DISCOVERY_DEPTH, PORT, FIX_UP_*, DOC_LANGUAGE }
+```
+- Allowlist dışı key sessizce atılır + warn log'lanır (örn. `PATH`,
+  `NODE_OPTIONS` enjeksiyon denemesi).
+- Value içinde `\n`/`\r` → 400 (env satır injection guard).
+- `.env` dosyasına `0o600` mode (sahip-only) + writeFileSync sonrası
+  `chmodSync` ile mevcut dosyada da zorlanır.
+- ATLASSIAN_ACCESS_TOKEN/REFRESH_TOKEN allowlist'te YOK — onları
+  `atlassianAuth.writeEnv` yazar; user UI'sından gelmemeli.
+
 ## referenceStore (server/store/referenceStore.ts)
 
 DB: `data/db/references.json` (atomik yazımlı).
@@ -608,6 +634,23 @@ CLAUDE.md'yi okur, kuralı görür, uygular.
 - **JSON kalıcılık** — DB yok. `data/db/*.json` atomik yazım, fakat
   binlerce kayıt ölçeğinde rerank.
 - **Yetkilendirme yok** — yerel kullanım varsayımıyla auth katmanı yok.
+  Bu, **tek-kullanıcı tehdit modelidir**: kullanıcının kendisi düşman
+  değil. Savunmalar şuna karşıdır:
+  (1) açık bir kötü niyetli tarayıcı sekmesinin `localhost:3000`'e
+  istek atması (CSRF guard + CORS localhost-only + settings allowlist
+  + newline guard çözüyor),
+  (2) `.env` dosyasının başka bir OS kullanıcısına veya bir cloud sync
+  (Dropbox/iCloud) hizmetine sızması (mode 0o600).
+  Pentest/server-side senaryoları kapsam dışı.
+- **Prompt injection — yumuşak risk:** Synced Confluence/Jira sayfaları
+  veya yüklenen BRD içeriği Claude'a olduğu gibi gönderilir. Birisinin
+  bu kaynaklara "ignore previous instructions" tarzı talimat enjekte
+  etmesi üretilen dokümanda yan etkiler oluşturabilir. Tam koruma zor;
+  iş süreci olarak Confluence/Jira içeriğinin güvenilirliği şart.
+- **CSRF guard tarayıcıya özgüdür** — `X-DocAgent` header'ı yalnız
+  browser CSRF'ini engeller; aynı LAN'daki bir aktör direkt header'la
+  istek atarsa geçer. Auth yok → bu tehdit zaten kapsam dışı, ama
+  "uzaktan-RCE-engelleyici" bir koruma değildir.
 - **Login arkası ekranlar** — `env.appUsername/Password` ile Playwright login
   destekli; cookie/SSO senaryoları zayıf.
 - **PDF okuma** — `pdf-parse` v2 (PDFParse sınıfı), `require()` ile yüklenir.
