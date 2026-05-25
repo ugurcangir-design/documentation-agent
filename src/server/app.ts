@@ -24,7 +24,24 @@ import { csrfGuard } from "./middleware/csrfGuard";
 const app = express();
 const PORT = env.port;
 
-app.use(cors());
+// CORS: yalnızca localhost / 127.0.0.1 / ::1 origin'lerine izin ver.
+// Yerel uygulama; cross-origin script'in (örn. açık başka bir tarayıcı
+// sekmesindeki kötü niyetli site) `fetch("http://localhost:3000/api/
+// references")` ile metadata (Confluence sayfa başlıkları, şirket adı
+// vb.) çekmesini engeller. Origin'siz istekler (curl/Postman) geçerli
+// kabul edilir — CSRF guard mutation'ları zaten X-DocAgent ile koruyor.
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);
+    try {
+      const h = new URL(origin).hostname;
+      const ok = h === "localhost" || h === "127.0.0.1" || h === "::1";
+      cb(null, ok);
+    } catch {
+      cb(null, false);
+    }
+  },
+}));
 app.use(express.json({ limit: "10mb" }));
 app.use(csrfGuard);
 

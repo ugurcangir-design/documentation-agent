@@ -53,7 +53,7 @@ function buildEnv(values: Record<string, string>): string {
     },
     {
       comment: "# Agent ayarları",
-      keys: ["MAX_DISCOVERY_DEPTH", "PORT"],
+      keys: ["MAX_DISCOVERY_DEPTH", "PORT", "FIX_UP_THRESHOLD", "FIX_UP_MAX_PASSES", "DOC_LANGUAGE"],
     },
   ];
 
@@ -89,6 +89,39 @@ const SECRET_KEYS = [
   "ATLASSIAN_REFRESH_TOKEN",
 ];
 
+/**
+ * Kullanıcının POST /api/settings ile yazabileceği env key allowlist.
+ *
+ * Allowlist olmazsa client `{"PATH": "/evil/bin"}` ya da `{"NODE_OPTIONS":
+ * "--require ./malicious.js"}` POST edip `.env`'e ve `process.env`'e
+ * sızdırabilir → bir sonraki spawn'da kod yürütme. CSRF guard ana
+ * savunma; bu allowlist defense-in-depth.
+ *
+ * ATLASSIAN_ACCESS_TOKEN/REFRESH_TOKEN gibi OAuth-yazılı alanlar bu
+ * allowlist'te YOK — onları atlassianAuth.writeEnv kendisi yazar; user
+ * UI'sından gelmemeli.
+ */
+const ALLOWED_SETTINGS_KEYS = new Set<string>([
+  // Claude
+  "CLAUDE_BACKEND", "CLAUDE_CLI_BIN", "ANTHROPIC_API_KEY",
+  // Hedef uygulama
+  "APP_BASE_URL", "APP_USERNAME", "APP_PASSWORD",
+  // Atlassian OAuth credentials (token'lar değil — onları auth flow yazar)
+  "ATLASSIAN_OAUTH_CLIENT_ID", "ATLASSIAN_OAUTH_CLIENT_SECRET",
+  "CONFLUENCE_SPACE_KEY", "CONFLUENCE_PARENT_PAGE_ID",
+  // Confluence legacy fallback
+  "CONFLUENCE_BASE_URL", "CONFLUENCE_EMAIL", "CONFLUENCE_API_TOKEN",
+  // Agent ayarları
+  "MAX_DISCOVERY_DEPTH", "PORT", "DOC_LANGUAGE",
+  "FIX_UP_THRESHOLD", "FIX_UP_MAX_PASSES",
+]);
+
+/** Newline injection guard — env value içinde \n veya \r olamaz; aksi
+ *  halde `.env` parser'ı yeni bir KEY=val satırı olarak yorumlar. */
+function hasInjection(value: string): boolean {
+  return /[\r\n]/.test(value);
+}
+
 // GET /api/settings — secrets are NEVER returned (return empty string).
 // The `configured` list tells the UI which secrets are already saved.
 router.get("/", (_req: Request, res: Response) => {
@@ -110,7 +143,25 @@ router.get("/", (_req: Request, res: Response) => {
 
 // POST /api/settings
 router.post("/", (req: Request, res: Response) => {
-  const incoming = req.body as Record<string, string>;
+  const raw = (req.body ?? {}) as Record<string, unknown>;
+
+  // Allowlist + string + newline-injection guard. Bilinmeyen key sessizce
+  // atılır (UI'da görünmeyen key zaten gelmemeli; gelseydi en olası
+  // sebep saldırı veya hata).
+  const incoming: Record<string, string> = {};
+  const rejected: string[] = [];
+  for (const [k, v] of Object.entries(raw)) {
+    if (!ALLOWED_SETTINGS_KEYS.has(k)) { rejected.push(k); continue; }
+    if (typeof v !== "string") { rejected.push(k); continue; }
+    if (hasInjection(v)) {
+      res.status(400).json({ error: `'${k}' değeri satır sonu içeremez` });
+      return;
+    }
+    incoming[k] = v;
+  }
+  if (rejected.length > 0) {
+    console.warn(`[settings] allowlist dışı/geçersiz key'ler atıldı: ${rejected.join(", ")}`);
+  }
 
   let existing: Record<string, string> = {};
   if (fs.existsSync(ENV_PATH)) {
@@ -128,7 +179,12 @@ router.post("/", (req: Request, res: Response) => {
   }
 
   const merged = { ...existing, ...incoming };
-  fs.writeFileSync(ENV_PATH, buildEnv(merged), "utf-8");
+  // 0o600 — yalnız sahibi okusun. macOS multi-user veya .env'in Dropbox/
+  // iCloud sync'ine düşmesi senaryolarında credential sızıntısını engeller.
+  // writeFileSync({mode}) yalnız dosya **oluşturulurken** uygulanır; var
+  // olan dosyanın mode'unu değiştirmez → chmod ile zorla.
+  fs.writeFileSync(ENV_PATH, buildEnv(merged), { encoding: "utf-8", mode: 0o600 });
+  try { fs.chmodSync(ENV_PATH, 0o600); } catch { /* best effort */ }
 
   // Reflect every change (including deletes) into process.env so the
   // running server picks them up immediately via the lazy env getters.
