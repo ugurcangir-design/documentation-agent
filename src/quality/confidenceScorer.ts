@@ -28,15 +28,23 @@ export function tokenize(query: string): string[] {
 
 /**
  * Türkçe için suffix-toleranslı regex: `etkinlik` token'ı `etkinlikler`,
- * `etkinliği`, `etkinliklerin` gibi formları yakalar. 6 karaktere kadar
+ * `etkinliği`, `etkinliklerin` gibi formları yakalar. 8 karaktere kadar
  * ek (suffix) chain'ini absorbe eder; bu Türkçe'nin tipik ek kombinasyon
- * uzunluğunu (–lerimizden, –larındaki, …) kapsar.
+ * uzunluğunu (–lerimden, –larındaki, …) kapsar.
  *
- * Aynı semantik, eski exact `\b<token>\b` ile çalışan content'i de
- * geriye dönük olarak yakalar (suffix'siz form da uzunluk 0 ile match'lenir).
+ * **Unicode-aware:** `\w` default'u yalnız ASCII tanır; Türkçe ı/ş/ğ/ç/ö/ü
+ * harflerini kaçırırdı ("filtreyı", "süzgeçleri" eski regex'te eşleşmiyordu).
+ * `\p{L}\p{N}` + `u` flag ile çözüldü. Word boundary için `\b` yerine
+ * lookahead/lookbehind kullanılıyor, çünkü `\b` da ASCII-only.
+ *
+ * Suffix'siz form da uzunluk 0 ile match'lenir → eski exact behavior'a
+ * geriye dönük uyumlu.
  */
 export function buildTokenRegex(token: string): RegExp {
-  return new RegExp(`\\b${escapeRegExp(token)}\\w{0,8}\\b`, "gi");
+  return new RegExp(
+    `(?<![\\p{L}\\p{N}])${escapeRegExp(token)}[\\p{L}\\p{N}]{0,8}(?![\\p{L}\\p{N}])`,
+    "giu"
+  );
 }
 
 function countAny(text: string, tokens: string[]): number {

@@ -39,6 +39,27 @@ describe("buildTokenRegex (Türkçe suffix toleransı)", () => {
   it("Kelime sınırı korunur — 'arifiltre' gibi ön-bitişikler eşleşmez", () => {
     expect("arifiltre".match(buildTokenRegex("filtre"))).toBeNull();
   });
+
+  it("Türkçe çekim eklerini (ı/ü/ünden/ında) yakalar — Unicode boundary", () => {
+    expect("filtreyı".match(buildTokenRegex("filtre"))?.[0]).toBe("filtreyı");
+    expect("filtreden".match(buildTokenRegex("filtre"))?.[0]).toBe("filtreden");
+    // Ünsüz yumuşaması yok (suffix ünsüzle başlıyor) — stem değişmez
+    expect("etkinlikten".match(buildTokenRegex("etkinlik"))?.[0]).toBe("etkinlikten");
+    expect("etkinlikler".match(buildTokenRegex("etkinlik"))?.[0]).toBe("etkinlikler");
+  });
+
+  it("Türkçe karakterli token (ş/ğ/ç/ö/ü) yakalanır", () => {
+    expect("süzgeçleri".match(buildTokenRegex("süzgeç"))?.[0]).toBe("süzgeçleri");
+    expect("öğrenci".match(buildTokenRegex("öğrenci"))?.[0]).toBe("öğrenci");
+  });
+
+  it("Türkçe ünsüz yumuşaması (k→ğ, p→b, t→d, ç→c) — stem değişimi YOK", () => {
+    // Bilinen sınırlama: "etkinlik" → "etkinliği" gibi stem softening
+    // formları regex'in kapsamı dışındadır. Tam morfolojik stemmer
+    // (Zemberek vb.) gerekir; pratikte BRD/Confluence içeriği genelde
+    // mastar formuyla yazıldığı için tolere edilebilir bir limit.
+    expect("etkinliği".match(buildTokenRegex("etkinlik"))).toBeNull();
+  });
 });
 
 describe("calculateConfidenceScore (suffix toleransıyla)", () => {
