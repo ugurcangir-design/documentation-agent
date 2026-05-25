@@ -39,12 +39,13 @@ export function searchParagraphs(
   const tokens = tokenize(query).filter((t) => t.length >= 4);
   if (tokens.length === 0) return [];
 
-  // Suffix-toleranslı OR-regex: Türkçe çekim ekleri (-ler, -leri, -nin,
-  // -dan vb.) absorbe edilir; "filtre" sorgu token'ı "filtrelerimizden"
-  // gibi formları da yakalar. confidenceScorer ile aynı patern.
+  // Suffix-toleranslı, Unicode-aware OR-regex: Türkçe çekim ekleri
+  // (-ler, -leri, -nin, -dan, -ı/-ü/-ünden vb.) absorbe edilir; ı/ş/ğ/ç/ö/ü
+  // harflerini de tanır (default \w ASCII-only olduğu için \p{L}\p{N}+u
+  // gerekir). confidenceScorer.buildTokenRegex ile aynı patern.
   const pattern = new RegExp(
-    `\\b(${tokens.map(escapeRegExp).join("|")})\\w{0,8}\\b`,
-    "gi"
+    `(?<![\\p{L}\\p{N}])(${tokens.map(escapeRegExp).join("|")})[\\p{L}\\p{N}]{0,8}(?![\\p{L}\\p{N}])`,
+    "giu"
   );
 
   const results: MatchedParagraph[] = [];
