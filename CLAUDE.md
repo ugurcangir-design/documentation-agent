@@ -39,7 +39,9 @@ src/
     screenAnalyzer.ts            Claude → screen analysis (UI öğeleri, akışlar)
     screenContextBuilder.ts      RAG → preparedChunks + paragraphMatches
   retrieval/
-    brdSectionParser.ts          Markdown'ı başlığa göre bölümlere ayır
+    brdSectionParser.ts          Markdown # heading'lerine göre böl
+    flatTextSectionParser.ts     Heading'siz .docx/.pdf için sezgisel
+                                  parser (numbered + ALL-CAPS) + dispatcher
     documentSearch.ts            Skor × kaynak önceliği sıralama
     paragraphSearch.ts           Paragraf düzeyinde uzun-kuyruk eşleşme
     endpointSearch.ts            API endpoint eşleştirme
@@ -276,7 +278,11 @@ CONCURRENCY = 3   // documentationJob.ts
 2. **Swagger referansları** (URL ile çekilenler)
 3. **BRD** `data/brd/*.md` → `parseBrdSections`
 4. **Yüklenen dökümanlar** (.docx/.pdf/.md/.txt) → `cleanReferenceText` →
-   `parseBrdSections`
+   `parseDocumentSections` (dispatcher; markdown varsa `parseBrdSections`,
+   yoksa `parseFlatTextSections` ile sezgisel heading tespiti — numbered
+   outline `1.1.` + standalone ALL-CAPS `AMAÇ/GEREKSİNİMLER`). `docRef.type`
+   `"reference"` ise `sourceType: "process_analysis"` (priority 0.95),
+   `"brd"` ise `sourceType: "brd"` (priority 1.0).
 5. **Stored Confluence** (`referenceStore.getAllConfluence()`) →
    `decodeHtmlEntities` + `cleanReferenceText` → bölüm
 6. **5b. Stored Jira** (`getAllJira()`) → her issue ayrı section
@@ -391,6 +397,8 @@ global skora göre. BRD'nin tüm bütçeyi yutması bu sayede engellenir.
 ```ts
 { minHits: 2, maxPerSection: 2, maxTotal: 9 }
 // ≥4 char tokens (3 char paragraf düzeyinde fazla gürültü)
+// paragraf uzunluk eşiği: 30-2500 char (eski 60-2500; süreç analizi
+// soruları 30-80 char olabildiği için aşağı çekildi)
 // preparedChunks'taki başlıklarda olanlar elenir
 ```
 
