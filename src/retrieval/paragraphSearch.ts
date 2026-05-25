@@ -56,7 +56,10 @@ export function searchParagraphs(
     let kept = 0;
     for (const p of paragraphs) {
       if (kept >= maxPerSection) break;
-      if (p.length < 60 || p.length > 2500) continue;
+      // Min 30 char: süreç analizi soruları ("Bu işlem ne zaman tetiklenir?")
+      // tipik 30-80 char; eski 60 char eşiği bunları eliyordu. Max 2500:
+      // boilerplate page-footer paragraflarının indeksi şişirmesi önlenir.
+      if (p.length < 30 || p.length > 2500) continue;
       const matches = p.match(pattern);
       const hits = matches ? matches.length : 0;
       if (hits < minHits) continue;
