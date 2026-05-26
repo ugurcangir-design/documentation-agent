@@ -55,7 +55,8 @@ src/
   quality/
     referenceTextCleaner.ts      cleanReferenceText + decodeHtmlEntities
     confidenceScorer.ts          tokenize (Türkçe stopwords) + score
-    coverageCheck.ts             Her UI öğesi dokümanda geçiyor mu?
+    coverageCheck.ts             Her UI öğesi dokümanda geçiyor mu? (substring)
+    verifiedCoverage.ts          Haiku LLM-judge ile "anlamlı anlatıldı mı?"
     markdownCleaner.ts           LLM çıktısı temizleme
     sourcePriority.ts            sourceType → ağırlık
     sidebarNav.ts                SIDEBAR_NAV_HINTS + isSidebarNav (tek kaynak)
@@ -354,6 +355,15 @@ computeCoverage(els, body) → { coveragePct, missing[] }
 **Early-stop:** kapsam % aynı kaldığında bile **eksik öğe set'i**
 değiştiyse bir sonraki tur denenir (farklı eksiklere yönelinme şansı).
 Yalnızca set birebir aynı olduğunda durulur.
+
+**LLM-as-judge (env.coverageLlmJudge, default true):** İlk coverage
+hesabı Haiku 4.5 ile doğrulanır — substring match "label var" der ama
+"anlamlı anlatıldı" garanti etmez (örn. "Kaydet butonu görünür"
+açıklama değil). Haiku her "covered" öğe için yes/no döner; "anlatılmadı"
+denenler missing'e geri taşınır → fix-up doğru hedefe yönelir. Fix-up
+iterasyonları raw substring kullanır (hız). Haiku çağrısı başarısız
+olursa raw substring'e graceful fallback (asla regresyon yapmaz).
+Maliyet ~$0.005/ekran. `COVERAGE_LLM_JUDGE=false` ile devre dışı.
 Her tur:
 - `runCoverageFixUp({docKind, currentContent, missing, uiElementsMissing})`
 - Yeni kapsam **eski kapsam ≥** ise kabul, gerileme reddedilir

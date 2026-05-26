@@ -59,6 +59,10 @@ export interface ClaudeCallOptions {
    *  cache desteklemediği için prompt'a basitçe önceler. Min ~1024 token
    *  olmadığında cache aktive olmaz (Anthropic limiti). */
   cachedPrefix?: string;
+  /** Çağrı için kullanılacak Claude modeli. Varsayılan
+   *  `claude-sonnet-4-6` (üretim). Ucuz yargı çağrıları için
+   *  `claude-haiku-4-5` kullanın. */
+  model?: string;
 }
 
 export interface ClaudeResult {
@@ -185,7 +189,7 @@ async function callApi(opts: ClaudeCallOptions): Promise<ClaudeResult> {
 
   const maxTokens = opts.maxTokens ?? 8000;
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: opts.model ?? "claude-sonnet-4-6",
     max_tokens: maxTokens,
     messages: [{ role: "user", content }],
   });
@@ -262,6 +266,7 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     // when stdin is closed; CLI requires the prompt as an argument).
     const args = ["--print", prompt, "--output-format", "json"];
     if (imagePaths.length > 0) args.push("--allowed-tools", "Read");
+    if (opts.model) args.push("--model", opts.model);
 
     const claudeBin = resolveClaudeBin(env.claudeCliBin);
     if (claudeBin !== env.claudeCliBin) {

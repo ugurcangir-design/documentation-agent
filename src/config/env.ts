@@ -34,6 +34,15 @@ export const env = {
     return Number.isFinite(n) ? Math.min(5, Math.max(0, n)) : 2;
   },
 
+  // Coverage doğrulama: substring match "label gövdede geçti" der ama
+  // "açıklandı" garanti etmez. Haiku ile "anlamlı şekilde anlatıldı mı?"
+  // yargısı yapar; sahte coverage'ı düşürür → fix-up daha iyi hedeflenir.
+  // Hata olursa graceful fallback (raw substring coverage); kalite düşmez.
+  // Kapatmak için: COVERAGE_LLM_JUDGE=false
+  get coverageLlmJudge(): boolean {
+    return (process.env.COVERAGE_LLM_JUDGE || "true").toLowerCase() !== "false";
+  },
+
   // Express server portu — tüm yerel URL'ler (OAuth redirect, frontend
   // fetch BASE, screenshots) bu değerden türer. Atlassian developer
   // konsoluna kayıtlı redirect URI'nin bu portla eşleşmesi gerektiğini

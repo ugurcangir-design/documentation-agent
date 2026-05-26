@@ -13,6 +13,7 @@ import { buildScreenContext } from "../../analysis/screenContextBuilder";
 import { generateUserManualSection } from "../../generator/userManualGenerator";
 import { generateTechnicalDocSection } from "../../generator/technicalDocGenerator";
 import { computeCoverage, type CoverageReport } from "../../quality/coverageCheck";
+import { computeVerifiedCoverage } from "../../quality/verifiedCoverage";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
 import { isSidebarNav } from "../../quality/sidebarNav";
 import { screenStore, type StoredScreen } from "../store/screenStore";
@@ -95,15 +96,27 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
 
     let umContent = userManual.content;
     let tdContent = technical.content;
-    let umCoverage = computeCoverage(inScopeForCoverage, umContent);
-    let tdCoverage = computeCoverage(inScopeForCoverage, tdContent);
+
+    // İlk coverage hesabı: LLM-judge etkinse Haiku ile "anlamlı anlatıldı
+    // mı?" doğrulaması yap; fix-up turu daha doğru hedeflere yönelir.
+    // Fix-up iterasyonlarında raw computeCoverage kullanılır (hız +
+    // maliyet; fix-up zaten eklemeyi vaadediyor, substring yeter).
+    const initialCoverage = env.coverageLlmJudge
+      ? (await Promise.all([
+          computeVerifiedCoverage(inScopeForCoverage, umContent, "userManual"),
+          computeVerifiedCoverage(inScopeForCoverage, tdContent, "technicalDoc"),
+        ]))
+      : [computeCoverage(inScopeForCoverage, umContent), computeCoverage(inScopeForCoverage, tdContent)];
+    let umCoverage = initialCoverage[0] as CoverageReport;
+    let tdCoverage = initialCoverage[1] as CoverageReport;
     let umExtraTokens = { input: 0, output: 0 };
     let tdExtraTokens = { input: 0, output: 0 };
     let umFixUpAdded = 0;
     let tdFixUpAdded = 0;
 
     console.log(
-      `[docjob ${jobId}] Coverage (initial): userManual=${umCoverage.coveragePct}% (${umCoverage.coveredElements}/${umCoverage.totalElements})  ` +
+      `[docjob ${jobId}] Coverage (initial${env.coverageLlmJudge ? ", LLM-judged" : ""}): ` +
+      `userManual=${umCoverage.coveragePct}% (${umCoverage.coveredElements}/${umCoverage.totalElements})  ` +
       `technicalDoc=${tdCoverage.coveragePct}% (${tdCoverage.coveredElements}/${tdCoverage.totalElements})`
     );
 
