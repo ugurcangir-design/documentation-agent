@@ -83,6 +83,14 @@ export const jobs = {
 
   getById: (jobId: string) => request<Job>(`/jobs/${jobId}`),
 
+  /** Sadece üretilmemiş ekranlar için yeni bir job başlat. Önceki job'un
+   *  screenPaths set'i ile mevcut documents.screenPath'in farkı kullanılır.
+   *  Token tasarrufu: zaten üretilen dokümanlar yeniden ödenmez. */
+  retryMissing: (jobId: string) =>
+    request<{ jobId: string; count: number }>(`/jobs/${jobId}/retry-missing`, {
+      method: "POST",
+    }),
+
   stream: (jobId: string) =>
     new EventSource(`${BASE}/jobs/${jobId}/stream`),
 };

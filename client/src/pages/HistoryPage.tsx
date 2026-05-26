@@ -10,6 +10,9 @@ interface Job {
   completedAt?: string;
   progress: { current: number; total: number; message: string };
   error?: string;
+  /** Üretilmemiş ekran sayısı; failed/cancelled job'larda > 0 olabilir.
+   *  Eski sürümde başlatılmış job'lar için undefined (screenPaths kaydı yok). */
+  missingScreenCount?: number;
 }
 
 export default function HistoryPage() {
@@ -37,6 +40,25 @@ export default function HistoryPage() {
     const sec = Math.round(ms / 1000);
     if (sec < 60) return `${sec}s`;
     return `${Math.floor(sec / 60)}d ${sec % 60}s`;
+  }
+
+  async function retryMissing(id: string, count: number) {
+    if (!confirm(`Bu job'tan ${count} eksik ekran için yeni bir üretim başlatılacak. Tamamlanmış olanlar yeniden ödenmez. Devam?`)) return;
+    try {
+      const r = await fetch(`/api/jobs/${id}/retry-missing`, {
+        method: "POST",
+        headers: { "X-DocAgent": "1" },
+      });
+      const d = await r.json() as { jobId?: string; error?: string; count?: number };
+      if (!r.ok || !d.jobId) {
+        toast.show(d.error ?? "Yeniden üretim başlatılamadı", "error");
+        return;
+      }
+      toast.show(`${d.count} eksik ekran için yeni job başlatıldı`, "success");
+      load();
+    } catch (e) {
+      toast.show((e as Error).message, "error");
+    }
   }
 
   async function deleteOne(id: string) {
@@ -177,6 +199,18 @@ export default function HistoryPage() {
                   <td className="px-4 py-3">
                     <p className="text-gray-700">{job.progress.current} / {job.progress.total}</p>
                     <p className="text-[11px] text-gray-400 truncate max-w-xs">{job.progress.message}</p>
+                    {job.type === "documentation" &&
+                     job.status !== "running" &&
+                     job.status !== "pending" &&
+                     (job.missingScreenCount ?? 0) > 0 && (
+                      <button
+                        onClick={() => retryMissing(job.id, job.missingScreenCount!)}
+                        className="mt-1 px-2 py-0.5 text-[11px] rounded-md border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                        title="Yalnız üretilmemiş ekranlar için yeni job başlat (token tasarrufu)"
+                      >
+                        ⟳ Eksikleri Üret ({job.missingScreenCount})
+                      </button>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-500">{duration(job)}</td>
                   <td className="px-4 py-3 text-gray-400 text-[12px]">
