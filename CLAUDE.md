@@ -130,6 +130,24 @@ electron/main.js                 Opsiyonel Electron paket
 
 ---
 
+## Partial Retry (eksik ekran üretimi)
+
+`Job.screenPaths` job oluşturulurken kaydedilir. Failed/cancelled/completed
+job'larda **eksik ekran set'i** = `screenPaths \ documentStore.getByJobId().
+screenPath`. UI bunu kullanır:
+
+```
+GET  /api/jobs                        → her job + missingScreenCount
+GET  /api/jobs/:jobId                 → ... + missingScreenCount
+POST /api/jobs/:jobId/retry-missing   → yalnız eksik path'lerle yeni job
+                                        başlat; orijinal job dokunulmaz
+```
+
+HistoryPage'de eksiği olan job satırında "⟳ Eksikleri Üret (N)" düğmesi.
+Token tasarrufu: tamamlanmış ekranlar yeniden ödenmez. Eski sürümden
+kalma job'larda `screenPaths` undefined → endpoint 400 döner (UI butonu
+da gizler).
+
 ## Job Durumları & Yaşam Döngüsü
 
 ```
