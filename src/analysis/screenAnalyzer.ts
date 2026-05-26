@@ -13,7 +13,8 @@ const JSON_SCHEMA_HINT = `JSON şeması:
       "type": "button|form|table|chart|modal|dropdown|input|tab|menu|filter|other",
       "label": "Elementin görünen etiketi",
       "description": "Bu elementin ne işe yaradığı",
-      "action": "Tıklandığında veya kullanıldığında ne olur (opsiyonel)"
+      "action": "Tıklandığında veya kullanıldığında ne olur (opsiyonel)",
+      "isGlobalNav": false
     }
   ],
   "workflows": [
@@ -21,7 +22,17 @@ const JSON_SCHEMA_HINT = `JSON şeması:
   ],
   "dataDisplayed": ["Ekranda gösterilen veri türleri"],
   "navigationOptions": ["Bu ekrandan erişilebilen diğer ekranlar"]
-}`;
+}
+
+ÖNEMLİ — isGlobalNav alanı:
+- Bu ekranın *parçası olmayan*, başka ekrana yönlendiren global navigasyon
+  öğeleri (sol sidebar menü öğeleri, üst bar menüleri, "Logout" gibi) için
+  isGlobalNav: true.
+- Bu ekranın asıl içeriğine ait butonlar, filtreler, satır işlemleri,
+  formlar, modal'lar için isGlobalNav: false.
+- Test: "Bu öğeyi anlatmazsam analist bu ekranı eksik tanır mı?" Yanıt EVET
+  ise isGlobalNav=false (asıl öğe). HAYIR ise isGlobalNav=true (nav).
+- Şüpheliyse false (asıl öğe gibi davran — fazladan açıklama zararsız).`;
 
 export async function analyzeScreen(screen: DiscoveredScreen): Promise<ScreenAnalysis> {
   const hash = hashScreenshot(screen.screenshotBase64);
