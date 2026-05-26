@@ -59,6 +59,9 @@ export interface Job {
     message: string;
   };
   error?: string;
+  /** Yalnızca GET /api/jobs/:jobId yanıtında set olur (liste endpoint'inde
+   *  yok). Failed/cancelled/completed job'larda üretilmemiş ekran sayısı. */
+  missingScreenCount?: number;
 }
 
 export interface JobEvent {

@@ -17,6 +17,11 @@ export interface Job {
     message: string;
   };
   error?: string;
+  /** Documentation job için kullanıcı tarafından seçilen ekran path'leri.
+   *  Failed/cancelled job'larda "eksik ekranları tekrar üret" özelliği
+   *  bunu kullanır: original screenPaths \ üretilmiş documents.screenPath
+   *  = eksik set. Geriye dönük uyumluluk: eski job'larda undefined. */
+  screenPaths?: string[];
 }
 
 const DB_PATH = path.join(process.cwd(), "data", "db", "jobs.json");
