@@ -446,13 +446,13 @@ global skora göre. BRD'nin tüm bütçeyi yutması bu sayede engellenir.
 
 `technicalDocGenerator.ts (139 satır)`: aynı pattern; template ilk 4000 char.
 
-Sidebar-nav filtre listesi tek kaynaktan gelir: `src/quality/sidebarNav.ts`
-(`SIDEBAR_NAV_HINTS` + `isSidebarNav(el)`). `documentationJob` (kapsam
-hesabı), `userManualGenerator` ve `technicalDocGenerator` (prompt UI
-listesi) bu helper'ı import eder. **Liste hedef uygulamaya özgüdür**
-(sports betting / Analyst Studio); yeni hedef uygulama eklenince ya bu
-liste güncellenmeli ya da `analyzeScreen` çıktısına `isGlobalNav`
-alanı eklenip LLM kararına bırakılmalıdır.
+Sidebar-nav filtre: `src/quality/sidebarNav.ts` → `isSidebarNav(el)`.
+Birincil kaynak: `analyzeScreen` her UI öğesine `isGlobalNav: boolean`
+ataması yapar (LLM kararı; hedef uygulamadan bağımsız). `isSidebarNav`
+bu alanı önce kontrol eder; tanımlı değilse (eski cached analizler için)
+`SIDEBAR_NAV_HINTS` hardcoded liste fallback olarak devreye girer. Cache
+zamanla yenilendikçe fallback gereksizleşir — listeyi tamamen çıkarmadan
+önce regression doğrula.
 
 ---
 
