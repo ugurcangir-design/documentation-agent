@@ -202,8 +202,16 @@
         bağlamda; çift okuma engelli, her kaynak tipi için bütçe garantili.
         Türkçe çekim eklerine toleranslı tokenizer.</li>
       <li>Kapsam doğrulama — her UI öğesinin dokümanda geçtiği kontrol
-        edilir, eksik varsa Claude'a hedefli düzeltme turu attırılır
-        (eşik + tur sayısı <code>.env</code>'den ayarlanır)</li>
+        edilir + <strong>Haiku LLM-judge</strong> "anlamlı anlatılmış mı?"
+        sorusuyla sahte coverage'ı düşürür; eksik varsa Claude'a hedefli
+        düzeltme turu attırılır (eşik + tur sayısı <code>.env</code>'den ayarlanır)</li>
+      <li>Hedef uygulama bağımsızlığı — sidebar/global nav tespitini
+        <strong>LLM</strong> her ekranda yeniden karar verir (eski hardcoded
+        liste yalnız legacy fallback)</li>
+      <li>Heading'siz .docx/.pdf parser — numbered "1.1." ve ALL-CAPS
+        "AMAÇ" sezgisi ile bölümlere ayırır (eski tek-blok davranışı yok)</li>
+      <li>Partial retry — başarısız job'larda yalnız eksik ekranlar için
+        yeniden üretim, tamamlananlar yeniden ödenmez</li>
       <li>Prompt caching — aynı job içinde 2. ekrandan itibaren input
         token'ların büyük kısmı Anthropic ephemeral cache'inden gelir
         (~%90 ucuz)</li>
@@ -288,6 +296,11 @@ MAX_DISCOVERY_DEPTH=0       # 0 → tek ekran modu (etkileşimli keşif)
 # öğeleri için ek LLM turu tetiklenir.
 FIX_UP_THRESHOLD=90         # 0-100; düşürünce hız ↑ maliyet ↓ kapsam ↓
 FIX_UP_MAX_PASSES=2         # 0-5; 0 → fix-up tamamen kapalı
+
+# Coverage LLM-judge — substring match'in "label var = açıklanmış" gibi
+# yalancı pozitiflerini Haiku ile doğrular ("anlamlı şekilde anlatılmış
+# mı?"). Fix-up turu daha doğru hedeflere yönelir. Maliyet ~$0.005/ekran.
+COVERAGE_LLM_JUDGE=true     # 'false' → saf substring match
 
 # Hedef uygulama login arkasındaysa:
 # APP_BASE_URL=https://...
@@ -527,9 +540,20 @@ offline_access</code></pre>
       <strong>Kaynak önceliği nasıl çalışır?</strong>
       DocAgent retrieval skorunu kaynak tipine göre çarpar:
       BRD ×1.0, Süreç Analizi ×0.95, Confluence ×0.85, Jira ×0.75, Manuel ×0.6.
-      Ayrıca <em>her kaynak tipinden en az 2 bölümün</em> prompt'a girmesi
-      garanti altına alınır (<code>balanceBySourceType</code>), yani BRD bağlam
-      bütçesini tek başına yutmaz.
+      Yüklenen <em>reference</em> tipi doc'lar otomatik <strong>Süreç Analizi</strong>
+      olarak etiketlenir (BRD tipi seçilmezse). Ayrıca <em>her kaynak tipinden
+      en az 2 bölümün</em> prompt'a girmesi garanti altına alınır
+      (<code>balanceBySourceType</code>), yani BRD bağlam bütçesini tek başına yutmaz.
+    </div>
+    <div class="box info">
+      <strong>Heading'siz .docx / .pdf de bölümlere ayrılır</strong>
+      <code>mammoth</code> (.docx) ve <code>pdf-parse</code> (.pdf) çıktısı düz
+      metin olarak gelir; DocAgent <em>sezgisel</em> heading tespiti yapar:
+      numbered outline (<code>1.</code>, <code>1.1.</code>, <code>1.1.1.</code>)
+      ve standalone ALL-CAPS (<code>AMAÇ</code>, <code>GEREKSİNİMLER</code>)
+      başlık sayılır. Ölçüm: 76 sayfalık bir spec PDF'i <em>1 → 52</em> anlamlı
+      bölüme ayrıldı. Markdown <code>#</code> heading'li doc'larda eski parser
+      kullanılır.
     </div>
 
     <h3 id="r-veri">4.2 Veri Kaynakları (toplu Confluence / Jira)</h3>
@@ -738,7 +762,17 @@ offline_access</code></pre>
           ephemeral cache hit verir (input token ~%10'a düşer). Konsolda
           <code>[claude] cache: read=… create=…</code> olarak loglanır.</li>
         <li><strong>Kapsam kontrolü</strong> — her UI öğesinin (sidebar
-          nav hariç) dokümanda geçtiği fuzzy-match ile sayılır</li>
+          nav hariç) dokümanda geçtiği fuzzy-match ile sayılır. Hangisi
+          "sidebar nav" sayılır? LLM (analyzeScreen) her öğeye
+          <code>isGlobalNav: true|false</code> ataması yapar — hedef
+          uygulamadan bağımsız. Eski/cached analizler için hardcoded
+          hint listesi fallback.</li>
+        <li><strong>LLM-judge doğrulaması</strong>
+          (<code>COVERAGE_LLM_JUDGE=true</code>, default açık) — substring
+          "label var" der ama "anlamlı anlatılmış" garanti etmez. Haiku 4.5
+          her covered öğeye yes/no döner; "anlatılmadı" denenler missing'e
+          geri taşınır → fix-up doğru hedefe yönelir. Hata olursa raw
+          coverage'a graceful fallback (regresyon yok). Maliyet ~$0.005/ekran.</li>
         <li><strong>Düzeltme turu</strong> — kapsam &lt;
           <code>FIX_UP_THRESHOLD</code> (varsayılan %90) ise eksikler için
           en fazla <code>FIX_UP_MAX_PASSES</code> (varsayılan 2) turlu
@@ -769,10 +803,20 @@ offline_access</code></pre>
       şablon)</em>. Manuel müdahale gerekmez. Çok sık alıyorsanız bağlam
       filtresi (6.1) kullanın.
     </div>
-    <div class="box warn">
-      <strong>Job watchdog 30 dk</strong>
-      30 dakikadan uzun süren bir job otomatik <em>failed</em> işaretlenir.
-      Çok büyük iş kuyruğu için iki parçaya bölün.
+    <div class="box info">
+      <strong>Job watchdog (idle-tabanlı)</strong>
+      Eski 30 dk sabit eşik kaldırıldı; artık <strong>3 saat hareketsizlik</strong>
+      (ekran üretim güncellemesi yok) veya <strong>12 saat toplam süre</strong>
+      tetiklenirse job <em>failed</em> işaretlenir. 50-80 ekranlık büyük üretimler
+      sorunsuz tamamlanır.
+    </div>
+    <div class="box info">
+      <strong>Bir job yarıda kalırsa — token kaybı yok</strong>
+      Tamamlanmış ekranların dokümanları her zaman <strong>Dökümanlar</strong>
+      sayfasında durur (per-ekran kalıcı yazım). Eksiklerini üretmek için:
+      <strong>Geçmiş</strong> sayfasında failed/cancelled satırının altındaki
+      <em>"⟳ Eksikleri Üret (N)"</em> düğmesi tamamlananları yeniden ödemeden
+      yalnız eksik ekranlar için yeni bir job başlatır.
     </div>
 
     <h3 id="u-inceleme">5.4 İnceleme &amp; düzenleme</h3>
@@ -891,6 +935,15 @@ screenshots/*.png</pre>
       (keşif + üretim). Her satır: tarih, durum (<em>completed/failed/
       cancelled</em>), süre, ekran sayısı, üretilen doküman sayısı.
       <code>data/db/jobs.json</code>'da saklanır.</p>
+    <div class="box info">
+      <strong>⟳ Eksikleri Üret düğmesi</strong>
+      Bir doküman job'ı başarısız veya iptal olduysa, satırda eksik ekran
+      sayısı (<em>"3/25 eksik"</em> gibi) görünür ve <strong>⟳ Eksikleri Üret</strong>
+      düğmesi çıkar. Tıklayınca yalnız üretilmemiş ekranlar için yeni bir
+      job başlar; tamamlananlar yeniden ödenmez (token tasarrufu).
+      Eski sürümden kalma job'larda bu bilgi olmadığı için düğme görünmez —
+      o durumda <em>Ekran Keşfi</em>'nden manuel yeniden başlatın.
+    </div>
 
     <h3 id="i-update">6.5 Güncelleme</h3>
     <p>İki yol var:</p>
@@ -1007,8 +1060,31 @@ npm test                     # 32/32 yeşil olmalı</code></pre>
       </tr>
       <tr>
         <td>Doküman üretimi <em>failed (watchdog)</em></td>
-        <td>30dk job sınırı aşıldı. İş kuyruğunu yarıya bölün veya
-          Derin Analiz'i kapatıp tekrar deneyin.</td>
+        <td>Yeni eşikler: 3 saat hareketsizlik veya 12 saat toplam süre.
+          Tipik üretimde tetiklenmez; tetiklendiyse muhtemelen ağ/Claude
+          tarafı takıldı. <strong>Geçmiş → ⟳ Eksikleri Üret</strong> ile
+          tamamlananları yeniden ödemeden kaldığı yerden devam edin.</td>
+      </tr>
+      <tr>
+        <td>Job iptal/fail oldu, üretilenler yok mu sandım?</td>
+        <td>Tamamlanmış ekranların dokümanları her zaman
+          <strong>Dökümanlar</strong> sayfasında durur (per-ekran kalıcı
+          yazım). Eksikleri tamamlamak için <strong>Geçmiş → ⟳ Eksikleri Üret</strong>.</td>
+      </tr>
+      <tr>
+        <td>Coverage yüksek görünüyor ama doküman aslında eksik</td>
+        <td>Eski substring match yanlış pozitif veriyordu ("Kaydet butonu
+          görünür" geçtiyse %100 sayardı). Şimdi varsayılan açık olan
+          <code>COVERAGE_LLM_JUDGE</code> Haiku ile "anlamlı anlatılmış mı?"
+          doğrulaması yapar; yine de şüpheniz varsa Üretim Bilgisi dipnotunda
+          "Eksik" listesini kontrol edin.</td>
+      </tr>
+      <tr>
+        <td>Yüklediğim .docx/.pdf retrieval'a girmiyor gibi</td>
+        <td>Heading'siz flat-text doc'lar artık sezgisel parser ile
+          (numbered "1.1." veya ALL-CAPS "AMAÇ") bölümlere ayrılır.
+          Üretim Bilgisi dipnotundaki "Referans bölümleri" sayısına bakın —
+          tek "Introduction" görünüyorsa parser hiçbir heading bulamamış demektir.</td>
       </tr>
       <tr>
         <td>"Orphan job" mesajı boot'ta</td>
@@ -1183,6 +1259,20 @@ npm test                     # 32/32 yeşil olmalı</code></pre>
       key'i sessizce atar; <code>data/logs/server.log</code>'da
       <code>[settings] allowlist dışı/geçersiz key'ler atıldı: …</code>
       uyarısı vardır. Allowlist için bkz. 2.5 — Settings yazma kutusu.</p>
+
+    <h4>Bir job yarıda kaldı veya iptal ettim — yeniden başlatınca her şey baştan mı?</h4>
+    <p>Hayır. Tamamlanmış ekranların dokümanları <strong>Dökümanlar</strong>
+      sayfasında durur. <strong>Geçmiş</strong> sayfasında o job'un satırında
+      <em>⟳ Eksikleri Üret (N)</em> düğmesi görünür; yalnız üretilmemiş
+      ekranlar için yeni bir job başlatır. Tamamlananlar yeniden ödenmez
+      (önemli token tasarrufu, özellikle API modu).</p>
+
+    <h4>Coverage %95 ama doküman gerçekten yetersiz olabilir mi?</h4>
+    <p>Eski sürümde evet: substring "label var" sayardı. Şimdi
+      <code>COVERAGE_LLM_JUDGE=true</code> (varsayılan açık) ile Haiku 4.5
+      her covered öğeyi "anlamlı anlatılmış mı?" diye doğrular; sadece etiket
+      mention'ları missing'e geri taşınır → fix-up doğru hedefe yönelir.
+      Ekstra maliyet ~$0.005/ekran. Kapatmak için <code>false</code>.</p>
 
     <h4>Sync edilen Confluence/Jira sayfası kötü bir talimat içerirse
       doküman tehlikeye girer mi?</h4>
