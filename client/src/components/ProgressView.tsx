@@ -21,6 +21,7 @@ export default function ProgressView({
   const [logs, setLogs] = useState<string[]>([]);
   const [current, setCurrent] = useState(0);
   const [done, setDone] = useState(false);
+  const [endedWithError, setEndedWithError] = useState(false);
   const [paused, setPaused] = useState(false);
   const [waitDismissed, setWaitDismissed] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
@@ -47,6 +48,7 @@ export default function ProgressView({
 
       if (event.type === "complete" || event.type === "error") {
         setDone(true);
+        if (event.type === "error") setEndedWithError(true);
         es.close();
         if (event.type === "complete") onComplete?.();
       }
@@ -164,7 +166,21 @@ export default function ProgressView({
         {paused && <div className="text-amber-400">⏸ duraklatıldı</div>}
       </div>
 
-      {done && <p className="text-sm text-green-600 font-medium">✓ Tamamlandı</p>}
+      {done && !endedWithError && (
+        <p className="text-sm text-green-600 font-medium">✓ Tamamlandı</p>
+      )}
+      {done && endedWithError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-[13px] text-red-800">
+          <div className="font-semibold mb-0.5">✗ Job tamamlanmadı</div>
+          <div>
+            {total > 0
+              ? `${current}/${total} ekran üretildi. Tamamlanan dokümanlar Dökümanlar sayfasında. `
+              : `Üretim sonlanmadan kesildi. `}
+            Eksik ekranları yeniden üretmek için <strong>Geçmiş</strong> sayfasındaki
+            "⟳ Eksikleri Üret" düğmesini kullanın — tamamlananlar yeniden ödenmez.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
