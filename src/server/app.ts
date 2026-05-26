@@ -125,29 +125,42 @@ setInterval(() => {
 }, CHECK_INTERVAL);
 
 // ── Job runtime watchdog ──────────────────────────────────────────
-// Any job that has been 'running' for more than JOB_MAX_AGE is
-// considered hung. We cancel it, then mark it 'failed' so the UI
-// stops showing a perpetual spinner. The cancellation is honored
-// at the next checkpoint (see jobCancellation.isCancelled() in
-// documentationJob/discoveryJob).
-const JOB_MAX_AGE_MS = 30 * 60_000; // 30 dakika
+// Bir job belirli süredir progress.updatedAt güncellemiyorsa "hung"
+// kabul edilir → cancel + failed işaretle. Eskiden createdAt'tan
+// 30dk sabit eşik vardı; bu büyük (40-80 ekran) job'ları orta üretimde
+// öldürüyordu. Şimdi: STALE eşiği `updatedAt`'a bağlı (3 saat hareketsizlik).
+// HARD üst sınır da var (12 saat) — yalnızca gerçekten kaçak süreçler için.
+//
+// updatedAt her ekran tamamlandığında / progress event'inde tazelenir
+// (jobStore.update otomatik set ediyor), dolayısıyla iyi çalışan büyük
+// işler asla bu eşiklere takılmaz.
+const JOB_STALE_MS = 3 * 60 * 60_000;   // 3 saat: ilerleme yoksa hung
+const JOB_HARD_MAX_MS = 12 * 60 * 60_000; // 12 saat: ne olursa olsun durdur
 setInterval(() => {
   const now = Date.now();
   for (const job of jobStore.getAll()) {
     if (job.status !== "running") continue;
     const startedAt = new Date(job.createdAt).getTime();
-    if (now - startedAt < JOB_MAX_AGE_MS) continue;
+    const lastSeen = new Date(job.updatedAt).getTime();
+    const totalAge = now - startedAt;
+    const idleAge = now - lastSeen;
+    const hung = idleAge >= JOB_STALE_MS;
+    const tooOld = totalAge >= JOB_HARD_MAX_MS;
+    if (!hung && !tooOld) continue;
 
-    console.log(`[watchdog] ${job.id} 30dk'dır çalışıyor, iptal ediliyor`);
+    const reason = tooOld
+      ? `12 saat hard limit — job yine de devam ediyordu`
+      : `${Math.round(idleAge / 60_000)}dk ilerleme yok (stale watchdog)`;
+    console.log(`[watchdog] ${job.id}: ${reason}`);
     jobCancellation.cancel(job.id);
     jobStore.update(job.id, {
       status: "failed",
       completedAt: new Date().toISOString(),
-      error: "Job 30 dakikadan uzun süredir çalışıyordu — watchdog tarafından sonlandırıldı",
-      progress: { ...job.progress, message: "Watchdog tarafından sonlandırıldı" },
+      error: `Watchdog tarafından sonlandırıldı: ${reason}`,
+      progress: { ...job.progress, message: `Watchdog: ${reason}` },
     });
   }
-}, 60_000);
+}, 5 * 60_000); // 5 dk'da bir kontrol — eski 1dk gereksiz sıktı
 
 // Serve React build in production
 const clientBuild = path.join(

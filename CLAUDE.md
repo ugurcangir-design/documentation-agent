@@ -201,10 +201,15 @@ Sekme kapatınca `pagehide` → `sendBeacon('/api/heartbeat/leave')` → 30sn
 içinde reconnect yoksa `process.exit(0)`. Yenileme `pagehide` tetikler ama
 yeniden yüklenen sayfa heartbeat ile iptal eder.
 
-### Job runtime watchdog (satır 122-141)
+### Job runtime watchdog
 ```ts
-JOB_MAX_AGE_MS = 30 * 60_000   // 30 dakikadan eski 'running' job → fail
+JOB_STALE_MS    = 3 * 60 * 60_000   // updatedAt 3 saattir hareketsiz → hung
+JOB_HARD_MAX_MS = 12 * 60 * 60_000  // hard limit; gerçekten kaçak süreçler
+// her 5 dakikada bir kontrol
 ```
+`updatedAt` her ekran tamamlandığında (jobStore.update otomatik) tazelenir,
+yani 50-80 ekranlık büyük doc job'ları öldürmez. Eskiden 30 dk sabit eşik
+büyük üretimleri yarıda kesiyordu.
 
 ### Orphan job reap (satır 162-177)
 Boot'ta running/pending job'lar `failed` olarak temizlenir.
