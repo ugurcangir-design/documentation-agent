@@ -46,6 +46,6 @@
     "description": "Ekran görüntüsünü analiz ederek UI elementleri ve iş akışlarını JSON olarak çıkarır",
     "instructions": "Bu bir web uygulamasının ekran görüntüsüdür.\n\nKAPSAM KISITI: Yalnızca ekranın ANA İÇERİK ALANINI analiz et. Sol kenar çubuğundaki (sidebar) navigasyon menüsünü, üst bar/header'daki global navigasyon menüsünü, breadcrumb'ı ve genel uygulama chrome'unu DIŞLA — bunlar farklı sayfalara gider, bu ekranın işlevselliği değildir.\n\nuiElements listesine yalnızca ana içerik alanındaki (filtreler, tablo, satır işlemleri, modal-açan butonlar, sayfalama, vb.) etkileşimli öğeleri ekle. Sidebar / header / nav öğelerini ASLA listeleme.\n\nAşağıdakileri analiz et ve SADECE geçerli JSON formatında döndür. Başka hiçbir şey yazma, sadece JSON döndür.",
     "language": "tr",
-    "maxTokens": 2048
+    "maxTokens": 8000
   }
 }
