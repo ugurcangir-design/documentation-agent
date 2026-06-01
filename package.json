@@ -21,6 +21,10 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20.19",
+    "npm": ">=10"
+  },
   "build": {
     "appId": "com.docagent.analysis-studio",
     "productName": "DocAgent",

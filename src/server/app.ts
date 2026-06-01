@@ -24,6 +24,28 @@ import { csrfGuard } from "./middleware/csrfGuard";
 const app = express();
 const PORT = env.port;
 
+// ── İlk-çalıştırma klasör garantisi ────────────────────────────────
+// Temiz bir `git clone` sonrası bu klasörler YOK (`.gitignore`'da veya
+// hiç oluşturulmamış). Çoğu kod yolu `mkdirSync(recursive)` ile kendi
+// klasörünü açar, ama multer'ın `dest`'i (data/references/_tmp) request
+// anında klasörü OLUŞTURMAZ — yoksa ilk doküman/şablon yüklemesi
+// `ENOENT` ile patlar. Tüm gerekli klasörleri tek yerden, server
+// dinlemeye başlamadan önce garantiye alıyoruz.
+for (const dir of [
+  "data/references/_tmp",
+  "data/references/confluence",
+  "data/references/documents",
+  "data/references/templates",
+  "data/db",
+  "data/logs",
+  "data/screenshots",
+  "data/exports",
+  "data/brd",
+  "data/swagger",
+]) {
+  fs.mkdirSync(path.join(process.cwd(), dir), { recursive: true });
+}
+
 // CORS: yalnızca localhost / 127.0.0.1 / ::1 origin'lerine izin ver.
 // Yerel uygulama; cross-origin script'in (örn. açık başka bir tarayıcı
 // sekmesindeki kötü niyetli site) `fetch("http://localhost:3000/api/
