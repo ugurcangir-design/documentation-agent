@@ -32,10 +32,30 @@ const JSON_SCHEMA_HINT = `JSON şeması:
   formlar, modal'lar için isGlobalNav: false.
 - Test: "Bu öğeyi anlatmazsam analist bu ekranı eksik tanır mı?" Yanıt EVET
   ise isGlobalNav=false (asıl öğe). HAYIR ise isGlobalNav=true (nav).
-- Şüpheliyse false (asıl öğe gibi davran — fazladan açıklama zararsız).`;
+- Şüpheliyse false (asıl öğe gibi davran — fazladan açıklama zararsız).
+
+EKSİKSİZ OL — EN ÖNEMLİ KURAL:
+Bu analiz, ekranın kullanım kılavuzunun temelidir. Ana içerik alanındaki
+HER etkileşimli öğeyi eksiksiz listele — kaç tane olursa olsun KISALTMA,
+özetleme, "vb." deyip geçme. Şunların TAMAMINI ayrı uiElements girdisi yap:
+- Her buton (birincil, ikincil, ikon buton, satır içi aksiyon)
+- Her form alanı / input / dropdown / checkbox / radio / toggle / tarih seçici
+- Her filtre ve arama kutusu
+- Tablo/liste kolonları (sıralanabilir/filtrelenebilir olanlar)
+- Her sekme, modal-açan tetikleyici, sayfalama kontrolü
+- Verilen ek görsellerde (modal/panel/dropdown açık halleri) görünen
+  TÜM iç alanları da ekle — bunlar ana ekranda kapalıdır ama ekranın
+  parçasıdır.
+Bir öğeyi atlamak, kılavuzda eksik anlatıma yol açar. Tereddütte ekle.`;
+
+// Analiz prompt'u / maxTokens / şeması her değiştiğinde artır. Cache
+// anahtarına karıştığı için eski (farklı prompt sürümüyle üretilmiş)
+// analizler otomatik geçersiz kalır — aksi halde aynı screenshot eski
+// eksik analizi sonsuza dek döndürürdü (cache hash yalnız görsele bağlı).
+const ANALYZER_VERSION = "v2-exhaustive-8k";
 
 export async function analyzeScreen(screen: DiscoveredScreen): Promise<ScreenAnalysis> {
-  const hash = hashScreenshot(screen.screenshotBase64);
+  const hash = hashScreenshot(screen.screenshotBase64 + ANALYZER_VERSION);
   const cached = analysisCache.get(hash);
   if (cached) return cached;
 
@@ -48,7 +68,10 @@ ${JSON_SCHEMA_HINT}`;
     prompt,
     imageBase64: screen.screenshotBase64,
     imagePath: screen.screenshotPath,
-    maxTokens: cfg.maxTokens ?? 2048,
+    // Zengin ekranlarda (30+ UI öğesi) 2048 token yetmiyordu; analiz JSON'u
+    // kesilince ya parse hatası ya da Claude'un sessizce öğe kısması olur →
+    // kılavuzda eksik alan/buton. 8000 token ~100+ öğeye yer açar.
+    maxTokens: cfg.maxTokens ?? 8000,
   });
 
   const jsonMatch = result.text.match(/\{[\s\S]*\}/);
@@ -56,7 +79,35 @@ ${JSON_SCHEMA_HINT}`;
     throw new Error(`Screen analysis returned no JSON for: ${screen.path}\nResponse: ${result.text.slice(0, 200)}`);
   }
 
-  const analysis = JSON.parse(jsonMatch[0]) as ScreenAnalysis;
+  // Çıktı max_tokens'a takıldıysa JSON büyük olasılıkla eksik → analiz
+  // kapsamı güvenilir değil. Sessiz kabul yerine net hata: ekran fail
+  // olur (Geçmiş → Eksikleri Üret ile tekrar denenebilir) ve kullanıcı
+  // maxTokens'ı artırması gerektiğini bilir.
+  if (result.truncated) {
+    throw new Error(
+      `Ekran analizi max_tokens limitine takıldı (${screen.path}) — çıktı kesildi, ` +
+      `UI öğeleri eksik kalmış olabilir. screenAnalysis maxTokens değerini artırın ` +
+      `(Sistem Promptları) veya ekranı bölün.`
+    );
+  }
+
+  let analysis: ScreenAnalysis;
+  try {
+    analysis = JSON.parse(jsonMatch[0]) as ScreenAnalysis;
+  } catch (e) {
+    throw new Error(
+      `Ekran analizi JSON ayrıştırılamadı (${screen.path}): ${(e as Error).message}. ` +
+      `Yanıt başı: ${jsonMatch[0].slice(0, 150)}`
+    );
+  }
+
+  // Hiç UI öğesi çıkmadıysa görsel boş/anlamsız (auth-wall, hata sayfası,
+  // boş state) olabilir → kılavuz halüsinasyona açık. Uyar ama bloklamadan
+  // devam et (bazı ekranlar gerçekten salt-okunur olabilir).
+  if (!analysis.uiElements || analysis.uiElements.length === 0) {
+    console.warn(`[analyze] ${screen.path}: UI öğesi tespit edilmedi — boş/erişilemez ekran olabilir`);
+  }
+
   analysisCache.set(hash, analysis);
   return analysis;
 }
