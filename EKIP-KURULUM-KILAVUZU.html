@@ -520,6 +520,15 @@ offline_access</code></pre>
     <!-- ============== 4 ============== -->
     <h2 id="referanslar">4. Referansları Yükle</h2>
 
+    <div class="box info">
+      <strong>Temiz kurulum — hazır örnek veri yoktur</strong>
+      Yeni bir <code>git clone</code> sonrası <code>data/</code> klasörü
+      <em>boştur</em> (gizlilik gereği örnek iş verileri repoya konmaz).
+      Kendi BRD, Confluence, Swagger ve şablonlarınızı bu bölümdeki
+      adımlarla yüklemeniz gerekir — aksi halde üretilen doküman yalnız
+      ekran görsellerine dayanır ve iş kuralı bağlamından yoksun kalır.
+    </div>
+
     <h3 id="r-sirası">4.1 Hangi sırayla yüklemeli?</h3>
     <p>Üretilen dokümanın kalitesi tamamen referansların kalitesine bağlıdır.
       <strong>Doküman üretmeden ÖNCE</strong> aşağıdaki sırayla yükleyin:</p>
@@ -750,7 +759,14 @@ offline_access</code></pre>
       <ol>
         <li><strong>Bağlam yükleme</strong> — referans envanteri loglanır
           (örn. <code>"Section types: {brd:4,confluence:2,jira_task:3}"</code>)</li>
-        <li><strong>Ekran analizi</strong> — Claude görselleri okur, UI öğeleri + akışlar çıkarır</li>
+        <li><strong>Ekran analizi</strong> — Claude görselleri okur, ana
+          içerikteki <em>tüm</em> UI öğelerini (buton, alan, filtre, kolon,
+          sekme, modal tetikleyici + açık modal/panel görsellerindeki iç
+          alanlar) eksiksiz listeler + iş akışlarını çıkarır. 8000 token
+          tavanı ~100+ öğeye yeter; analiz çıktısı tavana takılırsa ekran
+          <em>failed</em> olur (sessiz eksik yerine görünür hata) ve
+          <strong>Geçmiş → ⟳ Eksikleri Üret</strong> ile tekrar denenir.
+          Sidebar/global nav öğeleri bu ekranın parçası sayılmaz, dışlanır.</li>
         <li><strong>RAG seçimi</strong> — ilgili bölümler skor ×kaynak önceliği ile sıralanır;
           16KB bütçeye, her kaynak tipinden en az 2 bölüm garantili</li>
         <li><strong>İki paralel üretim:</strong> Kullanıcı Kılavuzu +
@@ -1066,6 +1082,22 @@ npm test                     # 32/32 yeşil olmalı</code></pre>
           tamamlananları yeniden ödemeden kaldığı yerden devam edin.</td>
       </tr>
       <tr>
+        <td>"Ekran analizi max_tokens limitine takıldı"</td>
+        <td>Çok zengin bir ekranda UI öğesi listesi 8000 token'a sığmadı.
+          <strong>Sistem Promptları → Ekran Analiz Promptu → maxTokens</strong>
+          değerini artırın (ör. 12000) veya ekranı işlevsel olarak bölün.
+          Ekran <em>failed</em> kalır; düzeltince Eksikleri Üret ile tekrarlayın.</td>
+      </tr>
+      <tr>
+        <td>Ekrandaki bazı buton/alan kılavuzda yok</td>
+        <td>1) Üretim Bilgisi dipnotundaki <em>UI kapsamı %</em> ve eksik
+          listesine bakın. 2) Öğe modal/panel içindeyse, keşifte o modalın
+          yakalandığından emin olun (Ekran Keşfi state sayısı). 3) Tek
+          bölümü <em>Bölüm Yeniden Üret</em> ile tamamlayın. 4) Hâlâ eksikse
+          <code>COVERAGE_LLM_JUDGE=true</code> olduğunu doğrulayın (sahte
+          %100'ü engeller) ve gerekirse o ekranı yeniden üretin.</td>
+      </tr>
+      <tr>
         <td>Job iptal/fail oldu, üretilenler yok mu sandım?</td>
         <td>Tamamlanmış ekranların dokümanları her zaman
           <strong>Dökümanlar</strong> sayfasında durur (per-ekran kalıcı
@@ -1273,6 +1305,18 @@ npm test                     # 32/32 yeşil olmalı</code></pre>
       her covered öğeyi "anlamlı anlatılmış mı?" diye doğrular; sadece etiket
       mention'ları missing'e geri taşınır → fix-up doğru hedefe yönelir.
       Ekstra maliyet ~$0.005/ekran. Kapatmak için <code>false</code>.</p>
+
+    <h4>Ekrandaki her buton ve alan kılavuza giriyor mu?</h4>
+    <p>Hedef bu. Üç katmanlı güvence: <em>(1)</em> Ekran analizi ana
+      içerikteki tüm UI öğelerini eksiksiz listeler (8000 token tavanı,
+      "kısaltma" yasağı; tavana takılırsa ekran <em>failed</em> olur,
+      sessizce eksik kalmaz). <em>(2)</em> Üretim her öğeyi kılavuzda işler;
+      kapsam eşiğin altındaysa hedefli düzeltme turu çalışır. <em>(3)</em>
+      LLM-judge "sadece adı geçiyor" ile "gerçekten anlatılmış"ı ayırır.
+      <strong>Sınır:</strong> bir öğe yalnızca bir modal/panel içinde
+      görünüyorsa, o modalın keşifte yakalanmış olması gerekir (Ekran Keşfi
+      modal limiti varsayılan 10). Üretim Bilgisi dipnotundaki kapsam %
+      ve eksik listesi her zaman gerçek durumu gösterir.</p>
 
     <h4>Sync edilen Confluence/Jira sayfası kötü bir talimat içerirse
       doküman tehlikeye girer mi?</h4>
