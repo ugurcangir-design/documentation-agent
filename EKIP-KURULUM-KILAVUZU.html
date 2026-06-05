@@ -592,10 +592,24 @@ offline_access</code></pre>
           olarak kaydedilir (Confluence v2 API,
           <code>body-format=storage</code> + entity decode +
           PDF-style TOC/header temizliği).</li>
-        <li>Jira projesi → tüm issue'lar tek dosyada
+        <li>Jira projesi → <strong>aktif/tamamlanmış statüdeki</strong>
+          issue'lar tek dosyada
           <code>data/references/jira/&lt;KEY&gt;.json</code> (ADF
           description'lar düz metne çevrilir).</li>
       </ul>
+      <div class="box info">
+        <strong>Jira statü filtresi</strong>
+        Henüz başlanmamış / iptal işler bağlama <em>alınmaz</em>:
+        <strong>Backlog</strong>, <strong>To Do</strong>,
+        <strong>Cancel / İptal</strong> (ve Türkçe/İngilizce varyasyonları)
+        statüsündeki issue'lar atlanır — bunlar kararlaştırılmış iş değildir
+        ve üretilen kılavuzu yanıltabilir. <em>In Progress</em>,
+        <em>In Review</em>, <em>Done</em> gibi tüm diğer statüler baz alınır.
+        Senkronizasyon log'unda kaç issue'nun bu nedenle atlandığı görünür.
+        Statü ismi kurumunuzda farklıysa
+        <code>src/ingestion/jiraStatusFilter.ts</code> içindeki listeye
+        eklenebilir.
+      </div>
       <p>Üstte <strong>Tümünü Güncelle</strong> butonu kayıtlı tüm
         kaynakları sırayla senkronize eder.</p>
       <div class="box tip">

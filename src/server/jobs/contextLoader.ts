@@ -23,6 +23,7 @@ import { readConfluencePages } from "../../ingestion/confluenceReader";
 import { parseBrdSections } from "../../retrieval/brdSectionParser";
 import { parseDocumentSections } from "../../retrieval/flatTextSectionParser";
 import { cleanReferenceText, decodeHtmlEntities } from "../../quality/referenceTextCleaner";
+import { isExcludedJiraStatus } from "../../ingestion/jiraStatusFilter";
 import { referenceStore } from "../store/referenceStore";
 
 import type { Endpoint } from "../../types/endpoint";
@@ -109,6 +110,10 @@ export async function loadJobContext(jobId: string): Promise<LoadedContext> {
         description?: string;
       }>;
       for (const issue of issues) {
+        // Defensive: bu fix'ten ÖNCE senkronize edilmiş JSON'larda
+        // Backlog/To Do/Cancel issue'ları kalmış olabilir; sync artık
+        // bunları yazmıyor ama eski dump'lar için burada da eliyoruz.
+        if (isExcludedJiraStatus(issue.status)) continue;
         const body = [
           issue.type ? `Tip: ${issue.type}` : "",
           issue.status ? `Durum: ${issue.status}` : "",
