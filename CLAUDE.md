@@ -572,6 +572,11 @@ syncConfluenceSpace(spaceKey) → { count, log[] }
 
 syncJiraProject(projectKey) → { count, log[] }
    // POST /rest/api/3/search/jql {jql, fields, maxResults:100, nextPageToken}
+   // STATÜ FİLTRESİ: isExcludedJiraStatus() ile Backlog/To Do/Cancel
+   //   (jiraStatusFilter.ts, Türkçe-fold normalize) issue'ları atlanır;
+   //   JQL sade tutulur (status ismi projede yoksa JQL patlamasın diye
+   //   post-filter). Atlanan sayısı log'a yazılır. contextLoader 5b'de
+   //   eski sync'ler için defensive aynı filtre tekrar uygulanır.
    // description ADF ise adfToText() ile düzleştir
    // → data/references/jira/<KEY>.json + addJira()
 ```

@@ -22,6 +22,7 @@ import {
 } from "../server/auth/atlassianAuth";
 import { referenceStore } from "../server/store/referenceStore";
 import { decodeHtmlEntities } from "../quality/referenceTextCleaner";
+import { isExcludedJiraStatus } from "./jiraStatusFilter";
 
 const REFS_DIR = path.join(process.cwd(), "data", "references");
 
@@ -171,6 +172,12 @@ export async function syncJiraProject(projectKey: string): Promise<SyncResult> {
     description: string;
   }> = [];
 
+  // Henüz başlanmamış / iptal statülerini bağlama almıyoruz (Backlog,
+  // To Do, Cancel vb.) — bunlar kararlaştırılmış iş değil. JQL'de status
+  // ismiyle filtrelemek, ismin projede bulunmaması durumunda JQL hatası
+  // verir; o yüzden sade JQL ile çekip statü ismini normalize ederek
+  // post-filter uyguluyoruz (instance bağımsız + isim varyasyonu toleranslı).
+  let skippedByStatus = 0;
   let nextPageToken: string | null = null;
   do {
     const body: Record<string, unknown> = {
@@ -186,6 +193,11 @@ export async function syncJiraProject(projectKey: string): Promise<SyncResult> {
     const batch = resp.data.issues ?? [];
     for (const issue of batch) {
       const f = issue.fields ?? {};
+      const statusName = f.status?.name ?? "";
+      if (isExcludedJiraStatus(statusName)) {
+        skippedByStatus++;
+        continue;
+      }
       const desc =
         typeof f.description === "string"
           ? f.description
@@ -193,7 +205,7 @@ export async function syncJiraProject(projectKey: string): Promise<SyncResult> {
       issues.push({
         key: issue.key,
         summary: f.summary ?? "",
-        status: f.status?.name ?? "",
+        status: statusName,
         type: f.issuetype?.name ?? "",
         priority: f.priority?.name ?? "",
         assignee: f.assignee?.displayName ?? "",
@@ -205,6 +217,13 @@ export async function syncJiraProject(projectKey: string): Promise<SyncResult> {
   } while (nextPageToken);
 
   if (issues.length === 0) {
+    if (skippedByStatus > 0) {
+      throw new Error(
+        `Jira projesi "${projectKey}": ${skippedByStatus} issue bulundu ama tümü ` +
+        `Backlog / To Do / Cancel benzeri statülerde olduğu için bağlama alınmadı. ` +
+        `Aktif/tamamlanmış statüde issue yok.`
+      );
+    }
     throw new Error(
       `Jira projesinde issue bulunamadı: "${projectKey}" (key'i ve erişiminizi kontrol edin)`
     );
@@ -223,6 +242,9 @@ export async function syncJiraProject(projectKey: string): Promise<SyncResult> {
     issueCount: issues.length,
   });
 
-  log.push(`Jira [${projectKey}]: ${issues.length} issue senkronize edildi`);
+  log.push(
+    `Jira [${projectKey}]: ${issues.length} issue senkronize edildi` +
+    (skippedByStatus > 0 ? ` (${skippedByStatus} issue Backlog/To Do/Cancel statüsü nedeniyle atlandı)` : "")
+  );
   return { count: issues.length, log };
 }
