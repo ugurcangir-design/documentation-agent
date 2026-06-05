@@ -8,7 +8,8 @@ export type Page =
   | "references"
   | "settings"
   | "prompts"
-  | "update";
+  | "update"
+  | "kilavuz";
 
 interface LayoutProps {
   currentPage: Page;
@@ -82,6 +83,12 @@ const SIDEBAR_GROUPS = [
       { id: "settings" as Page, label: "Ayarlar", icon: icons.settings },
       { id: "prompts" as Page, label: "Sistem Promptları", icon: icons.prompts },
       { id: "update" as Page, label: "Güncelleme", icon: "M8 2v8M5 7l3 3 3-3M2 13h12" },
+    ],
+  },
+  {
+    label: "YARDIM",
+    items: [
+      { id: "kilavuz" as Page, label: "Kullanım Kılavuzu", icon: "M8 1.5A6.5 6.5 0 1 1 8 14.5 6.5 6.5 0 0 1 8 1.5zM8 7v4M8 5h.01" },
     ],
   },
 ];

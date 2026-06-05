@@ -31,9 +31,12 @@ Tarayıcıdan **http://localhost:5173** açın.
 ## Tam Kılavuz
 
 Kurulum, ilk yapılandırma (Claude backend + Atlassian OAuth), kullanım,
-sorun giderme ve SSS için ayrıntılı kılavuz:
+sorun giderme ve SSS için ayrıntılı kılavuz **uygulamanın içindedir**:
+sol menüden **Yardım → Kullanım Kılavuzu** sekmesi. Kodla birlikte
+güncellenir — `git pull` çektiğinizde kılavuzun son hâlini de görürsünüz.
 
-**[EKIP-KURULUM-KILAVUZU.html](EKIP-KURULUM-KILAVUZU.html)** — tarayıcıda açın.
+Kaynak dosya: [`client/public/kilavuz.html`](client/public/kilavuz.html)
+(uygulama çalışmadan okumak isterseniz tarayıcıda doğrudan da açılır).
 
 ## Mimari Notları
 
