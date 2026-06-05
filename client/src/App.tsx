@@ -12,6 +12,7 @@ import ReferencesPage from "./pages/ReferencesPage";
 import PromptsPage from "./pages/PromptsPage";
 import HistoryPage from "./pages/HistoryPage";
 import UpdatePage from "./pages/UpdatePage";
+import KilavuzPage from "./pages/KilavuzPage";
 
 function AppInner() {
   const [page, setPage] = useState<Page>("dashboard");
@@ -89,6 +90,7 @@ function AppInner() {
       {page === "settings" && <SettingsPage />}
       {page === "prompts" && <PromptsPage />}
       {page === "update" && <UpdatePage />}
+      {page === "kilavuz" && <KilavuzPage />}
     </Layout>
   );
 }

@@ -630,6 +630,7 @@ references   → ReferencesPage     5 sekme: Veri Kaynakları | Confluence | Swa
 settings     → SettingsPage       Claude backend + API key + Atlassian OAuth
 prompts      → PromptsPage        15 sistem prompt'u düzenle
 update       → UpdatePage         git pull info + run + log
+kilavuz      → KilavuzPage        client/public/kilavuz.html iframe (uygulama içi kılavuz)
 ```
 
 ### Üst çubuk: **Derin Analiz** anahtarı
