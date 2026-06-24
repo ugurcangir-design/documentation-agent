@@ -309,8 +309,15 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     if (claudeBin !== env.claudeCliBin) {
       console.log(`[claude] CLI resolved: ${env.claudeCliBin} → ${claudeBin}`);
     }
+    // CLI backend yerel Claude Code OTURUMUNU kullanır. Ortamda (özellikle
+    // .env'den process.env'e yüklenmiş) bir ANTHROPIC_API_KEY varsa, claude
+    // CLI oturum yerine o anahtarı kullanır — anahtar eski/geçersizse 401.
+    // CLI'nin amacı oturum olduğundan anahtarı spawn ortamından çıkarıyoruz
+    // (API anahtarı kullanmak isteyen CLAUDE_BACKEND=api seçmelidir).
+    const cliEnv: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: "0" };
+    delete cliEnv.ANTHROPIC_API_KEY;
     const proc = spawn(claudeBin, args, {
-      env: { ...process.env, FORCE_COLOR: "0" },
+      env: cliEnv,
       // Explicitly: no stdin, pipe stdout/stderr. Otherwise the CLI waits
       // 3s for stdin data and exits with a non-zero warning.
       stdio: ["ignore", "pipe", "pipe"],
