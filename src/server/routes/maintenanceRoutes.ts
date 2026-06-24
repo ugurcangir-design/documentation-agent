@@ -4,38 +4,34 @@ import path from "path";
 
 import { screenStore } from "../store/screenStore";
 import { documentStore } from "../store/documentStore";
+import { computeReferencedScreenshots } from "../../quality/screenshotRefs";
 
 const router = Router();
 
 /**
- * Delete screenshots that are no longer referenced by any screen, state
- * or document. Returns counts + bytes freed.
+ * Hiçbir doküman/ekran tarafından kullanılmayan ekran görüntülerini siler.
+ * "Kullanılan" tanımı için bkz. quality/screenshotRefs — kabaca: bir
+ * dokümana gömülü görseller + ekran/doküman küçük-resimleri + henüz
+ * dokümante edilmemiş ekranların state'leri korunur. Dokümante edilmiş
+ * ekranların kılavuza girmeyen fazla state görüntüleri temizlenir.
  *
- * Referenced if any of:
- *   - screenStore.screenshotPath
- *   - screenStore.states[*].screenshotPath
- *   - documentStore.screenshotPath
+ * Yanıt `reason` alanı: 0 silindiğinde kullanıcıya NEDEN açıklanır.
  */
 router.post("/cleanup-screenshots", (_req: Request, res: Response) => {
-  const referenced = new Set<string>();
-
-  for (const s of screenStore.getAll()) {
-    if (s.screenshotPath) referenced.add(path.basename(s.screenshotPath));
-    for (const st of s.states ?? []) {
-      if (st.screenshotPath) referenced.add(path.basename(st.screenshotPath));
-    }
-  }
-  for (const d of documentStore.getAll()) {
-    if (d.screenshotPath) referenced.add(path.basename(d.screenshotPath));
-  }
+  const referenced = computeReferencedScreenshots(
+    screenStore.getAll(),
+    documentStore.getAll()
+  );
 
   const shotDir = path.join(process.cwd(), "data", "screenshots");
   let removed = 0;
   let bytesFreed = 0;
+  let scanned = 0;
 
   if (fs.existsSync(shotDir)) {
     for (const file of fs.readdirSync(shotDir)) {
       if (!file.endsWith(".png")) continue;
+      scanned++;
       if (referenced.has(file)) continue;
       const fp = path.join(shotDir, file);
       try {
@@ -47,7 +43,16 @@ router.post("/cleanup-screenshots", (_req: Request, res: Response) => {
     }
   }
 
-  res.json({ removed, bytesFreed, kept: referenced.size });
+  // 0 silindiğinde nedeni açıkla — "çalışmıyor" algısını önle.
+  let reason: string | undefined;
+  if (removed === 0) {
+    const hasDocs = documentStore.getAll().length > 0;
+    reason = hasDocs
+      ? "Silinecek kullanılmayan görüntü yok — taranan tüm görüntüler bir ekran ya da üretilmiş doküman tarafından kullanılıyor."
+      : "Henüz doküman üretilmediği için tüm keşif görüntüleri olası kullanım için saklanıyor. Doküman ürettikten sonra kılavuza girmeyen fazla görüntüler burada temizlenebilir.";
+  }
+
+  res.json({ removed, bytesFreed, scanned, kept: referenced.size, ...(reason ? { reason } : {}) });
 });
 
 /**
