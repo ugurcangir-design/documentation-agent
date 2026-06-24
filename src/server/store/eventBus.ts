@@ -1,7 +1,10 @@
 import { EventEmitter } from "events";
 
 export interface JobEvent {
-  type: "progress" | "screen" | "complete" | "error";
+  // Terminal job olayları: complete | failed | cancelled (stream kapanır).
+  // "error" job'ı SONLANDIRMAZ — tek bir ekranın hatasını bildirir, job
+  // diğer ekranlarla devam eder (frontend log'a yazar ama stream'i kapatmaz).
+  type: "progress" | "screen" | "complete" | "error" | "failed" | "cancelled";
   message: string;
   current?: number;
   total?: number;

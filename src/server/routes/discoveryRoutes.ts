@@ -75,8 +75,10 @@ router.get("/:jobId/stream", (req: Request, res: Response) => {
       job.status === "completed" ||
       job.status === "failed"
     ) {
+      // Bitmiş job'a yeniden bağlanan istemciye TERMINAL olay (failed),
+      // tek-ekran "error" ile karışmasın.
       send({
-        type: job.status === "completed" ? "complete" : "error",
+        type: job.status === "completed" ? "complete" : "failed",
         message: job.progress.message,
       });
     }

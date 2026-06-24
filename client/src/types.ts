@@ -65,7 +65,9 @@ export interface Job {
 }
 
 export interface JobEvent {
-  type: "progress" | "screen" | "complete" | "error";
+  // "error" = tek ekran hatası (non-terminal; job devam eder).
+  // complete | failed | cancelled = terminal (stream kapanır).
+  type: "progress" | "screen" | "complete" | "error" | "failed" | "cancelled";
   message: string;
   current?: number;
   total?: number;
