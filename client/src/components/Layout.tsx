@@ -203,7 +203,7 @@ export default function Layout({
                       <Icon d={item.icon} size={14} />
                     </span>
                     <span className="flex-1 truncate">{item.label}</span>
-                    {badge !== null && badge > 0 && (
+                    {badge != null && badge > 0 && (
                       <span
                         className={`text-[10px] font-mono px-1.5 rounded-full min-h-[16px] inline-flex items-center ${
                           active
