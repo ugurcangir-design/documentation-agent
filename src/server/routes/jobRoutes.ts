@@ -221,8 +221,11 @@ router.get("/:jobId/stream", (req: Request, res: Response) => {
       job.status === "completed" ||
       job.status === "failed"
     ) {
+      // Zaten bitmiş job'a yeniden bağlanan istemciye TERMINAL olay gönder.
+      // "failed" terminal'dir; "error" (tek-ekran) ile karıştırılmamalı —
+      // aksi halde yeni mantıkta frontend bitmiş job'u sonlanmış saymaz.
       send({
-        type: job.status === "completed" ? "complete" : "error",
+        type: job.status === "completed" ? "complete" : "failed",
         message: job.progress.message,
       });
     }

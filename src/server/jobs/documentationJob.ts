@@ -95,7 +95,7 @@ export async function runDocumentationJob(
     ...(wasCancelled ? { error: "Cancelled by user" } : {}),
   });
   emitJobEvent(jobId, {
-    type: wasCancelled ? "error" : "complete",
+    type: wasCancelled ? "cancelled" : "complete",
     message: wasCancelled ? "İptal edildi" : "Tüm dökümanlar oluşturuldu",
     current: completed,
     total,

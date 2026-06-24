@@ -33,7 +33,10 @@ export default function ProgressView({
     es.onmessage = (e) => {
       const event = JSON.parse(e.data as string) as JobEvent;
 
-      setLogs((prev) => [...prev, event.message]);
+      // Tek ekran hatası (non-terminal) → log'da görünür işaretle ama
+      // stream'i KAPATMA; job diğer ekranlarla devam eder.
+      const prefix = event.type === "error" ? "⚠ " : "";
+      setLogs((prev) => [...prev, prefix + event.message]);
 
       if (event.current !== undefined) setCurrent(event.current);
 
@@ -46,9 +49,11 @@ export default function ProgressView({
         }
       }
 
-      if (event.type === "complete" || event.type === "error") {
+      // Yalnız TERMINAL olaylar stream'i kapatır. "error" tek-ekran
+      // hatasıdır (job sürer) — burada job'ı bitmiş sayma.
+      if (event.type === "complete" || event.type === "failed" || event.type === "cancelled") {
         setDone(true);
-        if (event.type === "error") setEndedWithError(true);
+        if (event.type !== "complete") setEndedWithError(true);
         es.close();
         if (event.type === "complete") onComplete?.();
       }

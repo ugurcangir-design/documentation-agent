@@ -178,7 +178,7 @@ export async function runDiscoveryJob(
     });
 
     emitJobEvent(jobId, {
-      type: "error",
+      type: "failed",
       message,
     });
 
