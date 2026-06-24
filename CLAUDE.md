@@ -252,6 +252,9 @@ env.claudeCliBin  = 'claude'
 isPromptTooLong(err) → boolean         // generator backoff için
 isTransientError(err) → boolean        // retry (529/429/timeout/ECONNRESET/
                                        //   ECONNREFUSED) — export, test'li
+friendlyCliError(out,err,code)         // CLI exit≠0 / is_error:true → stdout
+                                       //   JSON'dan anlamlı mesaj; 401 auth
+                                       //   ipucu. Jenerik "exit 1" gizlemez.
 ClaudeResult.truncated                 // stop_reason === 'max_tokens' → true
 ClaudeResult.stopReason                // Claude'un duruş nedeni (opsiyonel)
 ClaudeResult.cacheReadTokens           // ephemeral cache okuma (0.1× ücret)
