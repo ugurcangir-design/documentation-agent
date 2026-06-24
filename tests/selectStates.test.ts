@@ -41,4 +41,15 @@ describe("selectRepresentativeStates", () => {
     expect(picked.some((s) => s.label.includes("doğrulama uyarısı"))).toBe(true);
     expect(picked.some((s) => s.label.includes("Filtre/arama sonucu"))).toBe(true);
   });
+
+  it("tab'ları cömertçe korur (her sekme ayrı alt-ekran)", () => {
+    const states: ScreenState[] = [];
+    // 8 sekme + 12 gürültü state'i (cap 1'lik kategoriler)
+    for (let i = 0; i < 8; i++) states.push(st(`Sekme: T${i}`, `tab tıklandı: T${i}`));
+    for (let i = 0; i < 12; i++) states.push(st(`Sıralama: k${i}`, `kolon header tıklandı: k${i}`));
+    const picked = selectRepresentativeStates(states);
+    const tabs = picked.filter((s) => s.triggeredBy.includes("tab tıklandı"));
+    // sekme cap 8 → 8 sekmenin tümü hayatta kalmalı
+    expect(tabs.length).toBe(8);
+  });
 });

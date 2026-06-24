@@ -21,6 +21,10 @@ export const SIDEBAR_NAV_HINTS: readonly string[] = [
   "outright program", "live program", "newspaper program", "v-sport program",
   "exported program", "groups", "outright",
   "settings", "ürünler", "users", "logout", "çıkış",
+  // Global üst-bar kontrolleri — ekran içeriği değil, sayfa şablonu.
+  "profil", "profilim", "profile", "hesap", "hesabım", "account",
+  "dil", "language", "türkçe", "english", "notifications", "bildirimler",
+  "oturumu kapat", "sign out",
 ];
 
 export interface SidebarNavLike {

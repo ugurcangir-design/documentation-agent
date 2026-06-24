@@ -17,7 +17,9 @@ const MAX_PER_CATEGORY: Record<string, number> = {
   dolu: 4,
   modal: 3,
   panel: 2,
-  sekme: 2,
+  // Tab'lar ayrı alt-ekranlardır; her biri kılavuzda kendi başlığını hak
+  // eder → cap yüksek (eskiden 2 idi, çoğu tab kılavuza giremiyordu).
+  sekme: 8,
   dropdown: 1,
   tarih: 1,
   checkbox: 1,
@@ -30,7 +32,7 @@ const MAX_PER_CATEGORY: Record<string, number> = {
   buton: 1,
 };
 
-const TOTAL_MAX = 15;
+const TOTAL_MAX = 18;
 
 function categorize(state: ScreenState): string {
   const t = state.triggeredBy.toLowerCase();

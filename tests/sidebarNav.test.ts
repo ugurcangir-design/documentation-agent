@@ -38,4 +38,10 @@ describe("isSidebarNav", () => {
     expect(isSidebarNav({ type: "button", label: "Kaydet" })).toBe(false);
     expect(isSidebarNav({ type: "filter", label: "Tarih" })).toBe(false);
   });
+
+  it("Global üst-bar kontrolleri (profil/dil/bildirim/çıkış) global nav sayılır", () => {
+    for (const label of ["Profil", "Profilim", "Hesabım", "Dil", "Language", "Türkçe", "English", "Bildirimler", "Oturumu Kapat"]) {
+      expect(isSidebarNav({ type: "button", label })).toBe(true);
+    }
+  });
 });
