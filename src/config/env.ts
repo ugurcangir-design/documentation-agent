@@ -73,4 +73,13 @@ export const env = {
   get allowFormSubmit(): boolean {
     return (process.env.ALLOW_FORM_SUBMIT || "false").toLowerCase() === "true";
   },
+
+  // Derin keşif: ekrandaki HER sekme için, o sekmenin içindeki butonları/
+  // modalları/formları/mesajları ayrı ayrı simüle eder (gerçek kullanıcı
+  // gibi tüm akışları gezer). Kapsamlı kılavuz için varsayılan AÇIK; çok
+  // sekmeli ekranlarda keşif süresi/maliyeti artar → DEEP_EXPLORE=false
+  // ile kapatılabilir (yalnız aktif sekme derinlemesine gezilir).
+  get deepExplore(): boolean {
+    return (process.env.DEEP_EXPLORE || "true").toLowerCase() !== "false";
+  },
 };
