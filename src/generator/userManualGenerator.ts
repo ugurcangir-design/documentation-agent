@@ -25,6 +25,65 @@ export interface GenerationResult {
  * Cache hit minimum ~1024 token gerektirir; şablonlar yoksa prefix
  * küçük kalır ve cache devreye girmeyebilir (zararı yoktur).
  */
+export interface StateImageRef {
+  n: number;
+  label: string;
+  triggeredBy: string;
+  url: string;
+}
+
+/**
+ * Görsel embed bloğunu kurar. KRİTİK: ekranın hiç state'i olmasa bile
+ * **en azından ana ekran görseli** her zaman embed talimatına girer —
+ * aksi halde (eski hata) state'siz ekranlarda görsel tablosu komple
+ * düşüyor, model görseli vision'da görse de gömmüyor → ekran görüntüsüz,
+ * eksik kılavuz. `mainImgUrl` null ise (ana görsel yok) yalnız state'ler;
+ * hiç görsel yoksa boş döner.
+ */
+export function buildScreenshotEmbedBlock(
+  mainImgUrl: string | null,
+  stateImageList: StateImageRef[],
+  screenPath: string
+): string {
+  const hasMain = !!mainImgUrl;
+  const stateCount = stateImageList.length;
+  const totalImages = (hasMain ? 1 : 0) + stateCount;
+  if (totalImages === 0) return "";
+
+  const minEmbeds = Math.min(totalImages, 12);
+
+  const rows: string[] = [];
+  if (hasMain) rows.push(`| 1 | Ana ekran | (sayfa açılışı) | \`![Ana ekran](${mainImgUrl})\` |`);
+  for (const s of stateImageList) {
+    rows.push(`| ${s.n} | ${s.label} | ${s.triggeredBy} | \`![${s.label}](${s.url})\` |`);
+  }
+  const imageTable =
+    `| # | Etiket | Tetikleyici | Embed kodu |\n|---|---|---|---|\n` + rows.join("\n");
+
+  const placement = stateCount > 0
+    ? `**Yerleştirme:**\n` +
+      `- Ana ekran görseli → 'Ekrana İlk Bakış' ilk paragraftan sonra\n` +
+      `- 'Filtre' / 'Filters' içeren görsel → 'Filtreler ve Arama Seçenekleri' başlığı altı + filtre alanlarını TEK TEK anlat\n` +
+      `- 'Modal' veya 'Panel/etki' ile başlayan görseller → 'Modallar ve Yan Paneller' alt başlıklarında, içindeki TÜM form alanlarını anlat\n` +
+      `- '(dolu)' veya 'Form dolu' içeren görseller → ilgili formun ALTINDA 'Örnek Veri Girişi' diye numaralı adımlar yaz: her alana NE girileceğini görseldeki örnek değerlerle göster (örn. \"1. **Ad** alanına firma adını girin (örn: Örnek Ad)\"). Bu görseller test verisiyle doldurulmuş gerçek hâli gösterir — kılavuzu bu somut örnek üzerinden adım adım anlat.\n` +
+      `- 'doğrulama uyarısı' içeren görseller → 'Doğrulama ve Hata Mesajları' başlığında: zorunlu/geçersiz alan bırakılırsa kullanıcının göreceği uyarıyı ve nasıl düzelteceğini anlat.\n` +
+      `- 'Filtre/arama sonucu' içeren görseller → filtre anlatımının sonunda 'Sonuçların Görüntülenmesi': filtre uygulandıktan sonra listenin nasıl güncellendiğini göster.\n` +
+      `- 'Kayıt sonrası' içeren görseller → ilgili kaydetme akışının SONUNDA 'Kaydetme ve Sonrası': Kaydet'e basıldıktan sonra ne olur (başarı mesajı, modalın kapanması, listeye dönüş) anlat.\n` +
+      `- 'Sıralama' / kolon header → 'Tablo / Liste Görünümü' içinde\n` +
+      `- 'Satır aksiyon' → 'Satır Üzerindeki İşlemler' içinde, menüdeki tüm seçenekleri listele\n` +
+      `- Diğer state'ler (toggle, checkbox, input, tooltip, dropdown) → ilgili oldukları bölüm\n`
+    : `**Yerleştirme:**\n` +
+      `- Ana ekran görselini 'Ekrana İlk Bakış' bölümünün ilk paragrafından sonra MUTLAKA embed et.\n`;
+
+  return (
+    `\n\n# ${totalImages} GÖRSEL VERİLDİ — TAMAMINI EMBED ET\n\n${imageTable}\n\n` +
+    placement +
+    `\n**Kural:** En az ${minEmbeds} embed. Path'leri AYNEN yukarıdaki tablodaki gibi kullan. ` +
+    `EKRAN GÖRÜNTÜSÜ OLMADAN KILAVUZ YAZMA — en azından ana ekran görselini embed etmek ZORUNLUDUR.\n\n` +
+    `**Yasak:** Görsellerde sol sidebar'da 'Sport Base Data', 'Sports', 'Categories', 'Multi Feed Settings' vb. olabilir — bunlar GLOBAL NAV, başka sayfalara gider. URL'i ${screenPath} olan bu ekranın parçası DEĞİL. Bahsetme, listeleme.\n`
+  );
+}
+
 function buildPrompt(ctx: ScreenContext, templates: string[]): { cachedPrefix: string; prompt: string } {
   const cfg = loadPromptConfig("userManual");
 
@@ -81,35 +140,11 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): { cachedPrefix: s
     url: `/screenshots/${basename(s.screenshotPath)}`,
   }));
 
-  // Single compact image catalog — used both for context (list) and
-  // for embed enforcement. No more duplicate state-image listings.
-  const stateCount = stateImageList.length;
-  const minEmbeds = Math.max(6, Math.min(stateCount + 1, 12));
-
-  const imageTable =
-    `| # | Etiket | Tetikleyici | Embed kodu |\n` +
-    `|---|---|---|---|\n` +
-    `| 1 | Ana ekran | (sayfa açılışı) | \`![Ana ekran](${mainImgUrl})\` |\n` +
-    stateImageList
-      .map((s) => `| ${s.n} | ${s.label} | ${s.triggeredBy} | \`![${s.label}](${s.url})\` |`)
-      .join("\n");
-
-  const stateBlock = stateCount > 0
-    ? `\n\n# ${stateCount + 1} GÖRSEL VERİLDİ — TAMAMINI EMBED ET\n\n${imageTable}\n\n` +
-      `**Yerleştirme:**\n` +
-      `- Görsel 1 → 'Ekrana İlk Bakış' ilk paragraftan sonra\n` +
-      `- 'Filtre' / 'Filters' içeren görsel → 'Filtreler ve Arama Seçenekleri' başlığı altı + filtre alanlarını TEK TEK anlat\n` +
-      `- 'Modal' veya 'Panel/etki' ile başlayan görseller → 'Modallar ve Yan Paneller' alt başlıklarında, içindeki TÜM form alanlarını anlat\n` +
-      `- '(dolu)' veya 'Form dolu' içeren görseller → ilgili formun ALTINDA 'Örnek Veri Girişi' diye numaralı adımlar yaz: her alana NE girileceğini görseldeki örnek değerlerle göster (örn. \"1. **Ad** alanına firma adını girin (örn: Örnek Ad)\"). Bu görseller test verisiyle doldurulmuş gerçek hâli gösterir — kılavuzu bu somut örnek üzerinden adım adım anlat.\n` +
-      `- 'doğrulama uyarısı' içeren görseller → 'Doğrulama ve Hata Mesajları' başlığında: zorunlu/geçersiz alan bırakılırsa kullanıcının göreceği uyarıyı ve nasıl düzelteceğini anlat.\n` +
-      `- 'Filtre/arama sonucu' içeren görseller → filtre anlatımının sonunda 'Sonuçların Görüntülenmesi': filtre uygulandıktan sonra listenin nasıl güncellendiğini göster.\n` +
-      `- 'Kayıt sonrası' içeren görseller → ilgili kaydetme akışının SONUNDA 'Kaydetme ve Sonrası': Kaydet'e basıldıktan sonra ne olur (başarı mesajı, modalın kapanması, listeye dönüş) anlat.\n` +
-      `- 'Sıralama' / kolon header → 'Tablo / Liste Görünümü' içinde\n` +
-      `- 'Satır aksiyon' → 'Satır Üzerindeki İşlemler' içinde, menüdeki tüm seçenekleri listele\n` +
-      `- Diğer state'ler (toggle, checkbox, input, tooltip, dropdown) → ilgili oldukları bölüm\n\n` +
-      `**Kural:** En az ${minEmbeds} embed. Path'leri AYNEN yukarıdaki tablodaki gibi kullan.\n\n` +
-      `**Yasak:** Görsellerde sol sidebar'da 'Sport Base Data', 'Sports', 'Categories', 'Multi Feed Settings' vb. olabilir — bunlar GLOBAL NAV, başka sayfalara gider. URL'i ${ctx.screen.path} olan bu ekranın parçası DEĞİL. Bahsetme, listeleme.\n`
-    : "";
+  const stateBlock = buildScreenshotEmbedBlock(
+    ctx.screen.screenshotPath ? mainImgUrl : null,
+    stateImageList,
+    ctx.screen.path
+  );
 
   // Job-stable prefix — bu metin aynı job içinde her ekran için byte-byte
   // aynıdır → cache hit. Header + (varsa) şablon bloğu + output structure
