@@ -121,11 +121,13 @@ async function main(): Promise<void> {
         console.log(`    Generating technical doc section...`);
         const technicalDocSection = await generateTechnicalDocSection(context);
 
+        // generate*Section GenerationResult döndürür ({ content, tokens… });
+        // ScreenDocumentation yalnız markdown metin (.content) bekler.
         screenDocs.push({
           screen,
           analysis,
-          userManualSection,
-          technicalDocSection,
+          userManualSection: userManualSection.content,
+          technicalDocSection: technicalDocSection.content,
         });
 
         console.log(`    Done.`);
