@@ -307,6 +307,9 @@ FILL_TEST_DATA = true              // keşifte form/modal'ı test verisiyle
 ALLOW_FORM_SUBMIT = false          // ⚠️ açıkken Kaydet/Gönder GERÇEKTEN
                                    //   tıklanır → hedef app'te gerçek kayıt.
                                    //   Yalnız test/staging. Varsayılan kapalı.
+DEEP_EXPLORE = true                // her sekmenin İÇİNİ ayrı derinlemesine
+                                   //   gez (sekme-içi buton/modal/form). Çok
+                                   //   sekmeli ekranda süre/maliyet artar.
 ```
 Lazy getter — Ayarlar'dan değiştirilince sunucu restart gerekmez.
 
@@ -564,11 +567,19 @@ Ekranın kendisi formsa (oluştur/düzenle/liste+filtre) en sonda ana-içerik
 
 ### selectStates — submit-akışı önceliği
 `categorize()` yeni state tiplerini ayrı yüksek-öncelikli kategorilere
-sokar: `kayit` (kayıt-sonrası, cap 3), `uyari` (doğrulama, cap 2), `sonuc`
-(filtre/arama sonucu, cap 2), `dolu` (test-verisiyle doldurulmuş, cap 4),
+sokar: `kayit` (cap 4), `uyari` (cap 3), `sonuc` (cap 3), `dolu` (cap 6),
+`modal` (cap 6 — derin keşifte sekme-içi modallar için yüksek),
 `sekme` (cap 8 — her tab ayrı alt-ekran, hepsi kılavuza girmeli).
-`TOTAL_MAX=18`. Bunlar adım-adım + submit-sonrası kılavuzun temeli olduğu
+`TOTAL_MAX=22`. Bunlar adım-adım + submit-sonrası kılavuzun temeli olduğu
 için eleme sırasında korunur.
+
+### Sekme-içi derin keşif (env.deepExplore, default açık)
+`interactiveExplorer.exploreTabContent` her sekme aktifken o sekmenin
+İÇİNİ gerçek kullanıcı gibi gezer: sekme butonları → modal/popup/alert +
+form doldurma + doğrulama/submit katmanları (sekme başına ≤6 modal) +
+inline form doldurma + okuma-submit sonucu. Her sekme TAZE etiket setiyle
+bağımsız keşfedilir; state dosyaları `${base}_tab_${i}_*`. Sekme görselleri
+fullPage. DEEP_EXPLORE=false → yalnız aktif sekme derinlemesine gezilir.
 
 ### Global chrome dışlama (profil/dil/header)
 `interactiveExplorer.isInNavOrSidebar` sidebar + üst bar (header/topbar/
