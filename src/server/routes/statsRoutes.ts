@@ -3,12 +3,9 @@ import { documentStore } from "../store/documentStore";
 import { jobStore } from "../store/jobStore";
 import { screenStore } from "../store/screenStore";
 import { referenceStore } from "../store/referenceStore";
+import { aggregateUsage } from "../../quality/usageCost";
 
 const router = Router();
-
-// Claude Sonnet pricing (USD per million tokens)
-const INPUT_PRICE = 3.0;
-const OUTPUT_PRICE = 15.0;
 
 router.get("/", (_req: Request, res: Response) => {
   const docs = documentStore.getAll();
@@ -16,11 +13,8 @@ router.get("/", (_req: Request, res: Response) => {
   const screens = screenStore.getAll();
   const refs = referenceStore.getAll();
 
-  const inputTokens = docs.reduce((s, d) => s + (d.inputTokens ?? 0), 0);
-  const outputTokens = docs.reduce((s, d) => s + (d.outputTokens ?? 0), 0);
-  const totalCostUsd =
-    (inputTokens / 1_000_000) * INPUT_PRICE +
-    (outputTokens / 1_000_000) * OUTPUT_PRICE;
+  const { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, totalCostUsd } =
+    aggregateUsage(docs);
 
   const recentJobs = jobs
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -60,7 +54,9 @@ router.get("/", (_req: Request, res: Response) => {
     usage: {
       inputTokens,
       outputTokens,
-      totalCostUsd: Math.round(totalCostUsd * 100) / 100,
+      cacheReadTokens,
+      cacheCreationTokens,
+      totalCostUsd,
     },
     recentJobs,
     recentDocs,

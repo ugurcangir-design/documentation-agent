@@ -8,7 +8,9 @@
  */
 
 import type { Page, Locator } from "playwright";
-import { captureScreenshot } from "./screenshotCapture";
+import { captureScreenshot, type CaptureOptions } from "./screenshotCapture";
+import { fillTestData, triggerValidation, clickSubmitButton } from "./formFiller";
+import { env } from "../config/env";
 import type { ScreenState } from "../types/screen";
 
 const DESTRUCTIVE_PATTERNS = [
@@ -71,6 +73,18 @@ async function modalIsOpen(page: Page): Promise<boolean> {
     } catch { /* noop */ }
   }
   return false;
+}
+
+/** Açık modal/dialog'un Locator'ını döndürür (clip'li screenshot için).
+ *  Yoksa null. */
+async function openModalLocator(page: Page): Promise<Locator | null> {
+  for (const sel of MODAL_SELECTORS) {
+    try {
+      const loc = page.locator(sel).first();
+      if (await loc.isVisible({ timeout: 200 })) return loc;
+    } catch { /* noop */ }
+  }
+  return null;
 }
 
 async function closeModal(page: Page): Promise<void> {
@@ -171,7 +185,7 @@ async function runActionButtonPass(
   basePath: string,
   log: (m: string) => void,
   clickedLabels: Set<string>,
-  pushState: (label: string, triggeredBy: string, filename: string) => Promise<void>
+  pushState: (label: string, triggeredBy: string, filename: string, capture?: CaptureOptions) => Promise<void>
 ): Promise<void> {
   const root = page.locator(
     'button:not([disabled]), [role="button"]:not([aria-disabled="true"])'
@@ -237,34 +251,82 @@ async function runActionButtonPass(
       continue;
     }
 
-    const isModal = await modalIsOpen(page);
+    const modalLoc = await openModalLocator(page);
+    const isModal = modalLoc !== null;
     const kind = isModal ? "Modal" : "Panel/etki";
-    await pushState(`${kind}: "${cand.label}"`, `buton tıklandı: ${cand.label}`, `${basePath}_btn_${cand.index}`);
+    // Modal'ı arka plan karartması olmadan kırparak yakala; panel için viewport.
+    const clipOpt: CaptureOptions = isModal && modalLoc ? { clip: modalLoc } : {};
+    await pushState(`${kind}: "${cand.label}"`, `buton tıklandı: ${cand.label}`, `${basePath}_btn_${cand.index}`, clipOpt);
     log(`  ✓ ${kind} yakalandı: ${cand.label}${cand.priority === 2 ? " (öncelikli)" : ""}`);
     captured++;
 
-    // Sub-explore: focus a field inside the open modal/panel
-    try {
-      const subInputs = page.locator(
-        'input[type="date"]:visible, input[type="datetime-local"]:visible, ' +
-        'input[type="text"]:not([disabled]):not([readonly]):visible, ' +
-        'input[type="search"]:visible, ' +
-        '[class*="DatePicker"]:visible, [role="combobox"]:visible'
-      );
-      if ((await subInputs.count()) > 0) {
-        const sub = subInputs.first();
-        await sub.focus({ timeout: 1500 }).catch(async () => {
-          await sub.click({ timeout: 1500, force: true }).catch(() => {});
-        });
-        await page.waitForTimeout(600);
-        await pushState(
-          `${kind} içi alan: "${cand.label}"`,
-          `${kind} açıkken alt alan focus`,
-          `${basePath}_btn_${cand.index}_inner`
+    // Sub-explore: modal/panel açıkken alanları güvenli test verisiyle
+    // doldur ve "dolu form" state'ini yakala → kılavuz adım-adım veri
+    // girişini gerçek değerlerle anlatabilir (asla submit edilmez).
+    if (env.fillTestData) {
+      try {
+        const scope = isModal && modalLoc ? modalLoc : page;
+        const { filledCount } = await fillTestData(page, scope, log);
+        if (filledCount > 0) {
+          await page.waitForTimeout(400);
+          await pushState(
+            `${kind} (dolu): "${cand.label}"`,
+            `${kind} test verisiyle dolduruldu (${filledCount} alan)`,
+            `${basePath}_btn_${cand.index}_filled`,
+            clipOpt
+          );
+          log(`  ↳ ${kind} dolu form state'i yakalandı (${filledCount} alan)`);
+
+          // Katman A — doğrulama uyarısı (mutasyonsuz): bir alanı geçersiz
+          // yap, blur ile inline hata mesajını yakala, sonra yeniden doldur.
+          try {
+            if (await triggerValidation(page, scope, log)) {
+              await pushState(
+                `${kind} doğrulama uyarısı: "${cand.label}"`,
+                `zorunlu/geçersiz alan blur — istemci doğrulaması`,
+                `${basePath}_btn_${cand.index}_invalid`,
+                clipOpt
+              );
+              await fillTestData(page, scope, log); // geçerli değere dön
+              await page.waitForTimeout(300);
+            }
+          } catch { /* doğrulama tetiklenemedi */ }
+
+          // Katman C — GERÇEK yazma submit (yalnız ALLOW_FORM_SUBMIT açıkken;
+          // hedef uygulamada gerçek kayıt oluşturur). Kayıt-sonrası ekranı
+          // (başarı toast'ı / kapanan modal / liste) yakalar.
+          if (env.allowFormSubmit) {
+            try {
+              const res = await clickSubmitButton(page, scope, "write", log);
+              if (res.clicked) {
+                await page.waitForTimeout(1500);
+                const stillModal = await modalIsOpen(page);
+                await pushState(
+                  `Kayıt sonrası: "${cand.label}"`,
+                  `form gönderildi (${res.label}) — GERÇEK submit`,
+                  `${basePath}_btn_${cand.index}_saved`,
+                  stillModal ? clipOpt : { fullPage: true }
+                );
+                log(`  ✓ Kayıt-sonrası ekran yakalandı (${res.label})`);
+              }
+            } catch { /* submit başarısız */ }
+          }
+        }
+      } catch { /* doldurma başarısızsa boş form state'i yeterli */ }
+    } else {
+      // Doldurma kapalıysa en azından bir alanı focus'la (eski davranış).
+      try {
+        const subInputs = page.locator(
+          'input[type="text"]:not([disabled]):not([readonly]):visible, ' +
+          'input[type="search"]:visible, [role="combobox"]:visible'
         );
-        log(`  ↳ ${kind} içi state yakalandı`);
-      }
-    } catch { /* noop */ }
+        if ((await subInputs.count()) > 0) {
+          await subInputs.first().focus({ timeout: 1500 }).catch(() => {});
+          await page.waitForTimeout(500);
+          await pushState(`${kind} içi alan: "${cand.label}"`, `${kind} açıkken alt alan focus`, `${basePath}_btn_${cand.index}_inner`, clipOpt);
+        }
+      } catch { /* noop */ }
+    }
 
     if (isModal) {
       await closeModal(page);
@@ -297,8 +359,13 @@ export async function exploreInteractiveStates(
   await page.waitForTimeout(1500);
   try { await page.waitForLoadState("networkidle", { timeout: 4000 }); } catch { /* noop */ }
 
-  const pushState = async (label: string, triggeredBy: string, filename: string) => {
-    const shot = await captureScreenshot(page, filename);
+  const pushState = async (
+    label: string,
+    triggeredBy: string,
+    filename: string,
+    capture?: CaptureOptions
+  ) => {
+    const shot = await captureScreenshot(page, filename, capture);
     states.push({
       label,
       triggeredBy,
@@ -521,13 +588,32 @@ export async function exploreInteractiveStates(
         await icon.click({ timeout: ACTION_TIMEOUT, force: true });
       });
       await page.waitForTimeout(RENDER_WAIT + 400);
-      if (await modalIsOpen(page)) {
+      const editModal = await openModalLocator(page);
+      if (editModal) {
+        const clipOpt: CaptureOptions = { clip: editModal };
         await pushState(
           `Modal: "${lbl}" (satır düzenleme/detay)`,
           `satır ${lbl} ikonu tıklandı`,
-          `${basePath}_rowedit`
+          `${basePath}_rowedit`,
+          clipOpt
         );
         log(`  ✓ Satır düzenleme/detay modalı yakalandı: ${lbl}`);
+        // Düzenleme modalı genelde mevcut kayıt verisiyle dolu gelir; boş
+        // alan varsa test verisiyle doldur ve dolu hâli de yakala.
+        if (env.fillTestData) {
+          try {
+            const { filledCount } = await fillTestData(page, editModal, log);
+            if (filledCount > 0) {
+              await page.waitForTimeout(400);
+              await pushState(
+                `Modal (dolu): "${lbl}" (satır düzenleme/detay)`,
+                `düzenleme modalı test verisiyle dolduruldu (${filledCount} alan)`,
+                `${basePath}_rowedit_filled`,
+                clipOpt
+              );
+            }
+          } catch { /* noop */ }
+        }
         await closeModal(page);
         break;
       }
@@ -723,6 +809,73 @@ export async function exploreInteractiveStates(
         return true;
       }
     );
+  }
+
+  // ── 11. ANA EKRAN FORMU — ekranın kendisi bir form ise (oluştur/düzenle
+  // sayfası) ana içerik alanını test verisiyle doldur ve dolu hâli yakala.
+  // En sona alındı: önceki pass'leri (checkbox revert, hover) bozmaz.
+  if (env.fillTestData && !(await modalIsOpen(page))) {
+    try {
+      const mainScope = page.locator("main, [role=main], form").first();
+      const scope = (await mainScope.count().catch(() => 0)) > 0 ? mainScope : page;
+      const { filledCount, labels } = await fillTestData(page, scope, log);
+      if (filledCount >= 2) {
+        await page.waitForTimeout(400);
+        await pushState(
+          `Form dolu (ana ekran)`,
+          `ana ekran formu test verisiyle dolduruldu: ${labels.slice(0, 4).join(", ")}`,
+          `${basePath}_form_filled`,
+          { fullPage: true }
+        );
+        log(`  ✓ Ana ekran dolu form state'i yakalandı (${filledCount} alan)`);
+
+        // Katman B — okuma submit'i (Ara/Filtrele/Listele): mutasyonsuz,
+        // her zaman güvenli. Filtre/arama sonucu ekranını yakala.
+        try {
+          const r = await clickSubmitButton(page, scope, "read", log);
+          if (r.clicked) {
+            await page.waitForTimeout(1200);
+            await pushState(
+              `Filtre/arama sonucu`,
+              `okuma submit tıklandı (${r.label}) — sonuç listesi`,
+              `${basePath}_form_results`,
+              { fullPage: true }
+            );
+            log(`  ✓ Filtre/arama sonuç ekranı yakalandı (${r.label})`);
+          }
+        } catch { /* okuma submit yok */ }
+
+        // Katman A — doğrulama uyarısı (mutasyonsuz)
+        try {
+          if (await triggerValidation(page, scope, log)) {
+            await pushState(
+              `Form doğrulama uyarısı (ana ekran)`,
+              `zorunlu/geçersiz alan blur — istemci doğrulaması`,
+              `${basePath}_form_invalid`,
+              { fullPage: true }
+            );
+            await fillTestData(page, scope, log);
+          }
+        } catch { /* noop */ }
+
+        // Katman C — GERÇEK yazma submit (yalnız ALLOW_FORM_SUBMIT açıkken)
+        if (env.allowFormSubmit) {
+          try {
+            const w = await clickSubmitButton(page, scope, "write", log);
+            if (w.clicked) {
+              await page.waitForTimeout(1500);
+              await pushState(
+                `Kayıt sonrası (ana ekran)`,
+                `form gönderildi (${w.label}) — GERÇEK submit`,
+                `${basePath}_form_saved`,
+                { fullPage: true }
+              );
+              log(`  ✓ Kayıt-sonrası ekran yakalandı (${w.label})`);
+            }
+          } catch { /* submit başarısız */ }
+        }
+      }
+    } catch { /* form yoksa / doldurulamadıysa atla */ }
   }
 
   log(`Toplam ${states.length} ek state yakalandı.`);

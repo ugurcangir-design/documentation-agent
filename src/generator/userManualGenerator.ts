@@ -9,6 +9,8 @@ export interface GenerationResult {
   content: string;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   /** True when Claude hit max_tokens — doküman muhtemelen yarım kaldı. */
   truncated?: boolean;
 }
@@ -98,6 +100,10 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): { cachedPrefix: s
       `- Görsel 1 → 'Ekrana İlk Bakış' ilk paragraftan sonra\n` +
       `- 'Filtre' / 'Filters' içeren görsel → 'Filtreler ve Arama Seçenekleri' başlığı altı + filtre alanlarını TEK TEK anlat\n` +
       `- 'Modal' veya 'Panel/etki' ile başlayan görseller → 'Modallar ve Yan Paneller' alt başlıklarında, içindeki TÜM form alanlarını anlat\n` +
+      `- '(dolu)' veya 'Form dolu' içeren görseller → ilgili formun ALTINDA 'Örnek Veri Girişi' diye numaralı adımlar yaz: her alana NE girileceğini görseldeki örnek değerlerle göster (örn. \"1. **Ad** alanına firma adını girin (örn: Örnek Ad)\"). Bu görseller test verisiyle doldurulmuş gerçek hâli gösterir — kılavuzu bu somut örnek üzerinden adım adım anlat.\n` +
+      `- 'doğrulama uyarısı' içeren görseller → 'Doğrulama ve Hata Mesajları' başlığında: zorunlu/geçersiz alan bırakılırsa kullanıcının göreceği uyarıyı ve nasıl düzelteceğini anlat.\n` +
+      `- 'Filtre/arama sonucu' içeren görseller → filtre anlatımının sonunda 'Sonuçların Görüntülenmesi': filtre uygulandıktan sonra listenin nasıl güncellendiğini göster.\n` +
+      `- 'Kayıt sonrası' içeren görseller → ilgili kaydetme akışının SONUNDA 'Kaydetme ve Sonrası': Kaydet'e basıldıktan sonra ne olur (başarı mesajı, modalın kapanması, listeye dönüş) anlat.\n` +
       `- 'Sıralama' / kolon header → 'Tablo / Liste Görünümü' içinde\n` +
       `- 'Satır aksiyon' → 'Satır Üzerindeki İşlemler' içinde, menüdeki tüm seçenekleri listele\n` +
       `- Diğer state'ler (toggle, checkbox, input, tooltip, dropdown) → ilgili oldukları bölüm\n\n` +
@@ -137,7 +143,9 @@ ${apiContext || "_(yok)_"}
 ${stateBlock}
 ---
 
-Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.`;
+Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.
+
+ADIM ADIM ANLAT — her veri girişi / form içeren akışta numaralı adımlar kullan: hangi alana ne girileceğini, hangi sırayla, hangi butonla kaydedileceğini somut örnek değerlerle (dolu form görsellerindeki gibi) yaz. Zorunlu/opsiyonel alanları, varsa biçim kurallarını (tarih formatı, telefon, e-posta) belirt. Amaç: kullanıcı tek bir detayı bile kaçırmadan ekranı baştan sona kullanabilsin.`;
 
   return { cachedPrefix, prompt };
 }
@@ -175,6 +183,8 @@ export async function generateUserManualSection(
       content: cleanGeneratedMarkdown(result.text),
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
+      cacheReadTokens: result.cacheReadTokens ?? 0,
+      cacheCreationTokens: result.cacheCreationTokens ?? 0,
     };
     if (result.truncated) out.truncated = true;
     return out;

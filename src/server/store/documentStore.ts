@@ -27,6 +27,10 @@ export interface StoredDocument {
   versions?: DocumentVersion[];
   inputTokens?: number;
   outputTokens?: number;
+  /** Cache'ten okunan input token (0.1× ücret). Maliyet hesabında ayrı. */
+  cacheReadTokens?: number;
+  /** Cache yaratımı input token (1.25× ücret). */
+  cacheCreationTokens?: number;
 }
 
 const DB_PATH = path.join(

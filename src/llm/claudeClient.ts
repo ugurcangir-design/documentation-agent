@@ -67,15 +67,21 @@ export interface ClaudeCallOptions {
 
 export interface ClaudeResult {
   text: string;
+  /** Fresh (uncached) input tokens. NOT cache_read/cache_creation —
+   *  those are billed at different rates and tracked separately. */
   inputTokens: number;
   outputTokens: number;
+  /** Cache'ten okunan input token (ephemeral hit). 0.1× ücretlendirilir. */
+  cacheReadTokens?: number;
+  /** Cache'e yazılan input token (ilk istek, prefix yaratımı). 1.25×. */
+  cacheCreationTokens?: number;
   /** True when model hit max_tokens and output is truncated. Caller
    *  decides whether to surface a warning or retry with a higher cap. */
   truncated?: boolean;
   stopReason?: string;
 }
 
-function isTransientError(err: unknown): boolean {
+export function isTransientError(err: unknown): boolean {
   const msg = (err as Error)?.message?.toLowerCase() ?? "";
   return (
     msg.includes("overload") ||      // 529
@@ -85,7 +91,7 @@ function isTransientError(err: unknown): boolean {
     msg.includes("etimedout") ||
     msg.includes("socket hang") ||
     msg.includes("network") ||
-    msg.includes("ecconnrefused")
+    msg.includes("econnrefused")
   );
 }
 
@@ -219,6 +225,8 @@ async function callApi(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     text,
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
+    cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+    cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
     truncated,
   };
   if (response.stop_reason) result.stopReason = response.stop_reason;
@@ -310,7 +318,12 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
         const parsed = JSON.parse(out) as {
           result?: string;
           stop_reason?: string;
-          usage?: { input_tokens?: number; output_tokens?: number };
+          usage?: {
+            input_tokens?: number;
+            output_tokens?: number;
+            cache_read_input_tokens?: number;
+            cache_creation_input_tokens?: number;
+          };
         };
         const truncated = parsed.stop_reason === "max_tokens";
         if (truncated) {
@@ -322,6 +335,8 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
           text: parsed.result ?? out.trim(),
           inputTokens: parsed.usage?.input_tokens ?? 0,
           outputTokens: parsed.usage?.output_tokens ?? 0,
+          cacheReadTokens: parsed.usage?.cache_read_input_tokens ?? 0,
+          cacheCreationTokens: parsed.usage?.cache_creation_input_tokens ?? 0,
           truncated,
         };
         if (parsed.stop_reason) cliResult.stopReason = parsed.stop_reason;
