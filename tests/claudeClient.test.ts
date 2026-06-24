@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isPromptTooLong, isTransientError } from "../src/llm/claudeClient";
+import { isPromptTooLong, isTransientError, friendlyCliError } from "../src/llm/claudeClient";
 
 describe("isPromptTooLong", () => {
   it("yaygın 'prompt too long' varyasyonlarını yakalar", () => {
@@ -46,5 +46,33 @@ describe("isTransientError", () => {
     expect(isTransientError(new Error("invalid api key"))).toBe(false);
     expect(isTransientError(new Error("prompt is too long"))).toBe(false);
     expect(isTransientError(undefined)).toBe(false);
+  });
+});
+
+describe("friendlyCliError", () => {
+  it("401 auth hatasını stdout JSON'dan çıkarıp eyleme dönük ipucu verir", () => {
+    const out = JSON.stringify({
+      is_error: true,
+      api_error_status: 401,
+      result: "Failed to authenticate. API Error: 401 Invalid authentication credentials",
+    });
+    const msg = friendlyCliError(out, "", 1);
+    expect(msg).toMatch(/kimlik doğrulama/i);
+    expect(msg).toMatch(/login|API moduna/i);
+    expect(msg).toContain("Failed to authenticate");
+  });
+
+  it("auth dışı JSON hatasında result mesajını yüzeye çıkarır", () => {
+    const out = JSON.stringify({ is_error: true, result: "Something broke" });
+    expect(friendlyCliError(out, "", 1)).toBe("Something broke");
+  });
+
+  it("JSON yoksa stderr'a, o da yoksa jenerik exit mesajına düşer", () => {
+    expect(friendlyCliError("not-json", "boom from stderr", 1)).toBe("boom from stderr");
+    expect(friendlyCliError("not-json", "", 2)).toBe("claude CLI exit 2");
+  });
+
+  it("'authenticate' metnini api_error_status olmadan da yakalar", () => {
+    expect(friendlyCliError(JSON.stringify({ result: "Unauthorized request" }), "", 1)).toMatch(/kimlik doğrulama/i);
   });
 });
