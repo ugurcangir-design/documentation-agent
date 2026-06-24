@@ -110,6 +110,35 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** CLI çıktısından (stdout JSON / stderr / exit code) kullanıcı için
+ *  anlamlı bir hata mesajı türetir. Auth (401) durumunda eyleme dönük
+ *  ipucu ekler. */
+export function friendlyCliError(stdout: string, stderr: string, code: number | null): string {
+  let detail = "";
+  let apiStatus: number | undefined;
+  try {
+    const j = JSON.parse(stdout) as { result?: string; api_error_status?: number; is_error?: boolean };
+    if (j.api_error_status) apiStatus = j.api_error_status;
+    if (j.result) detail = j.result;
+  } catch {
+    // stdout JSON değil — stderr'a düş
+  }
+  if (!detail) detail = stderr.trim();
+
+  const lower = `${detail} ${apiStatus ?? ""}`.toLowerCase();
+  const isAuth = apiStatus === 401 || lower.includes("authenticate") || lower.includes("authentication") || lower.includes("unauthorized");
+
+  if (isAuth) {
+    return (
+      `Claude CLI kimlik doğrulaması başarısız (401). Yerel Claude Code oturumunuz ` +
+      `geçersiz veya süresi dolmuş. Çözüm: bir terminalde \`claude\` çalıştırıp \`/login\` ile ` +
+      `yeniden giriş yapın; ya da Ayarlar'dan API moduna geçip geçerli bir ANTHROPIC_API_KEY girin.` +
+      (detail ? ` (CLI: ${detail})` : "")
+    );
+  }
+  return detail || `claude CLI exit ${code}`;
+}
+
 export async function callClaude(opts: ClaudeCallOptions): Promise<ClaudeResult> {
   const imageCount = (opts.images?.length ?? 0) + (opts.imageBase64 || opts.imagePath ? 1 : 0);
   const promptLen = opts.prompt.length;
@@ -309,8 +338,12 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     proc.on("exit", (code) => {
       for (const f of tempFiles) fs.unlink(f, () => {});
 
+      // CLI exit≠0 olduğunda asıl hata genelde STDOUT'taki JSON'da durur
+      // (is_error/api_error_status/result), stderr boş olabilir. Önce onu
+      // parse edip anlamlı mesajı yüzeye çıkar — aksi halde kullanıcı
+      // jenerik "claude CLI exit 1" görür (gerçek neden gizlenir).
       if (code !== 0) {
-        reject(new Error(err.trim() || `claude CLI exit ${code}`));
+        reject(new Error(friendlyCliError(out, err, code)));
         return;
       }
 
@@ -318,6 +351,9 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
         const parsed = JSON.parse(out) as {
           result?: string;
           stop_reason?: string;
+          is_error?: boolean;
+          api_error_status?: number;
+          subtype?: string;
           usage?: {
             input_tokens?: number;
             output_tokens?: number;
@@ -325,6 +361,12 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
             cache_creation_input_tokens?: number;
           };
         };
+        // Exit 0 olsa bile CLI is_error:true / api_error_status dönebilir
+        // (örn. 401/429 bazı sürümlerde 0 ile döner) → hata olarak ele al.
+        if (parsed.is_error || parsed.api_error_status) {
+          reject(new Error(friendlyCliError(out, err, code)));
+          return;
+        }
         const truncated = parsed.stop_reason === "max_tokens";
         if (truncated) {
           console.warn(
