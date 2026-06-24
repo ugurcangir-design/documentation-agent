@@ -65,6 +65,9 @@ src/
     sidebarNav.ts                SIDEBAR_NAV_HINTS + isSidebarNav (tek kaynak)
     usageCost.ts                 Cache-aware token→USD maliyet (saf,
                                  computeUsageCost + aggregateUsage)
+    screenshotRefs.ts            Kullanılan görüntü kümesi (saf) — bakım
+                                 temizliği için; gömülü+küçük-resim+
+                                 dokümante-edilmemiş-state mantığı
   generator/
     userManualGenerator.ts       Kullanıcı kılavuzu prompt + üretim
     technicalDocGenerator.ts     Teknik doc prompt + üretim
@@ -102,7 +105,8 @@ src/
       promptRoutes.ts            data/prompts/config.json CRUD
       statsRoutes.ts             Dashboard sayaçları
       authRoutes.ts              Atlassian OAuth start/callback/disconnect/test
-      maintenanceRoutes.ts       cleanup-screenshots, disk-usage
+      maintenanceRoutes.ts       cleanup-screenshots (screenshotRefs ile
+                                 kullanılmayan tespiti), disk-usage
       updateRoutes.ts            git pull + log
     store/
       atomicJson.ts              writeJsonAtomic + readJsonSafe
