@@ -215,7 +215,8 @@ async function runActionButtonPass(
   basePath: string,
   log: (m: string) => void,
   clickedLabels: Set<string>,
-  pushState: (label: string, triggeredBy: string, filename: string, capture?: CaptureOptions) => Promise<void>
+  pushState: (label: string, triggeredBy: string, filename: string, capture?: CaptureOptions) => Promise<void>,
+  maxModals: number = MAX.modals
 ): Promise<void> {
   const root = page.locator(
     'button:not([disabled]), [role="button"]:not([aria-disabled="true"])'
@@ -259,7 +260,7 @@ async function runActionButtonPass(
 
   let captured = 0;
   for (const cand of candidates) {
-    if (captured >= MAX.modals) break;
+    if (captured >= maxModals) break;
     if (clickedLabels.has(cand.label)) continue;
     clickedLabels.add(cand.label);
 
@@ -367,6 +368,54 @@ async function runActionButtonPass(
   }
 }
 
+/**
+ * Tek bir sekme aktifken o sekmenin İÇİNİ gerçek kullanıcı gibi gezer:
+ * sekmedeki action butonları → modal/popup/alert + form doldurma +
+ * doğrulama/submit katmanları, ardından sekmenin inline formunu doldurup
+ * okuma submit'i (Ara/Filtrele) ile sonucu yakalar. Her sekme için TAZE
+ * etiket seti kullanılır → tab'lar bağımsız keşfedilir. Çağıran yalnız
+ * env.deepExplore açıkken kullanır.
+ */
+async function exploreTabContent(
+  page: Page,
+  tabBase: string,
+  tabLabel: string,
+  log: (m: string) => void,
+  pushState: (label: string, triggeredBy: string, filename: string, capture?: CaptureOptions) => Promise<void>
+): Promise<void> {
+  // Sekme içi butonlar → modallar/popup/alert + form doldurma + submit
+  // katmanları (sekme başına ≤6 modal — toplam patlamasın).
+  await runActionButtonPass(page, tabBase, log, new Set<string>(), pushState, 6);
+
+  // Sekmenin inline formu (modal değil) — doldur + okuma submit'i ile sonuç.
+  if (env.fillTestData) {
+    try {
+      const scopeLoc = page.locator("main, [role=main], form").first();
+      const scope = (await scopeLoc.count().catch(() => 0)) > 0 ? scopeLoc : page;
+      const { filledCount } = await fillTestData(page, scope, log);
+      if (filledCount >= 2) {
+        await page.waitForTimeout(400);
+        await pushState(
+          `Sekme (dolu): "${tabLabel}"`,
+          `sekme formu test verisiyle dolduruldu (${filledCount} alan)`,
+          `${tabBase}_form_filled`,
+          { fullPage: true }
+        );
+        const r = await clickSubmitButton(page, scope, "read", log);
+        if (r.clicked) {
+          await page.waitForTimeout(1200);
+          await pushState(
+            `Sekme sonuç: "${tabLabel}"`,
+            `sekmede okuma submit (${r.label}) — sonuç`,
+            `${tabBase}_results`,
+            { fullPage: true }
+          );
+        }
+      }
+    } catch { /* sekme formu yok / doldurulamadı */ }
+  }
+}
+
 export async function exploreInteractiveStates(
   page: Page,
   basePath: string,
@@ -461,9 +510,15 @@ export async function exploreInteractiveStates(
       if (clickedLabels.has(label)) return false;
       await loc.click({ timeout: ACTION_TIMEOUT });
       await page.waitForTimeout(RENDER_WAIT);
-      await pushState(`Sekme: "${label || `tab ${i}`}"`, `tab tıklandı: ${label}`, `${basePath}_tab_${i}`);
+      // Sekme içeriği tam-sayfa yakalanır (alt-kıvrım dahil).
+      await pushState(`Sekme: "${label || `tab ${i}`}"`, `tab tıklandı: ${label}`, `${basePath}_tab_${i}`, { fullPage: true });
       clickedLabels.add(label);
       log(`  ✓ Sekme yakalandı: ${label}`);
+      // Derin keşif: her sekmenin İÇİNİ (butonlar/modallar/formlar) ayrı gez.
+      if (env.deepExplore) {
+        log(`  ↳ Sekme içi derin keşif: ${label || `tab ${i}`}`);
+        await exploreTabContent(page, `${basePath}_tab_${i}`, label || `tab ${i}`, log, pushState);
+      }
       return true;
     }
   );
