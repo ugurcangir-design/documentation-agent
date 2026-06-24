@@ -63,6 +63,7 @@ export function buildScreenshotEmbedBlock(
   const placement = stateCount > 0
     ? `**Yerleştirme:**\n` +
       `- Ana ekran görseli → 'Ekrana İlk Bakış' ilk paragraftan sonra\n` +
+      `- 'Sekme:' içeren görseller → EKRANDAKİ HER SEKME AYRI BİR '### <Sekme Adı> Sekmesi' ALT BAŞLIĞI olur. Sekmeleri görseldeki SOLDAN SAĞA SIRAYLA anlat. Her sekme için SADECE 'bu sekme var' DEME — o sekmenin görselindeki tüm alanları, tabloları, butonları, filtreleri ve ne işe yaradığını adım adım detaylandır. Her sekme kendi mini-kılavuzu gibi olmalı.\n` +
       `- 'Filtre' / 'Filters' içeren görsel → 'Filtreler ve Arama Seçenekleri' başlığı altı + filtre alanlarını TEK TEK anlat\n` +
       `- 'Modal' veya 'Panel/etki' ile başlayan görseller → 'Modallar ve Yan Paneller' alt başlıklarında, içindeki TÜM form alanlarını anlat\n` +
       `- '(dolu)' veya 'Form dolu' içeren görseller → ilgili formun ALTINDA 'Örnek Veri Girişi' diye numaralı adımlar yaz: her alana NE girileceğini görseldeki örnek değerlerle göster (örn. \"1. **Ad** alanına firma adını girin (örn: Örnek Ad)\"). Bu görseller test verisiyle doldurulmuş gerçek hâli gösterir — kılavuzu bu somut örnek üzerinden adım adım anlat.\n` +
@@ -80,7 +81,7 @@ export function buildScreenshotEmbedBlock(
     placement +
     `\n**Kural:** En az ${minEmbeds} embed. Path'leri AYNEN yukarıdaki tablodaki gibi kullan. ` +
     `EKRAN GÖRÜNTÜSÜ OLMADAN KILAVUZ YAZMA — en azından ana ekran görselini embed etmek ZORUNLUDUR.\n\n` +
-    `**Yasak:** Görsellerde sol sidebar'da 'Sport Base Data', 'Sports', 'Categories', 'Multi Feed Settings' vb. olabilir — bunlar GLOBAL NAV, başka sayfalara gider. URL'i ${screenPath} olan bu ekranın parçası DEĞİL. Bahsetme, listeleme.\n`
+    `**Yasak — global sayfa şablonu:** Görsellerde sol sidebar menüsü (başka sayfalara giden linkler) ve üst bardaki **profil/hesap menüsü, dil seçici (Türkçe/English), bildirim zili, oturumu kapat** gibi kontroller görünebilir — bunlar bu ekranın değil, uygulamanın GENEL ŞABLONUNUN parçasıdır. URL'i ${screenPath} olan bu ekranı anlatırken bunları BAHSETME, listeleme, görsellerini embed ETME.\n`
   );
 }
 
@@ -178,9 +179,16 @@ ${apiContext || "_(yok)_"}
 ${stateBlock}
 ---
 
-Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.
+Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine, SEKMEYE hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.
 
-ADIM ADIM ANLAT — her veri girişi / form içeren akışta numaralı adımlar kullan: hangi alana ne girileceğini, hangi sırayla, hangi butonla kaydedileceğini somut örnek değerlerle (dolu form görsellerindeki gibi) yaz. Zorunlu/opsiyonel alanları, varsa biçim kurallarını (tarih formatı, telefon, e-posta) belirt. Amaç: kullanıcı tek bir detayı bile kaçırmadan ekranı baştan sona kullanabilsin.`;
+EKSİKSİZLİK ZORUNLU — şu beş boyutta hiçbir şey atlama:
+1. **Ekran görüntüsü:** Her ana adım/sekme/modal için ilgili görseli embed et (yukarıdaki tablo). Görselsiz adım anlatma.
+2. **İşlem adımları:** Her akışı NUMARALI adımlarla anlat (1, 2, 3…): hangi öğeye tıklanır, hangi alana ne girilir, hangi sırayla. "Şunu yapabilirsiniz" gibi muğlak değil; "1. X butonuna tıklayın → 2. açılan formda Y alanına … girin → 3. Kaydet'e basın" gibi somut.
+3. **Sekmeler:** Ekranda sekme varsa her birini SOLDAN SAĞA SIRAYLA, ayrı alt başlıkla, kendi alanları/tabloları/aksiyonlarıyla detaylandır.
+4. **Ekran mesajları:** Doğrulama uyarıları, başarı/hata bildirimleri, onay diyalogları — hangi durumda hangi mesajın çıktığını ve kullanıcının ne yapması gerektiğini yaz (ilgili görseller verildiyse onlardan).
+5. **Veri girişi:** Form alanlarına somut örnek değerlerle (dolu form görsellerindeki gibi); zorunlu/opsiyonel alanlar ve biçim kuralları (tarih, telefon, e-posta) belirtilir.
+
+Amaç: Kullanıcı bu ekranı baştan sona, tek bir işlemi/bilgiyi/detayı kaçırmadan kullanabilsin. Atlanan her öğe eksik kılavuz demektir.`;
 
   return { cachedPrefix, prompt };
 }

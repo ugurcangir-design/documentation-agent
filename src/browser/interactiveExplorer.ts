@@ -31,7 +31,7 @@ const MODAL_SELECTORS = [
 ];
 
 const MAX = {
-  tabs: 6, dropdowns: 5, modals: 10, dates: 4,
+  tabs: 8, dropdowns: 5, modals: 10, dates: 4,
   checkboxes: 4, toggles: 3, inputs: 4, hovers: 5,
   accordions: 3, fallback: 6,
   columns: 4, rowActions: 3,
@@ -52,15 +52,45 @@ async function safeText(loc: Locator): Promise<string> {
   } catch { return ""; }
 }
 
+/** Global "chrome" — bu ekranın içeriği DEĞİL, sayfa şablonu: sol sidebar,
+ *  üst bar (header/topbar/navbar/appbar) ve içindeki profil/hesap/dil/
+ *  bildirim kontrolleri. Bunlar yakalanmamalı; aksi halde profil menüsü,
+ *  dil seçici gibi ekranla ilgisiz görseller kılavuza giriyor. */
 async function isInNavOrSidebar(loc: Locator): Promise<boolean> {
   try {
     return await loc.evaluate((el: Element) => {
-      return Boolean(
+      // 1. Kapsayıcı: sidebar veya üst bar içinde mi?
+      if (
         el.closest(
-          'aside, nav, [role="navigation"], [class*="sidebar" i], ' +
-            '[class*="Sidebar"], [class*="side-nav" i], [class*="SideNav"]'
+          'aside, nav, [role="navigation"], header, [role="banner"], ' +
+          '[class*="sidebar" i], [class*="side-nav" i], ' +
+          '[class*="topbar" i], [class*="top-bar" i], [class*="navbar" i], ' +
+          '[class*="appbar" i], [class*="app-bar" i], [class*="headerbar" i]'
         )
-      );
+      ) {
+        return true;
+      }
+      // 2. Profil / hesap / dil / bildirim kontrolü mü? (üst barda olmasa bile)
+      if (
+        el.closest(
+          '[class*="profile" i], [class*="account" i], [class*="user-menu" i], ' +
+          '[class*="usermenu" i], [class*="avatar" i], [class*="lang" i], ' +
+          '[class*="locale" i], [class*="i18n" i], [class*="notification" i], ' +
+          '[aria-label*="profile" i], [aria-label*="profil" i], ' +
+          '[aria-label*="account" i], [aria-label*="hesap" i], ' +
+          '[aria-label*="language" i], [aria-label*="dil" i], ' +
+          '[aria-label*="notification" i], [aria-label*="bildirim" i], ' +
+          '[aria-label*="logout" i], [aria-label*="çıkış" i], [aria-label*="cikis" i]'
+        )
+      ) {
+        return true;
+      }
+      // 3. Etiket metni dil/profil/çıkış mı? (örn. "Türkçe", "EN", "Profilim")
+      const txt = (el.textContent || "").trim().toLowerCase().slice(0, 30);
+      if (/^(profil|profilim|hesab|hesabım|çıkış|cikis|logout|sign out|oturumu kapat)/.test(txt)) {
+        return true;
+      }
+      return false;
     });
   } catch { return false; }
 }

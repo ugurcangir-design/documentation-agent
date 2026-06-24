@@ -25,9 +25,11 @@ const JSON_SCHEMA_HINT = `JSON şeması:
 }
 
 ÖNEMLİ — isGlobalNav alanı:
-- Bu ekranın *parçası olmayan*, başka ekrana yönlendiren global navigasyon
-  öğeleri (sol sidebar menü öğeleri, üst bar menüleri, "Logout" gibi) için
-  isGlobalNav: true.
+- Bu ekranın *parçası olmayan*, uygulamanın genel şablonuna ait öğeler için
+  isGlobalNav: true. Bunlar: sol sidebar menü öğeleri, üst bardaki global
+  kontroller — **profil/hesap menüsü, dil seçici (Türkçe/English), bildirim
+  zili, "Logout"/"Oturumu Kapat"**. Bu öğeler ekrana özgü değildir; her
+  sayfada aynıdır → isGlobalNav: true (kılavuzda anlatılmaz).
 - Bu ekranın asıl içeriğine ait butonlar, filtreler, satır işlemleri,
   formlar, modal'lar için isGlobalNav: false.
 - Test: "Bu öğeyi anlatmazsam analist bu ekranı eksik tanır mı?" Yanıt EVET
@@ -52,7 +54,7 @@ Bir öğeyi atlamak, kılavuzda eksik anlatıma yol açar. Tereddütte ekle.`;
 // anahtarına karıştığı için eski (farklı prompt sürümüyle üretilmiş)
 // analizler otomatik geçersiz kalır — aksi halde aynı screenshot eski
 // eksik analizi sonsuza dek döndürürdü (cache hash yalnız görsele bağlı).
-const ANALYZER_VERSION = "v2-exhaustive-8k";
+const ANALYZER_VERSION = "v3-globalnav-profile-lang";
 
 export async function analyzeScreen(screen: DiscoveredScreen): Promise<ScreenAnalysis> {
   const hash = hashScreenshot(screen.screenshotBase64 + ANALYZER_VERSION);
