@@ -411,7 +411,7 @@ export default function SettingsPage() {
 function MaintenanceSection() {
   const [usage, setUsage] = useState<Record<string, { files: number; bytes: number }> | null>(null);
   const [busy, setBusy] = useState(false);
-  const [lastCleanup, setLastCleanup] = useState<{ removed: number; bytesFreed: number } | null>(null);
+  const [lastCleanup, setLastCleanup] = useState<{ removed: number; bytesFreed: number; scanned?: number; reason?: string } | null>(null);
 
   const loadUsage = () => {
     fetch("/api/maintenance/disk-usage")
@@ -427,7 +427,7 @@ function MaintenanceSection() {
     setBusy(true);
     try {
       const r = await fetch("/api/maintenance/cleanup-screenshots", { method: "POST", headers: { "X-DocAgent": "1" } });
-      const d = await r.json() as { removed: number; bytesFreed: number };
+      const d = await r.json() as { removed: number; bytesFreed: number; scanned?: number; reason?: string };
       setLastCleanup(d);
       loadUsage();
     } finally {
@@ -466,9 +466,16 @@ function MaintenanceSection() {
         {busy ? "Temizleniyor..." : "Kullanılmayan ekran görüntülerini sil"}
       </button>
       {lastCleanup && (
-        <p className="text-xs text-green-600 mt-2">
-          ✓ {lastCleanup.removed} dosya silindi, {fmt(lastCleanup.bytesFreed)} alan boşaltıldı
-        </p>
+        lastCleanup.removed > 0 ? (
+          <p className="text-xs text-green-600 mt-2">
+            ✓ {lastCleanup.removed} dosya silindi, {fmt(lastCleanup.bytesFreed)} alan boşaltıldı
+            {typeof lastCleanup.scanned === "number" ? ` (${lastCleanup.scanned} tarandı)` : ""}
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500 mt-2">
+            {lastCleanup.reason ?? "Silinecek kullanılmayan görüntü bulunamadı."}
+          </p>
+        )
       )}
     </div>
   );
