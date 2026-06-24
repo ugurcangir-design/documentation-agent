@@ -513,7 +513,7 @@ zamanla yenilendikçe fallback gereksizleşir — listeyi tamamen çıkarmadan
 
 ### Limitler (interactiveExplorer.ts:31)
 ```ts
-MAX = { tabs: 6, dropdowns: 5, modals: 10, dates: 4 }
+MAX = { tabs: 8, dropdowns: 5, modals: 10, dates: 4 }
 ```
 
 ### MODAL_KEYWORDS (yakalama önceliği)
@@ -565,9 +565,17 @@ Ekranın kendisi formsa (oluştur/düzenle/liste+filtre) en sonda ana-içerik
 ### selectStates — submit-akışı önceliği
 `categorize()` yeni state tiplerini ayrı yüksek-öncelikli kategorilere
 sokar: `kayit` (kayıt-sonrası, cap 3), `uyari` (doğrulama, cap 2), `sonuc`
-(filtre/arama sonucu, cap 2), `dolu` (test-verisiyle doldurulmuş, cap 4).
-`TOTAL_MAX=15`. Bunlar adım-adım + submit-sonrası kılavuzun temeli olduğu
+(filtre/arama sonucu, cap 2), `dolu` (test-verisiyle doldurulmuş, cap 4),
+`sekme` (cap 8 — her tab ayrı alt-ekran, hepsi kılavuza girmeli).
+`TOTAL_MAX=18`. Bunlar adım-adım + submit-sonrası kılavuzun temeli olduğu
 için eleme sırasında korunur.
+
+### Global chrome dışlama (profil/dil/header)
+`interactiveExplorer.isInNavOrSidebar` sidebar + üst bar (header/topbar/
+navbar/appbar) + profil/hesap/dil/bildirim/çıkış kontrollerini yakalama
+dışı bırakır — bunlar ekran içeriği değil sayfa şablonudur. Üretim
+tarafında `sidebarNav` hint'leri + `screenAnalyzer` isGlobalNav (v3) +
+userManual prompt "Yasak" notu aynı öğeleri kılavuzdan eler.
 
 ---
 
