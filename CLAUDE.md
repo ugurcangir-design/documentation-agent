@@ -484,8 +484,11 @@ global skora göre. BRD'nin tüm bütçeyi yutması bu sayede engellenir.
   - `uiElementsBlock` = sidebar-nav filtrelenmiş öğeler numaralı liste
   - `workflowsBlock` = isimli akış + adımlar
   - `templateBlock` = ilk 7000 char (üslup taklidi — içerik kopyalama YASAK)
-  - `stateBlock` = ekran görselleri tablosu + yerleştirme kuralları,
-    min embed = `max(6, min(stateCount+1, 12))`
+  - `stateBlock` = `buildScreenshotEmbedBlock(mainImgUrl, states, path)`
+    (export, saf, test'li). **Hiç state olmasa bile ana ekran görseli
+    HER ZAMAN embed talimatına girer** — eski hata: stateCount=0'da blok
+    komple düşüyordu → görüntüsüz kılavuz. min embed = `min(görselSayısı,12)`
+    (1..12; mevcut görselden fazla embed istenmez).
 - Backoff tier'ları:
   - `runWithBudget(allStates, 7000)` → fail (`isPromptTooLong`) →
   - `runWithBudget(max(5,half), 3500)` → fail →
