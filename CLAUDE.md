@@ -114,7 +114,13 @@ src/
       screenStore.ts             data/db/screens.json
       documentStore.ts           data/db/documents.json (versions[] dahil)
       referenceStore.ts          data/db/references.json (confluence/swagger/documents/sources/jira)
-      eventBus.ts                SSE event emitter (job ID → subscribers)
+      eventBus.ts                SSE event emitter (job ID → subscribers).
+                                 JobEvent.type: progress | screen |
+                                 complete | error | failed | cancelled.
+                                 TERMINAL = complete/failed/cancelled
+                                 (stream kapanır). "error" = tek-ekran
+                                 hatası, NON-terminal — job devam eder,
+                                 frontend stream'i kapatmaz.
       jobCancellation.ts         Cancel + pause/resume lock
 data/
   brd/                           Yerel BRD .md
