@@ -32,9 +32,12 @@ src/
     promptConfig.ts              data/prompts/config.json'dan prompt cfg
   browser/
     browserSession.ts            Playwright Chromium oturumu + login
-    screenDiscovery.ts           URL → ekran graph keşfi
+    screenDiscovery.ts           URL → ekran graph keşfi (ana ekran fullPage)
     interactiveExplorer.ts       Filtre/modal/satır-aksiyon etkileşimli yakalama
-    screenshotCapture.ts         PNG ekran görüntüsü kaydetme
+                                  + test-verisi doldurma + modal clip
+    formFiller.ts                Güvenli otomatik test-verisi doldurma
+                                  (sampleValueForField + fillTestData; ASLA submit)
+    screenshotCapture.ts         PNG ekran görüntüsü (opts: fullPage | clip<modal>)
   analysis/
     screenAnalyzer.ts            Claude → screen analysis (UI öğeleri, akışlar)
     screenContextBuilder.ts      RAG → preparedChunks + paragraphMatches
@@ -60,6 +63,8 @@ src/
     markdownCleaner.ts           LLM çıktısı temizleme
     sourcePriority.ts            sourceType → ağırlık
     sidebarNav.ts                SIDEBAR_NAV_HINTS + isSidebarNav (tek kaynak)
+    usageCost.ts                 Cache-aware token→USD maliyet (saf,
+                                 computeUsageCost + aggregateUsage)
   generator/
     userManualGenerator.ts       Kullanıcı kılavuzu prompt + üretim
     technicalDocGenerator.ts     Teknik doc prompt + üretim
@@ -235,10 +240,22 @@ env.claudeCliBin  = 'claude'
 
 ```ts
 isPromptTooLong(err) → boolean         // generator backoff için
+isTransientError(err) → boolean        // retry (529/429/timeout/ECONNRESET/
+                                       //   ECONNREFUSED) — export, test'li
 ClaudeResult.truncated                 // stop_reason === 'max_tokens' → true
 ClaudeResult.stopReason                // Claude'un duruş nedeni (opsiyonel)
+ClaudeResult.cacheReadTokens           // ephemeral cache okuma (0.1× ücret)
+ClaudeResult.cacheCreationTokens       // cache yazımı (1.25× ücret)
 ClaudeCallOptions.cachedPrefix         // job-stable text block → ephemeral cache
 ```
+
+**Token muhasebesi cache-aware:** `cache_read`/`cache_creation` token'ları
+hem API hem CLI backend'den çıkarılır, `GenerationResult`/`FixUpResult` →
+`screenProcessor` → `documentStore` (cacheReadTokens/cacheCreationTokens) →
+`statsRoutes` zinciriyle taşınır. Maliyet `quality/usageCost.ts` ile
+hesaplanır: input 3$, output 15$, cache-write 3.75$, cache-read 0.30$/M.
+Eskiden dashboard maliyeti caching açıkken cache token'ı saymadığı için
+eksikti.
 
 **Prompt caching:** `callApi` `cachedPrefix`'i ilk content bloğu olarak
 `cache_control: { type: "ephemeral" }` ile gönderir. Generator'lar
@@ -270,6 +287,13 @@ MAX_DISCOVERY_DEPTH = 0           // 0 → tek ekran modu (interactive=true)
 PORT = 3000                       // tüm yerel URL'lerin tek kaynağı
 CLAUDE_BACKEND = 'cli' | 'api'
 CLAUDE_CLI_BIN = 'claude'
+COVERAGE_LLM_JUDGE = true          // Haiku coverage doğrulama
+FILL_TEST_DATA = true              // keşifte form/modal'ı test verisiyle
+                                   //   doldur → dolu-form + validation +
+                                   //   okuma-submit state'leri
+ALLOW_FORM_SUBMIT = false          // ⚠️ açıkken Kaydet/Gönder GERÇEKTEN
+                                   //   tıklanır → hedef app'te gerçek kayıt.
+                                   //   Yalnız test/staging. Varsayılan kapalı.
 ```
 Lazy getter — Ayarlar'dan değiştirilince sunucu restart gerekmez.
 
@@ -490,6 +514,45 @@ satır 141. Eşleşen butonların priority=2, diğerleri 1.
 - Her durum için `screenshotCapture` ile PNG +
   `StoredScreenState{ label, triggeredBy, screenshotPath }`
 
+### Test-verisi doldurma + submit katmanları (formFiller)
+Modal/panel açıldığında **boş form yerine dolu form** yakalanır:
+`fillTestData(page, scope)` görünür alanları tür-duyarlı güvenli örnek
+veriyle doldurur (e-posta→test@ornek.com, tarih→bugün, sayı→42, ad→"Örnek
+Ad", açıklama→örnek metin; parola/file atlanır), select'te ilk anlamlı
+seçeneği seçer, checkbox/radio işaretler. Doldurma sonrası `${kind} (dolu)`
+state'i `clip<modal>` ile yakalanır. `sampleValueForField` saf + test'li.
+
+**Submit-sonrası ekranları üç katmanda yakalanır** (`env.fillTestData`):
+- **A — Doğrulama uyarısı (mutasyonsuz):** `triggerValidation()` bir
+  zorunlu/e-posta alanı geçersiz yapıp `blur` eder → istemci-tarafı inline
+  hata; sunucuya istek GİTMEZ. Hata tespit edilirse `doğrulama uyarısı`
+  state'i, sonra yeniden geçerli değerle doldurma.
+- **B — Okuma submit'i (mutasyonsuz, her zaman):** `clickSubmitButton(…,
+  "read")` Ara/Filtrele/Listele gibi GET butonlarını gerçekten tıklar →
+  `Filtre/arama sonucu` state'i. `classifySubmitButton()` saf + test'li
+  (read > write önceliği; sil/delete → destructive, asla tıklanmaz).
+- **C — Yazma submit'i (GERÇEK mutasyon, opt-in):** yalnız
+  `env.allowFormSubmit` (ALLOW_FORM_SUBMIT=true, **varsayılan kapalı**)
+  iken `clickSubmitButton(…, "write")` Kaydet/Gönder'i tıklar → hedef
+  uygulamada **gerçek kayıt** oluşur, `Kayıt sonrası` ekranı yakalanır.
+  Yalnız test/staging ortamında açılmalı.
+
+Ekranın kendisi formsa (oluştur/düzenle/liste+filtre) en sonda ana-içerik
+`fullPage` doldurulup aynı A/B/C katmanları uygulanır.
+
+### Screenshot opsiyonları (screenshotCapture)
+- `{ fullPage: true }` — alt-kıvrım altı dahil; yükseklik 2600px clamp.
+  Ana ekran keşfinde varsayılan.
+- `{ clip: <modalLocator> }` — açık modal'ı arka plan karartması olmadan
+  kırpar (temiz modal görüntüsü). interactiveExplorer modal state'lerinde.
+
+### selectStates — submit-akışı önceliği
+`categorize()` yeni state tiplerini ayrı yüksek-öncelikli kategorilere
+sokar: `kayit` (kayıt-sonrası, cap 3), `uyari` (doğrulama, cap 2), `sonuc`
+(filtre/arama sonucu, cap 2), `dolu` (test-verisiyle doldurulmuş, cap 4).
+`TOTAL_MAX=15`. Bunlar adım-adım + submit-sonrası kılavuzun temeli olduğu
+için eleme sırasında korunur.
+
 ---
 
 ## Atlassian OAuth (server/auth/atlassianAuth.ts)
@@ -532,7 +595,8 @@ fileFilter: .docx | .pdf | .md | .txt allowlist
 
 ```ts
 ALLOWED_SETTINGS_KEYS = { CLAUDE_*, APP_*, ATLASSIAN_OAUTH_*,
-   CONFLUENCE_*, MAX_DISCOVERY_DEPTH, PORT, FIX_UP_*, DOC_LANGUAGE }
+   CONFLUENCE_*, MAX_DISCOVERY_DEPTH, PORT, FIX_UP_*, DOC_LANGUAGE,
+   COVERAGE_LLM_JUDGE, FILL_TEST_DATA, ALLOW_FORM_SUBMIT }
 ```
 - Allowlist dışı key sessizce atılır + warn log'lanır (örn. `PATH`,
   `NODE_OPTIONS` enjeksiyon denemesi).
@@ -711,10 +775,15 @@ CLAUDE.md'yi okur, kuralı görür, uygular.
   endpoint yok); attachment hatası fatal değil.
 - **Job watchdog 30 dakika** — büyük üretim işleri buna takılabilir
   (CONCURRENCY=3 ile ~25-30 ekran sınırda).
-- **Test kapsamı sınırlı** — `tests/` altında vitest ile 24 birim test
+- **Test kapsamı sınırlı** — `tests/` altında vitest ile 76 birim test
   (BRD parser, sourcePriority, sidebar nav, coverage, section dedup,
-  paragraph search). Üretim job'ı, generator prompt'u, OAuth flow,
-  Playwright keşif kısımları henüz test edilmedi.
+  paragraph search, jira status, flat-text parser, confidence scorer,
+  claudeClient helpers, usageCost, formFiller sampleValue +
+  classifySubmitButton, selectStates). Üretim job'ı, generator prompt'u,
+  OAuth flow ve Playwright tarayıcı etkileşiminin DOM tarafı (fillTestData /
+  triggerValidation / clickSubmitButton) canlı hedef gerektirdiği için
+  test edilmedi — saf çekirdekleri (değer üreteci, submit sınıflandırıcı)
+  test'li.
 - **CLI backend** Claude Code oturumu açık olmalı; `resolveClaudeBin()`
   AppleScript-sanitize PATH için fallback dener.
 
@@ -734,6 +803,13 @@ CLAUDE.md'yi okur, kuralı görür, uygular.
 - ✅ Analyst Studio tasarım dili port'u (slate+teal, light/dark)
 - ✅ Heartbeat: `pagehide` beacon + grace timer (refresh güvenli, tab close
   ~30sn, background 15dk yedek)
+- ✅ Cache-aware token muhasebesi + doğru USD maliyet (usageCost.ts)
+- ✅ Otomatik test-verisi doldurma (formFiller) + dolu-form state yakalama
+- ✅ Submit-sonrası yakalama: validation uyarısı (A) + okuma-submit/sonuç
+     (B) güvenli; gerçek yazma-submit (C) ALLOW_FORM_SUBMIT ile opt-in
+- ✅ Screenshot: ana ekran fullPage + modal clip (temiz/eksiksiz görsel)
+- ✅ Kullanıcı kılavuzu prompt'u: adım-adım veri girişi + örnek değer zorunlu
+- ✅ ECONNREFUSED retry typo düzeltmesi
 
 ### Yapılacak (öneri)
 - ⏳ **Hybrid (keyword + embedding) retrieval** — şu an saf keyword
