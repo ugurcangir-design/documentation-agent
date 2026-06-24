@@ -103,8 +103,10 @@ async function discoverAtDepth(
     const finalUrl = page.url();
     console.log(`    Page loaded: title="${title}" url="${finalUrl}"`);
 
+    // Ana ekran görüntüsü tam-sayfa: uzun tablolar / alt-kıvrım altındaki
+    // form alanları da kılavuza girsin (yükseklik capture içinde sınırlı).
     const { screenshotPath, screenshotBase64 } =
-      await captureScreenshot(page, path);
+      await captureScreenshot(page, path, { fullPage: true });
 
     const screen: DiscoveredScreen = {
       url,

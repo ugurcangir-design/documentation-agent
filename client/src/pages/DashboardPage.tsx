@@ -5,7 +5,7 @@ interface Stats {
   jobs: { total: number; running: number; completed: number; failed: number };
   screens: { total: number };
   references: { confluence: number; swagger: number; documents: number; templates: number };
-  usage: { inputTokens: number; outputTokens: number; totalCostUsd: number };
+  usage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number; totalCostUsd: number };
   recentJobs: Array<{
     id: string; type: string; status: string; createdAt: string;
     progress: { current: number; total: number; message: string };
@@ -41,7 +41,7 @@ export default function DashboardPage() {
         <Kpi label="Dökümanlar" value={stats.documents.total} sub={`${stats.documents.draft} taslak · ${stats.documents.approved} onaylı · ${stats.documents.published} yayında`} accent="blue" />
         <Kpi label="Job'lar" value={stats.jobs.total} sub={`${stats.jobs.running} çalışıyor · ${stats.jobs.failed} hata`} accent="violet" />
         <Kpi label="Keşfedilen Ekran" value={stats.screens.total} sub="Toplam tarama" accent="green" />
-        <Kpi label="Maliyet (USD)" value={`$${stats.usage.totalCostUsd.toFixed(2)}`} sub={`${(stats.usage.inputTokens / 1000).toFixed(0)}K in · ${(stats.usage.outputTokens / 1000).toFixed(0)}K out`} accent="amber" />
+        <Kpi label="Maliyet (USD)" value={`$${stats.usage.totalCostUsd.toFixed(2)}`} sub={`${(stats.usage.inputTokens / 1000).toFixed(0)}K in · ${(stats.usage.outputTokens / 1000).toFixed(0)}K out${stats.usage.cacheReadTokens ? ` · ${(stats.usage.cacheReadTokens / 1000).toFixed(0)}K cache` : ""}`} accent="amber" />
       </div>
 
       {/* Two columns */}

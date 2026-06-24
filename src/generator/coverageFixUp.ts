@@ -16,6 +16,8 @@ export interface FixUpResult {
   content: string;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   addedCount: number;
 }
 
@@ -97,6 +99,8 @@ export async function runCoverageFixUp(input: FixUpInput): Promise<FixUpResult> 
     content: text,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
+    cacheReadTokens: result.cacheReadTokens ?? 0,
+    cacheCreationTokens: result.cacheCreationTokens ?? 0,
     addedCount: input.uiElementsMissing.length,
   };
 }

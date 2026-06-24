@@ -109,8 +109,8 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       : [computeCoverage(inScopeForCoverage, umContent), computeCoverage(inScopeForCoverage, tdContent)];
     let umCoverage = initialCoverage[0] as CoverageReport;
     let tdCoverage = initialCoverage[1] as CoverageReport;
-    let umExtraTokens = { input: 0, output: 0 };
-    let tdExtraTokens = { input: 0, output: 0 };
+    let umExtraTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
+    let tdExtraTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
     let umFixUpAdded = 0;
     let tdFixUpAdded = 0;
 
@@ -133,12 +133,14 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       docKind: "userManual" | "technicalDoc",
       content: string,
       coverage: CoverageReport
-    ): Promise<{ content: string; coverage: CoverageReport; addedTotal: number; tokensIn: number; tokensOut: number }> {
+    ): Promise<{ content: string; coverage: CoverageReport; addedTotal: number; tokensIn: number; tokensOut: number; cacheRead: number; cacheCreate: number }> {
       let curContent = content;
       let curCov = coverage;
       let addedTotal = 0;
       let tokensIn = 0;
       let tokensOut = 0;
+      let cacheRead = 0;
+      let cacheCreate = 0;
 
       const maxPasses = env.fixUpMaxPasses;
       const threshold = env.fixUpThreshold;
@@ -161,6 +163,8 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
           const newCov = computeCoverage(inScopeForCoverage, fix.content);
           tokensIn += fix.inputTokens;
           tokensOut += fix.outputTokens;
+          cacheRead += fix.cacheReadTokens ?? 0;
+          cacheCreate += fix.cacheCreationTokens ?? 0;
           if (newCov.coveragePct >= curCov.coveragePct) {
             const prev = curCov.coveragePct;
             const prevMissingSet = new Set(curCov.missing);
@@ -188,7 +192,7 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
           break;
         }
       }
-      return { content: curContent, coverage: curCov, addedTotal, tokensIn, tokensOut };
+      return { content: curContent, coverage: curCov, addedTotal, tokensIn, tokensOut, cacheRead, cacheCreate };
     }
 
     {
@@ -196,14 +200,14 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       umContent = r.content;
       umCoverage = r.coverage;
       umFixUpAdded = r.addedTotal;
-      umExtraTokens = { input: r.tokensIn, output: r.tokensOut };
+      umExtraTokens = { input: r.tokensIn, output: r.tokensOut, cacheRead: r.cacheRead, cacheCreate: r.cacheCreate };
     }
     {
       const r = await fixUpLoop("technicalDoc", tdContent, tdCoverage);
       tdContent = r.content;
       tdCoverage = r.coverage;
       tdFixUpAdded = r.addedTotal;
-      tdExtraTokens = { input: r.tokensIn, output: r.tokensOut };
+      tdExtraTokens = { input: r.tokensIn, output: r.tokensOut, cacheRead: r.cacheRead, cacheCreate: r.cacheCreate };
     }
 
     if (umCoverage.missing.length > 0) {
@@ -230,6 +234,12 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       updatedAt: new Date().toISOString(),
       inputTokens: userManual.inputTokens + technical.inputTokens + umExtraTokens.input + tdExtraTokens.input,
       outputTokens: userManual.outputTokens + technical.outputTokens + umExtraTokens.output + tdExtraTokens.output,
+      cacheReadTokens:
+        (userManual.cacheReadTokens ?? 0) + (technical.cacheReadTokens ?? 0) +
+        umExtraTokens.cacheRead + tdExtraTokens.cacheRead,
+      cacheCreationTokens:
+        (userManual.cacheCreationTokens ?? 0) + (technical.cacheCreationTokens ?? 0) +
+        umExtraTokens.cacheCreate + tdExtraTokens.cacheCreate,
     });
 
     const completed = incCompleted();

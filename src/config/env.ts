@@ -55,4 +55,22 @@ export const env = {
     return (process.env.CLAUDE_BACKEND as "cli" | "api") || "cli";
   },
   get claudeCliBin() { return process.env.CLAUDE_CLI_BIN || "claude"; },
+
+  // İnteraktif keşifte açılan form/modal alanlarına güvenli test verisi
+  // doldur (asla submit etmez) — "dolu form" state'i yakalanır, kılavuz
+  // adım-adım veri girişini anlatabilir. Yan etkiden çekinen kullanıcı
+  // FILL_TEST_DATA=false ile kapatabilir.
+  get fillTestData(): boolean {
+    return (process.env.FILL_TEST_DATA || "true").toLowerCase() !== "false";
+  },
+
+  // ⚠️ GERÇEK MUTASYON: açıkken keşif, doldurduğu form/modal'da Kaydet/
+  // Gönder/Oluştur gibi YAZMA butonlarını gerçekten tıklar → hedef
+  // uygulamada GERÇEK KAYIT oluşur/güncellenir. Kayıt-sonrası başarı
+  // ekranını belgelemek için. VARSAYILAN KAPALI — yalnız test/staging
+  // ortamında ALLOW_FORM_SUBMIT=true yapın. Okuma submit'leri (Ara/
+  // Filtrele) bu bayraktan bağımsız, her zaman güvenle çalıştırılır.
+  get allowFormSubmit(): boolean {
+    return (process.env.ALLOW_FORM_SUBMIT || "false").toLowerCase() === "true";
+  },
 };

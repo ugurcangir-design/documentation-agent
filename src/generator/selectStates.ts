@@ -11,6 +11,10 @@
 import type { ScreenState } from "../types/screen";
 
 const MAX_PER_CATEGORY: Record<string, number> = {
+  kayit: 3, // kayıt-sonrası ekranlar (başarı/post-save) — yüksek değer
+  uyari: 2, // doğrulama/validation uyarıları
+  sonuc: 2, // filtre/arama sonuç ekranları
+  dolu: 4,
   modal: 3,
   panel: 2,
   sekme: 2,
@@ -26,10 +30,19 @@ const MAX_PER_CATEGORY: Record<string, number> = {
   buton: 1,
 };
 
-const TOTAL_MAX = 11;
+const TOTAL_MAX = 15;
 
 function categorize(state: ScreenState): string {
   const t = state.triggeredBy.toLowerCase();
+  const lbl = state.label.toLowerCase();
+  // Submit-sonrası ekranlar — en yüksek değer (kılavuzda "kaydettikten
+  // sonra ne olur" anlatımı). triggeredBy/label ile önce sınıflandırılır.
+  if (t.includes("gerçek submit") || lbl.includes("kayıt sonrası")) return "kayit";
+  if (t.includes("doğrulama") || lbl.includes("doğrulama uyarısı")) return "uyari";
+  if (lbl.includes("filtre/arama sonucu") || t.includes("sonuç listesi")) return "sonuc";
+  // Dolu-form state'leri (test verisiyle doldurulmuş) — adım-adım veri
+  // girişi kılavuzunun temeli; yüksek öncelikli ayrı kategori.
+  if (t.includes("dolduruldu") || lbl.includes("(dolu)") || lbl.includes("form dolu")) return "dolu";
   if (t.includes("tab")) return "sekme";
   if (t.includes("dropdown")) return "dropdown";
   if (t.includes("tarih")) return "tarih";

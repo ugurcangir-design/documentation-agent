@@ -115,6 +115,8 @@ export async function generateTechnicalDocSection(
       content: cleanGeneratedMarkdown(result.text),
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
+      cacheReadTokens: result.cacheReadTokens ?? 0,
+      cacheCreationTokens: result.cacheCreationTokens ?? 0,
     };
     if (result.truncated) out.truncated = true;
     return out;
