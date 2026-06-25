@@ -10,7 +10,7 @@ import { v4 as uuid } from "uuid";
 
 import { analyzeScreen } from "../../analysis/screenAnalyzer";
 import { buildScreenContext } from "../../analysis/screenContextBuilder";
-import { generateUserManualSection } from "../../generator/userManualGenerator";
+import { generateUserManualComplete } from "../../generator/userManualGenerator";
 import { generateTechnicalDocSection } from "../../generator/technicalDocGenerator";
 import { computeCoverage, type CoverageReport } from "../../quality/coverageCheck";
 import { computeVerifiedCoverage } from "../../quality/verifiedCoverage";
@@ -87,7 +87,7 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     setProgress(`Kullanıcı kılavuzu + teknik döküman yazılıyor: ${screenTitle}`);
 
     const [userManual, technical] = await Promise.all([
-      generateUserManualSection(context, templateContents),
+      generateUserManualComplete(context, templateContents),
       generateTechnicalDocSection(context, templateContents),
     ]);
 

@@ -4,6 +4,8 @@ import { loadPromptConfig, buildPromptHeader, buildPromptFooter } from "../confi
 import { callClaude, isPromptTooLong } from "../llm/claudeClient";
 import { selectRepresentativeStates } from "./selectStates";
 import { isSidebarNav } from "../quality/sidebarNav";
+import type { ScreenState } from "../types/screen";
+import { groupStatesByTab } from "./tabGrouping";
 
 export interface GenerationResult {
   content: string;
@@ -85,7 +87,11 @@ export function buildScreenshotEmbedBlock(
   );
 }
 
-function buildPrompt(ctx: ScreenContext, templates: string[]): { cachedPrefix: string; prompt: string } {
+function buildPrompt(
+  ctx: ScreenContext,
+  templates: string[],
+  tabFocus?: { label: string }
+): { cachedPrefix: string; prompt: string } {
   const cfg = loadPromptConfig("userManual");
 
   const brdContext = ctx.preparedChunks
@@ -157,7 +163,15 @@ function buildPrompt(ctx: ScreenContext, templates: string[]): { cachedPrefix: s
   ].filter((s) => s && s.trim().length > 0).join("\n\n");
 
   // Per-screen dynamic prompt — retrieval + ekran-spesifik içerik.
-  const prompt = `**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}
+  const finalInstruction = tabFocus
+    ? `Bu çıktı, '${ctx.analysis.screenTitle}' ekranının **'${tabFocus.label}' SEKMESİNE** ait bölümdür.
+- Çıktı SADECE \`## ${tabFocus.label} Sekmesi\` markdown başlığıyla başlasın. Ekranın genel girişini/başlığını TEKRARLAMA (o ayrı ana bölümde yazıldı).
+- YALNIZCA bu sekmeye ait, sana verilen sekme görsellerinde görünen alanları, butonları, tabloları, filtreleri, modalları, popup/alert ve mesajları anlat. Diğer sekmeleri anlatma.
+- Aşağıdaki 5 boyutlu eksiksizlik bu sekme için de ZORUNLU: her adım numaralı, her modal/mesaj kendi görseliyle, veri girişi somut örnekli.
+- Bu sekmeye ait HİÇBİR işlem, alan, buton, mesaj veya detay atlanmasın.`
+    : `Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine, SEKMEYE hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.`;
+
+  const prompt = `**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}${tabFocus ? `\n**Aktif Sekme:** ${tabFocus.label}` : ""}
 **Amaç:** ${ctx.analysis.purpose}
 **Hedef kullanıcı:** ${ctx.analysis.targetAudience || "Genel kullanıcı"}
 
@@ -179,7 +193,7 @@ ${apiContext || "_(yok)_"}
 ${stateBlock}
 ---
 
-Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine, SEKMEYE hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.
+${finalInstruction}
 
 EKSİKSİZLİK ZORUNLU — şu beş boyutta hiçbir şey atlama:
 1. **Ekran görüntüsü:** Her ana adım/sekme/modal için ilgili görseli embed et (yukarıdaki tablo). Görselsiz adım anlatma.
@@ -193,13 +207,24 @@ Amaç: Kullanıcı bu ekranı baştan sona, tek bir işlemi/bilgiyi/detayı kaç
   return { cachedPrefix, prompt };
 }
 
+export interface ManualFocus {
+  /** Bu çağrı için kullanılacak state alt-kümesi (örn. tek bir sekmenin
+   *  görselleri). Verilmezse ctx.screen.states kullanılır. */
+  statesOverride?: ScreenState[];
+  /** Sekme bölümü üretiliyorsa sekmenin adı (çıktı '## <ad> Sekmesi'). */
+  tabLabel?: string;
+}
+
 export async function generateUserManualSection(
   ctx: ScreenContext,
-  templates: string[] = []
+  templates: string[] = [],
+  focus?: ManualFocus
 ): Promise<GenerationResult> {
   const cfg = loadPromptConfig("userManual");
 
-  const allStates = selectRepresentativeStates(ctx.screen.states ?? []);
+  const sourceStates = focus?.statesOverride ?? ctx.screen.states ?? [];
+  const allStates = selectRepresentativeStates(sourceStates);
+  const tabFocus = focus?.tabLabel ? { label: focus.tabLabel } : undefined;
 
   async function runWithBudget(stateCap: number, tmplChars: number): Promise<GenerationResult> {
     const useStates = allStates.slice(0, stateCap);
@@ -213,7 +238,7 @@ export async function generateUserManualSection(
       path: s.screenshotPath,
       label: s.label,
     }));
-    const { cachedPrefix, prompt } = buildPrompt(trimmedCtx, useTemplates);
+    const { cachedPrefix, prompt } = buildPrompt(trimmedCtx, useTemplates, tabFocus);
     const result = await callClaude({
       prompt,
       cachedPrefix,
@@ -248,4 +273,59 @@ export async function generateUserManualSection(
       return await runWithBudget(4, 1500);
     }
   }
+}
+
+/** İki GenerationResult'ı (içerik + token) birleştirir. */
+function mergeResults(a: GenerationResult, b: GenerationResult, joiner = "\n\n"): GenerationResult {
+  const out: GenerationResult = {
+    content: a.content + joiner + b.content,
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: (a.cacheReadTokens ?? 0) + (b.cacheReadTokens ?? 0),
+    cacheCreationTokens: (a.cacheCreationTokens ?? 0) + (b.cacheCreationTokens ?? 0),
+  };
+  if (a.truncated || b.truncated) out.truncated = true;
+  return out;
+}
+
+/**
+ * Tam kullanıcı kılavuzu — çok sekmeli ekranlarda KAYIPSIZ üretim.
+ * Ekranda ≥2 sekme varsa: önce genel-bakış bölümü (sekme-dışı state'ler),
+ * sonra HER SEKME için AYRI üretim çağrısı (yalnız o sekmenin görselleriyle)
+ * yapılır ve tek dokümanda birleştirilir. Böylece her sekmenin kendi tam
+ * görsel/işlem seti modele girer; tek çağrının görsel bütçesine sıkışıp
+ * sekme detayı kaybolmaz. Tek sekme / sekmesiz ekranlarda tek çağrı.
+ */
+export async function generateUserManualComplete(
+  ctx: ScreenContext,
+  templates: string[] = []
+): Promise<GenerationResult> {
+  const { baseStates, tabs } = groupStatesByTab(ctx.screen.states ?? []);
+
+  // Tek sekme ya da hiç sekme yok → mevcut tek-çağrı akışı (tüm state'ler).
+  if (tabs.length < 2) {
+    return generateUserManualSection(ctx, templates);
+  }
+
+  console.log(`[userManual] ${tabs.length} sekme tespit edildi → sekme başına ayrı üretim + birleştirme`);
+
+  // 1. Genel bakış — sekmeye ait olmayan state'lerle (ana görsel + ortak alanlar).
+  const overviewCtx: ScreenContext = { ...ctx, screen: { ...ctx.screen, states: baseStates } };
+  let merged = await generateUserManualSection(overviewCtx, templates);
+
+  // 2. Her sekme için ayrı, odaklı bölüm üret ve ekle.
+  for (const tab of tabs) {
+    try {
+      const section = await generateUserManualSection(ctx, templates, {
+        statesOverride: tab.states,
+        tabLabel: tab.label,
+      });
+      merged = mergeResults(merged, section, "\n\n---\n\n");
+      console.log(`[userManual]   ✓ '${tab.label}' sekmesi bölümü üretildi (${tab.states.length} görsel)`);
+    } catch (e) {
+      console.warn(`[userManual]   ✗ '${tab.label}' sekmesi üretilemedi: ${(e as Error).message}`);
+    }
+  }
+
+  return merged;
 }
