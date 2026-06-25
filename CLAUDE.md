@@ -548,10 +548,13 @@ satır 141. Eşleşen butonların priority=2, diğerleri 1.
   `StoredScreenState{ label, triggeredBy, screenshotPath }`
 
 ### Yinelenen görsel dedup + modal kapatma (kritik)
-- **İçerik-hash dedup:** `pushState` her görselin md5'ini tutar; aynı görüntü
-  ikinci kez gelirse state'e EKLENMEZ (dosya silinir). Başlangıç görünümü
-  seed'lenir. Aksi halde farklı butonlar aynı modalı/aynı arka planı
-  açtığında kılavuz "hep aynı ekranı" anlatıyordu.
+- **İçerik-hash dedup, PER-SCOPE:** `makePushState(seen)` factory'si her
+  görselin md5'ini `seen` setinde tutar; aynı görüntü scope içinde ikinci
+  kez gelirse EKLENMEZ. **Her sekme KENDİ `seen` setini alır** (ana akış
+  ayrı). KRİTİK: global dedup, Market/Player gibi görsel-benzer ama farklı
+  sekmelerin modallerini "yinelenen" sayıp siliyordu → her sekmede "create
+  ekranı yok" oluyordu. Scope-içi dedup yalnız aynı butonun aynı modalı
+  tekrar yakalamasını engeller.
 - **`closeModal` çok-yollu + tekrarlı** (Escape / kapat-iptal / backdrop,
   ≤4 tur) ve `runActionButtonPass` her turdan önce kalmış modalı kapatır;
   kapatılamazsa kalan butonları atlar. Modal kapanmazsa sonraki butonlar
@@ -600,10 +603,13 @@ için eleme sırasında korunur.
 ### Sekme-içi derin keşif (env.deepExplore, default açık)
 `interactiveExplorer.exploreTabContent` her sekme aktifken o sekmenin
 İÇİNİ gerçek kullanıcı gibi gezer: sekme butonları → modal/popup/alert +
-form doldurma + doğrulama/submit katmanları (sekme başına ≤6 modal) +
-inline form doldurma + okuma-submit sonucu. Her sekme TAZE etiket setiyle
-bağımsız keşfedilir; state dosyaları `${base}_tab_${i}_*`. Sekme görselleri
-fullPage. DEEP_EXPLORE=false → yalnız aktif sekme derinlemesine gezilir.
+**veri tablosu etkileşimleri** (`runColumnHeaderPass` sıralama +
+`runRowActionPass` satır menüsü + `runRowEditDrilldown` önizleme/düzenle/
+detay ≤3) + inline form doldurma + okuma-submit sonucu. Bu pass
+fonksiyonları ana akışta da çağrılır (tek kaynak). Her sekme TAZE etiket +
+TAZE dedup scope ile bağımsız; state dosyaları `${base}_tab_${i}_*`. Sekme
+geçişinde async içerik için ek bekleme + networkidle. Sekme görselleri
+fullPage. DEEP_EXPLORE=false → yalnız aktif sekme gezilir.
 
 ### Global chrome dışlama (profil/dil/header)
 `interactiveExplorer.isInNavOrSidebar` sidebar + üst bar (header/topbar/
