@@ -7,6 +7,8 @@
  * navigation items.
  */
 
+import crypto from "crypto";
+import fs from "fs";
 import type { Page, Locator } from "playwright";
 import { captureScreenshot, type CaptureOptions } from "./screenshotCapture";
 import { fillTestData, triggerValidation, clickSubmitButton } from "./formFiller";
@@ -117,25 +119,45 @@ async function openModalLocator(page: Page): Promise<Locator | null> {
   return null;
 }
 
-async function closeModal(page: Page): Promise<void> {
-  await page.keyboard.press("Escape").catch(() => {});
-  await page.waitForTimeout(300);
-  if (!(await modalIsOpen(page))) return;
+/** Açık modal'ı kapatmak için ÇOK YOLLU ve TEKRARLI dener: Escape, kapat
+ *  butonu, backdrop tıklama. Modal kapanmazsa sonraki butonlar onun altında
+ *  kalır ve aynı modal tekrar tekrar yakalanır (kök neden). En fazla 4 tur. */
+async function closeModal(page: Page): Promise<boolean> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (!(await modalIsOpen(page))) return true;
 
-  const closeBtn = page.locator(
-    'button[aria-label*="close" i], button[aria-label*="kapat" i], ' +
-      '.modal-close, .ant-modal-close, [class*="CloseIcon"]'
-  ).first();
-  try {
-    if (await closeBtn.isVisible({ timeout: 300 })) {
-      await closeBtn.click({ timeout: ACTION_TIMEOUT });
-      await page.waitForTimeout(300);
-    }
-  } catch { /* noop */ }
-
-  if (await modalIsOpen(page)) {
+    // 1. Escape
     await page.keyboard.press("Escape").catch(() => {});
+    await page.waitForTimeout(250);
+    if (!(await modalIsOpen(page))) return true;
+
+    // 2. Kapat / İptal butonu
+    const closeBtn = page.locator(
+      'button[aria-label*="close" i], button[aria-label*="kapat" i], ' +
+      '[role="dialog"] button:has-text("İptal"), [role="dialog"] button:has-text("Kapat"), ' +
+      '[role="dialog"] button:has-text("Cancel"), [role="dialog"] button:has-text("Vazgeç"), ' +
+      '.modal-close, .ant-modal-close, .MuiDialog-root [aria-label*="close" i], [class*="CloseIcon"]'
+    ).first();
+    try {
+      if (await closeBtn.isVisible({ timeout: 300 })) {
+        await closeBtn.click({ timeout: ACTION_TIMEOUT, force: true });
+        await page.waitForTimeout(300);
+        if (!(await modalIsOpen(page))) return true;
+      }
+    } catch { /* noop */ }
+
+    // 3. Backdrop / overlay'a tıkla (modalın dışına)
+    try {
+      const backdrop = page.locator(
+        '.modal-backdrop, .ant-modal-mask, .MuiBackdrop-root, [class*="overlay" i], [class*="Backdrop"]'
+      ).first();
+      if (await backdrop.isVisible({ timeout: 200 })) {
+        await backdrop.click({ timeout: 1000, force: true, position: { x: 5, y: 5 } }).catch(() => {});
+        await page.waitForTimeout(250);
+      }
+    } catch { /* noop */ }
   }
+  return !(await modalIsOpen(page));
 }
 
 /** Iterate visible locators up to a limit. Re-queries the locator on each
@@ -263,6 +285,17 @@ async function runActionButtonPass(
     if (captured >= maxModals) break;
     if (clickedLabels.has(cand.label)) continue;
     clickedLabels.add(cand.label);
+
+    // Önceki turdan kalmış açık modal varsa kapat — yoksa bu butona basamaz
+    // (overlay engeller) ve hâlâ açık olan eski modal yeniden yakalanır.
+    if (await modalIsOpen(page)) {
+      const closed = await closeModal(page);
+      if (!closed) {
+        log(`  ⚠ açık modal kapatılamadı, kalan action butonları atlanıyor`);
+        break;
+      }
+      await page.waitForTimeout(200);
+    }
 
     const loc = root.nth(cand.index);
     if (!(await loc.isVisible().catch(() => false))) continue;
@@ -424,6 +457,11 @@ export async function exploreInteractiveStates(
   const states: ScreenState[] = [];
   const log = (m: string) => { onProgress?.(m); console.log(`    [explore] ${m}`); };
   const clickedLabels = new Set<string>();
+  // İçerik-hash'i ile yinelenen görsel ataması: farklı butonlar aynı modalı
+  // açtığında ya da tıklama görünür değişiklik yapmadığında (arka plan aynen
+  // kalır) AYNI screenshot tekrar tekrar yakalanıyordu → kılavuz "hep aynı
+  // ekranı" anlatıyordu. Aynı görüntü ikinci kez gelirse state'e eklenmez.
+  const seenHashes = new Set<string>();
 
   // Wait for SPA to render its interactive content
   log("Sayfa içeriği bekleniyor…");
@@ -445,6 +483,15 @@ export async function exploreInteractiveStates(
     capture?: CaptureOptions
   ) => {
     const shot = await captureScreenshot(page, filename, capture);
+    const hash = crypto.createHash("md5").update(shot.screenshotBase64).digest("hex");
+    if (seenHashes.has(hash)) {
+      // Bu görüntü zaten yakalandı (aynı modal/aynı arka plan) → ekleme,
+      // dosyayı sil. Aksi halde kılavuza yinelenen görsel girer.
+      log(`  ⊘ yinelenen görsel atlandı: ${label}`);
+      fs.unlink(shot.screenshotPath, () => {});
+      return;
+    }
+    seenHashes.add(hash);
     states.push({
       label,
       triggeredBy,
@@ -452,6 +499,14 @@ export async function exploreInteractiveStates(
       screenshotBase64: shot.screenshotBase64,
     });
   };
+
+  // Başlangıç (etkileşimsiz) görünümünü seed'le — buna birebir eşit, yani
+  // "tıkladım ama görünür bir şey değişmedi" türü state'ler de elensin.
+  try {
+    const baseShot = await captureScreenshot(page, `${basePath}__baseseed`);
+    seenHashes.add(crypto.createHash("md5").update(baseShot.screenshotBase64).digest("hex"));
+    fs.unlink(baseShot.screenshotPath, () => {});
+  } catch { /* noop */ }
 
   // ── 0. PRE-PASS: open the Filters/Search panel first ─────────────
   // The filter trigger is often NOT a <button> — it can be a div/span
