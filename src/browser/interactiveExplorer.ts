@@ -800,10 +800,16 @@ export async function exploreInteractiveStates(
   const tabsCaptured = await forEachVisible(
     page,
     [
-      '[role="tab"]', '.ant-tabs-tab', '.MuiTab-root',
+      '[role="tab"]',
+      '[role="tablist"] > a', '[role="tablist"] > button', '[role="tablist"] > li',
+      '[role="tablist"] > [role="presentation"]',
+      '.ant-tabs-tab', '.MuiTab-root',
       '.nav-tabs > li > a', '.nav-tabs > li > button',
+      '.nav-tabs .nav-link', '.nav-pills .nav-link', '.nav-link[data-toggle="tab"]',
       'ul[class*="tabs" i] > li', 'ul[class*="Tabs"] > li',
-      '[class*="tab-button"]', '[class*="TabButton"]',
+      'ul[class*="tab" i] > li > a',
+      '[class*="tab-item" i]', '[class*="TabItem"]', '[class*="tab-link" i]',
+      '[class*="tab-button"]', '[class*="TabButton"]', '[class*="tab-header" i]',
       '[class*="segment" i][role="button"]',
       '[class*="SegmentedControl"] button',
       '[class*="ButtonGroup"] button[aria-pressed]',
