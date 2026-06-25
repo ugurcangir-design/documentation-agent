@@ -521,56 +521,179 @@ async function runRowEditDrilldown(
 }
 
 /**
- * Tek bir sekme aktifken o sekmenin İÇİNİ gerçek kullanıcı gibi gezer:
- * sekmedeki action butonları → modal/popup/alert, KOLON SIRALAMA, SATIR
- * AKSİYONLARI (önizleme/düzenle/detay) ve veri tablosu, ardından inline
- * formu doldurup okuma submit'i (Ara/Filtrele) ile sonucu yakalar. Her
- * sekme TAZE etiket + TAZE dedup scope ile bağımsız keşfedilir; böylece
- * sekmeler benzer görünse de her birinin kendi içeriği yakalanır.
+ * Aktif görünümün (ekranın kendisi VEYA aktif bir sekmenin) İÇİNİ gerçek
+ * kullanıcı gibi baştan sona gezer: dropdownlar → action butonları (create/
+ * add modalleri) → kolon sıralama → satır aksiyonları (önizleme/düzenle/
+ * detay) → tarih/checkbox/toggle/input → accordion → inline form doldurma +
+ * okuma/yazma submit. TEK KAYNAK: hem sekmesiz ekran hem her sekme bunu
+ * çağırır → ana akış ile sekme keşfi arasında kod/davranış tekrarı olmaz.
  */
-async function exploreTabContent(
+async function exploreContentArea(
   page: Page,
-  tabBase: string,
-  tabLabel: string,
+  basePath: string,
   log: (m: string) => void,
-  pushState: PushStateFn
+  clickedLabels: Set<string>,
+  pushState: PushStateFn,
+  maxModals: number
 ): Promise<void> {
-  const tabLabels = new Set<string>();
-  // Sekme içi butonlar → modallar/popup/alert + form doldurma + submit
-  // katmanları (sekme başına ≤6 modal — toplam patlamasın).
-  await runActionButtonPass(page, tabBase, log, tabLabels, pushState, 6);
-  // Sekmenin veri tablosu etkileşimleri: kolon sıralama + satır aksiyonları
-  // (önizleme/düzenle/detay/silme menüsü) + satır modal drill-down.
-  await runColumnHeaderPass(page, tabBase, log, tabLabels, pushState);
-  await runRowActionPass(page, tabBase, log, pushState);
-  await runRowEditDrilldown(page, tabBase, log, pushState);
+  // Dropdownlar / select'ler
+  await forEachVisible(
+    page,
+    [
+      'select:not([disabled])', '[aria-haspopup="true"]', '[aria-haspopup="menu"]',
+      '[aria-haspopup="listbox"]', '[aria-haspopup="dialog"][role="button"]',
+      '.ant-dropdown-trigger', '.ant-select-selector', '.MuiSelect-select',
+      '[class*="dropdown-trigger" i]', '[class*="DropdownTrigger"]', '[class*="select-trigger" i]',
+    ].join(", "),
+    MAX.dropdowns, log, "Dropdown", true,
+    async (loc, label, i) => {
+      await loc.click({ timeout: ACTION_TIMEOUT });
+      await page.waitForTimeout(RENDER_WAIT);
+      await pushState(`Dropdown açık: "${label || `dropdown ${i}`}"`, `dropdown tıklandı: ${label || "(etiketsiz)"}`, `${basePath}_dd_${i}`);
+      log(`  ✓ Dropdown yakalandı: ${label || "(etiketsiz)"}`);
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(200);
+      return true;
+    }
+  );
 
-  // Sekmenin inline formu (modal değil) — doldur + okuma submit'i ile sonuç.
-  if (env.fillTestData) {
+  // Action butonları (create/add → modal/popup/alert + form doldurma + submit)
+  await runActionButtonPass(page, basePath, log, clickedLabels, pushState, maxModals);
+
+  // Veri tablosu: kolon sıralama + satır aksiyonları + satır drill-down
+  await runColumnHeaderPass(page, basePath, log, clickedLabels, pushState);
+  await runRowActionPass(page, basePath, log, pushState);
+  await runRowEditDrilldown(page, basePath, log, pushState);
+
+  // Tarih seçiciler
+  await forEachVisible(
+    page,
+    [
+      'input[type="date"]', 'input[type="datetime-local"]', 'input[type="month"]', 'input[type="week"]',
+      '[class*="DatePicker"]', '[class*="date-picker"]', '[class*="datepicker"]',
+      '[data-testid*="date" i]', '[aria-label*="tarih" i]', '[aria-label*="date" i]',
+    ].join(", "),
+    MAX.dates, log, "Tarih seçici", true,
+    async (loc, label, i) => {
+      await loc.click({ timeout: ACTION_TIMEOUT });
+      await page.waitForTimeout(800);
+      await pushState(`Tarih seçici açık: "${label || "tarih"}"`, `tarih input tıklandı: ${label || "(etiketsiz)"}`, `${basePath}_date_${i}`);
+      log(`  ✓ Tarih seçici yakalandı: ${label || "(etiketsiz)"}`);
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(200);
+      return true;
+    }
+  );
+
+  // Checkbox'lar
+  await forEachVisible(
+    page,
+    'input[type="checkbox"]:not([disabled]):not([readonly]), [role="checkbox"]:not([aria-disabled="true"]), [class*="Checkbox"]:not([disabled])',
+    MAX.checkboxes, log, "Checkbox", true,
+    async (loc, label, i) => {
+      const wasChecked = await loc.isChecked().catch(() => false);
+      await loc.click({ timeout: ACTION_TIMEOUT, force: true });
+      await page.waitForTimeout(400);
+      await pushState(`Checkbox ${wasChecked ? "kaldırıldı" : "işaretlendi"}: "${label || "(etiketsiz)"}"`, `checkbox toggle: ${label || "(etiketsiz)"}`, `${basePath}_cb_${i}`);
+      log(`  ✓ Checkbox yakalandı: ${label || "(etiketsiz)"}`);
+      await loc.click({ timeout: ACTION_TIMEOUT, force: true }).catch(() => {});
+      await page.waitForTimeout(200);
+      return true;
+    }
+  );
+
+  // Toggle'lar
+  await forEachVisible(
+    page,
+    [
+      '[role="switch"]:not([aria-disabled="true"])', '.ant-switch:not(.ant-switch-disabled)',
+      '.MuiSwitch-root input[type="checkbox"]', '[class*="toggle-switch" i]:not(button)',
+      '[class*="Toggle"][role="button"]', '[class*="Switch"][role="button"]',
+    ].join(", "),
+    MAX.toggles, log, "Toggle", true,
+    async (loc, label, i) => {
+      await loc.click({ timeout: ACTION_TIMEOUT, force: true });
+      await page.waitForTimeout(500);
+      await pushState(`Toggle değişti: "${label || "switch"}"`, `toggle: ${label || "(etiketsiz)"}`, `${basePath}_toggle_${i}`);
+      log(`  ✓ Toggle yakalandı: ${label || "(etiketsiz)"}`);
+      await loc.click({ timeout: ACTION_TIMEOUT, force: true }).catch(() => {});
+      await page.waitForTimeout(200);
+      return true;
+    }
+  );
+
+  // Metin inputları (focus)
+  await forEachVisible(
+    page,
+    [
+      'input[type="text"]:not([disabled]):not([readonly])', 'input[type="search"]:not([disabled])',
+      'input[type="email"]:not([disabled])', 'input[type="number"]:not([disabled])',
+      'input[type="tel"]:not([disabled])', 'input[type="url"]:not([disabled])',
+      'input:not([type]):not([disabled])', 'textarea:not([disabled]):not([readonly])',
+    ].join(", "),
+    MAX.inputs, log, "Text input", true,
+    async (loc, label, i) => {
+      await loc.focus({ timeout: ACTION_TIMEOUT });
+      await page.waitForTimeout(500);
+      await pushState(`Input focus: "${label || "metin alanı"}"`, `input focus: ${label || "(etiketsiz)"}`, `${basePath}_input_${i}`);
+      log(`  ✓ Input focus yakalandı: ${label || "(etiketsiz)"}`);
+      await loc.evaluate((el: HTMLElement) => el.blur()).catch(() => {});
+      return true;
+    }
+  );
+
+  // Accordion'lar
+  await forEachVisible(
+    page,
+    [
+      'details > summary', '[aria-expanded="false"][role="button"]',
+      '[aria-expanded="false"][class*="accordion" i]', '[class*="accordion-header" i]',
+      '[class*="AccordionHeader"]', '[class*="Collapse"][role="button"]', '[class*="collapsible" i]',
+    ].join(", "),
+    MAX.accordions, log, "Accordion", true,
+    async (loc, label, i) => {
+      await loc.click({ timeout: ACTION_TIMEOUT, force: true });
+      await page.waitForTimeout(500);
+      await pushState(`Accordion açık: "${label || "bölüm"}"`, `accordion: ${label || "(etiketsiz)"}`, `${basePath}_acc_${i}`);
+      log(`  ✓ Accordion yakalandı: ${label || "(etiketsiz)"}`);
+      return true;
+    }
+  );
+
+  // İnline form (modal değil) — doldur + okuma submit (sonuç) + doğrulama + (opt-in) yazma submit
+  if (env.fillTestData && !(await modalIsOpen(page))) {
     try {
       const scopeLoc = page.locator("main, [role=main], form").first();
       const scope = (await scopeLoc.count().catch(() => 0)) > 0 ? scopeLoc : page;
-      const { filledCount } = await fillTestData(page, scope, log);
+      const { filledCount, labels } = await fillTestData(page, scope, log);
       if (filledCount >= 2) {
         await page.waitForTimeout(400);
-        await pushState(
-          `Sekme (dolu): "${tabLabel}"`,
-          `sekme formu test verisiyle dolduruldu (${filledCount} alan)`,
-          `${tabBase}_form_filled`,
-          { fullPage: true }
-        );
-        const r = await clickSubmitButton(page, scope, "read", log);
-        if (r.clicked) {
-          await page.waitForTimeout(1200);
-          await pushState(
-            `Sekme sonuç: "${tabLabel}"`,
-            `sekmede okuma submit (${r.label}) — sonuç`,
-            `${tabBase}_results`,
-            { fullPage: true }
-          );
+        await pushState(`Form dolu`, `form test verisiyle dolduruldu: ${labels.slice(0, 4).join(", ")}`, `${basePath}_form_filled`, { fullPage: true });
+        log(`  ✓ Dolu form state'i yakalandı (${filledCount} alan)`);
+        try {
+          const r = await clickSubmitButton(page, scope, "read", log);
+          if (r.clicked) {
+            await page.waitForTimeout(1200);
+            await pushState(`Filtre/arama sonucu`, `okuma submit tıklandı (${r.label}) — sonuç listesi`, `${basePath}_form_results`, { fullPage: true });
+          }
+        } catch { /* okuma submit yok */ }
+        try {
+          if (await triggerValidation(page, scope, log)) {
+            await pushState(`Form doğrulama uyarısı`, `zorunlu/geçersiz alan blur — istemci doğrulaması`, `${basePath}_form_invalid`, { fullPage: true });
+            await fillTestData(page, scope, log);
+          }
+        } catch { /* noop */ }
+        if (env.allowFormSubmit) {
+          try {
+            const w = await clickSubmitButton(page, scope, "write", log);
+            if (w.clicked) {
+              await page.waitForTimeout(1500);
+              await pushState(`Kayıt sonrası`, `form gönderildi (${w.label}) — GERÇEK submit`, `${basePath}_form_saved`, { fullPage: true });
+            }
+          } catch { /* submit başarısız */ }
         }
       }
-    } catch { /* sekme formu yok / doldurulamadı */ }
+    } catch { /* form yok */ }
   }
 }
 
@@ -670,7 +793,11 @@ export async function exploreInteractiveStates(
   }
 
   // ── 1. TABS ──────────────────────────────────────────────────────
-  await forEachVisible(
+  // Her sekme: tıkla → tam-sayfa yakala → o sekmenin İÇİNİ (kendi dedup
+  // scope'uyla) baştan sona gez. Sekme varsa ana içerik keşfi TEKRAR
+  // çalışmaz (aşağıda guard) — aksi halde aktif sekme iki kez yakalanıp
+  // kılavuza "aynı görsel arka arkaya" giriyordu.
+  const tabsCaptured = await forEachVisible(
     page,
     [
       '[role="tab"]', '.ant-tabs-tab', '.MuiTab-root',
@@ -685,174 +812,35 @@ export async function exploreInteractiveStates(
     ].join(", "),
     MAX.tabs, log, "Tab", false,
     async (loc, label, i) => {
-      if (clickedLabels.has(label)) return false;
+      if (clickedLabels.has(`tab:${label}:${i}`)) return false;
       await loc.click({ timeout: ACTION_TIMEOUT });
       // Sekme içeriği async yüklenebilir — tam yüklensin diye biraz daha bekle
       // (aksi halde önceki sekmenin içeriği yakalanıp "aynı görsel" oluşuyordu).
       await page.waitForTimeout(RENDER_WAIT + 500);
       try { await page.waitForLoadState("networkidle", { timeout: 3000 }); } catch { /* noop */ }
-      clickedLabels.add(label);
+      clickedLabels.add(`tab:${label}:${i}`);
       log(`  ✓ Sekme yakalandı: ${label}`);
       // Her sekme KENDİ dedup scope'unu alır → benzer görünen ama farklı
       // sekmelerin içerikleri "yinelenen" diye silinmez.
-      const tabSeen = new Set<string>();
-      const tabPush = makePushState(tabSeen);
-      // Sekme içeriği tam-sayfa yakalanır (alt-kıvrım dahil).
+      const tabPush = makePushState(new Set<string>());
       await tabPush(`Sekme: "${label || `tab ${i}`}"`, `tab tıklandı: ${label}`, `${basePath}_tab_${i}`, { fullPage: true });
-      // Derin keşif: her sekmenin İÇİNİ (butonlar/modallar/tablo/satır işlemleri) ayrı gez.
       if (env.deepExplore) {
         log(`  ↳ Sekme içi derin keşif: ${label || `tab ${i}`}`);
-        await exploreTabContent(page, `${basePath}_tab_${i}`, label || `tab ${i}`, log, tabPush);
+        await exploreContentArea(page, `${basePath}_tab_${i}`, log, new Set<string>(), tabPush, 6);
       }
       return true;
     }
   );
+  const tabsExplored = tabsCaptured > 0 && env.deepExplore;
 
-  // ── 2. DROPDOWNS / SELECTS ───────────────────────────────────────
-  await forEachVisible(
-    page,
-    [
-      'select:not([disabled])',
-      '[aria-haspopup="true"]',
-      '[aria-haspopup="menu"]',
-      '[aria-haspopup="listbox"]',
-      '[aria-haspopup="dialog"][role="button"]',
-      '.ant-dropdown-trigger', '.ant-select-selector',
-      '.MuiSelect-select',
-      '[class*="dropdown-trigger" i]', '[class*="DropdownTrigger"]',
-      '[class*="select-trigger" i]',
-    ].join(", "),
-    MAX.dropdowns, log, "Dropdown", true,
-    async (loc, label, i) => {
-      await loc.click({ timeout: ACTION_TIMEOUT });
-      await page.waitForTimeout(RENDER_WAIT);
-      await pushState(
-        `Dropdown açık: "${label || `dropdown ${i}`}"`,
-        `dropdown tıklandı: ${label || "(etiketsiz)"}`,
-        `${basePath}_dd_${i}`
-      );
-      log(`  ✓ Dropdown yakalandı: ${label || "(etiketsiz)"}`);
-      await page.keyboard.press("Escape").catch(() => {});
-      await page.waitForTimeout(200);
-      return true;
-    }
-  );
-
-  // ── 3. ACTION BUTTONS (priority-ordered) ─────────────────────────
-  // Modal-opening buttons (Add / Edit / Filter / Log / Info / +) are
-  // tried FIRST. Column headers and pagination are excluded — they're
-  // handled by their own passes and would otherwise eat all the slots.
-  await runActionButtonPass(page, basePath, log, clickedLabels, pushState);
-
-  // ── 3.5/3.6/3.6b. VERİ TABLOSU — kolon sıralama + satır aksiyonları +
-  //    satır önizleme/düzenle/detay drill-down. (Aynı fonksiyonlar her
-  //    sekme için exploreTabContent içinde de çağrılır.)
-  await runColumnHeaderPass(page, basePath, log, clickedLabels, pushState);
-  await runRowActionPass(page, basePath, log, pushState);
-  await runRowEditDrilldown(page, basePath, log, pushState);
-
-  // ── 4. DATE PICKERS ──────────────────────────────────────────────
-  await forEachVisible(
-    page,
-    [
-      'input[type="date"]', 'input[type="datetime-local"]',
-      'input[type="month"]', 'input[type="week"]',
-      '[class*="DatePicker"]', '[class*="date-picker"]', '[class*="datepicker"]',
-      '[data-testid*="date" i]',
-      '[aria-label*="tarih" i]', '[aria-label*="date" i]',
-    ].join(", "),
-    MAX.dates, log, "Tarih seçici", true,
-    async (loc, label, i) => {
-      await loc.click({ timeout: ACTION_TIMEOUT });
-      await page.waitForTimeout(800);
-      await pushState(
-        `Tarih seçici açık: "${label || "tarih"}"`,
-        `tarih input tıklandı: ${label || "(etiketsiz)"}`,
-        `${basePath}_date_${i}`
-      );
-      log(`  ✓ Tarih seçici yakalandı: ${label || "(etiketsiz)"}`);
-      await page.keyboard.press("Escape").catch(() => {});
-      await page.waitForTimeout(200);
-      return true;
-    }
-  );
-
-  // ── 5. CHECKBOXES ────────────────────────────────────────────────
-  await forEachVisible(
-    page,
-    'input[type="checkbox"]:not([disabled]):not([readonly]), [role="checkbox"]:not([aria-disabled="true"]), [class*="Checkbox"]:not([disabled])',
-    MAX.checkboxes, log, "Checkbox", true,
-    async (loc, label, i) => {
-      const wasChecked = await loc.isChecked().catch(() => false);
-      await loc.click({ timeout: ACTION_TIMEOUT, force: true });
-      await page.waitForTimeout(400);
-      await pushState(
-        `Checkbox ${wasChecked ? "kaldırıldı" : "işaretlendi"}: "${label || "(etiketsiz)"}"`,
-        `checkbox toggle: ${label || "(etiketsiz)"}`,
-        `${basePath}_cb_${i}`
-      );
-      log(`  ✓ Checkbox yakalandı: ${label || "(etiketsiz)"}`);
-      // Revert
-      await loc.click({ timeout: ACTION_TIMEOUT, force: true }).catch(() => {});
-      await page.waitForTimeout(200);
-      return true;
-    }
-  );
-
-  // ── 6. TOGGLE SWITCHES ───────────────────────────────────────────
-  await forEachVisible(
-    page,
-    [
-      '[role="switch"]:not([aria-disabled="true"])',
-      '.ant-switch:not(.ant-switch-disabled)',
-      '.MuiSwitch-root input[type="checkbox"]',
-      '[class*="toggle-switch" i]:not(button)',
-      '[class*="Toggle"][role="button"]',
-      '[class*="Switch"][role="button"]',
-    ].join(", "),
-    MAX.toggles, log, "Toggle", true,
-    async (loc, label, i) => {
-      await loc.click({ timeout: ACTION_TIMEOUT, force: true });
-      await page.waitForTimeout(500);
-      await pushState(
-        `Toggle değişti: "${label || "switch"}"`,
-        `toggle: ${label || "(etiketsiz)"}`,
-        `${basePath}_toggle_${i}`
-      );
-      log(`  ✓ Toggle yakalandı: ${label || "(etiketsiz)"}`);
-      await loc.click({ timeout: ACTION_TIMEOUT, force: true }).catch(() => {});
-      await page.waitForTimeout(200);
-      return true;
-    }
-  );
-
-  // ── 7. TEXT INPUT FOCUS ──────────────────────────────────────────
-  await forEachVisible(
-    page,
-    [
-      'input[type="text"]:not([disabled]):not([readonly])',
-      'input[type="search"]:not([disabled])',
-      'input[type="email"]:not([disabled])',
-      'input[type="number"]:not([disabled])',
-      'input[type="tel"]:not([disabled])',
-      'input[type="url"]:not([disabled])',
-      'input:not([type]):not([disabled])',
-      'textarea:not([disabled]):not([readonly])',
-    ].join(", "),
-    MAX.inputs, log, "Text input", true,
-    async (loc, label, i) => {
-      await loc.focus({ timeout: ACTION_TIMEOUT });
-      await page.waitForTimeout(500);
-      await pushState(
-        `Input focus: "${label || "metin alanı"}"`,
-        `input focus: ${label || "(etiketsiz)"}`,
-        `${basePath}_input_${i}`
-      );
-      log(`  ✓ Input focus yakalandı: ${label || "(etiketsiz)"}`);
-      await loc.evaluate((el: HTMLElement) => el.blur()).catch(() => {});
-      return true;
-    }
-  );
+  // ── 2. ANA İÇERİK KEŞFİ — yalnız SEKME YOKSA (sekme varsa her sekme
+  //    exploreContentArea ile zaten gezildi; burada tekrar çalışırsa aktif
+  //    sekme iki kez yakalanır → kılavuzda yinelenen görseller).
+  if (!tabsExplored) {
+    await exploreContentArea(page, basePath, log, clickedLabels, pushState, MAX.modals);
+  } else {
+    log(`  (${tabsCaptured} sekme ayrı ayrı gezildi — ana içerik keşfi atlandı, tekrar önlendi)`);
+  }
 
   // ── 8. HELP / INFO ICONS (hover) ─────────────────────────────────
   await forEachVisible(
@@ -878,31 +866,6 @@ export async function exploreInteractiveStates(
       log(`  ✓ Tooltip yakalandı`);
       await page.mouse.move(0, 0).catch(() => {});
       await page.waitForTimeout(200);
-      return true;
-    }
-  );
-
-  // ── 9. ACCORDIONS ────────────────────────────────────────────────
-  await forEachVisible(
-    page,
-    [
-      'details > summary',
-      '[aria-expanded="false"][role="button"]',
-      '[aria-expanded="false"][class*="accordion" i]',
-      '[class*="accordion-header" i]', '[class*="AccordionHeader"]',
-      '[class*="Collapse"][role="button"]',
-      '[class*="collapsible" i]',
-    ].join(", "),
-    MAX.accordions, log, "Accordion", true,
-    async (loc, label, i) => {
-      await loc.click({ timeout: ACTION_TIMEOUT, force: true });
-      await page.waitForTimeout(500);
-      await pushState(
-        `Accordion açık: "${label || "bölüm"}"`,
-        `accordion: ${label || "(etiketsiz)"}`,
-        `${basePath}_acc_${i}`
-      );
-      log(`  ✓ Accordion yakalandı: ${label || "(etiketsiz)"}`);
       return true;
     }
   );
@@ -940,73 +903,6 @@ export async function exploreInteractiveStates(
         return true;
       }
     );
-  }
-
-  // ── 11. ANA EKRAN FORMU — ekranın kendisi bir form ise (oluştur/düzenle
-  // sayfası) ana içerik alanını test verisiyle doldur ve dolu hâli yakala.
-  // En sona alındı: önceki pass'leri (checkbox revert, hover) bozmaz.
-  if (env.fillTestData && !(await modalIsOpen(page))) {
-    try {
-      const mainScope = page.locator("main, [role=main], form").first();
-      const scope = (await mainScope.count().catch(() => 0)) > 0 ? mainScope : page;
-      const { filledCount, labels } = await fillTestData(page, scope, log);
-      if (filledCount >= 2) {
-        await page.waitForTimeout(400);
-        await pushState(
-          `Form dolu (ana ekran)`,
-          `ana ekran formu test verisiyle dolduruldu: ${labels.slice(0, 4).join(", ")}`,
-          `${basePath}_form_filled`,
-          { fullPage: true }
-        );
-        log(`  ✓ Ana ekran dolu form state'i yakalandı (${filledCount} alan)`);
-
-        // Katman B — okuma submit'i (Ara/Filtrele/Listele): mutasyonsuz,
-        // her zaman güvenli. Filtre/arama sonucu ekranını yakala.
-        try {
-          const r = await clickSubmitButton(page, scope, "read", log);
-          if (r.clicked) {
-            await page.waitForTimeout(1200);
-            await pushState(
-              `Filtre/arama sonucu`,
-              `okuma submit tıklandı (${r.label}) — sonuç listesi`,
-              `${basePath}_form_results`,
-              { fullPage: true }
-            );
-            log(`  ✓ Filtre/arama sonuç ekranı yakalandı (${r.label})`);
-          }
-        } catch { /* okuma submit yok */ }
-
-        // Katman A — doğrulama uyarısı (mutasyonsuz)
-        try {
-          if (await triggerValidation(page, scope, log)) {
-            await pushState(
-              `Form doğrulama uyarısı (ana ekran)`,
-              `zorunlu/geçersiz alan blur — istemci doğrulaması`,
-              `${basePath}_form_invalid`,
-              { fullPage: true }
-            );
-            await fillTestData(page, scope, log);
-          }
-        } catch { /* noop */ }
-
-        // Katman C — GERÇEK yazma submit (yalnız ALLOW_FORM_SUBMIT açıkken)
-        if (env.allowFormSubmit) {
-          try {
-            const w = await clickSubmitButton(page, scope, "write", log);
-            if (w.clicked) {
-              await page.waitForTimeout(1500);
-              await pushState(
-                `Kayıt sonrası (ana ekran)`,
-                `form gönderildi (${w.label}) — GERÇEK submit`,
-                `${basePath}_form_saved`,
-                { fullPage: true }
-              );
-              log(`  ✓ Kayıt-sonrası ekran yakalandı (${w.label})`);
-            }
-          } catch { /* submit başarısız */ }
-        }
-      }
-    } catch { /* form yoksa / doldurulamadıysa atla */ }
   }
 
   log(`Toplam ${states.length} ek state yakalandı.`);
