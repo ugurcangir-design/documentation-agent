@@ -70,6 +70,9 @@ src/
                                  dokümante-edilmemiş-state mantığı
   generator/
     userManualGenerator.ts       Kullanıcı kılavuzu prompt + üretim
+                                  (generateUserManualComplete: sekme başına
+                                  ayrı çağrı + birleştirme)
+    tabGrouping.ts               State'leri _tab_<i>'den sekmeye gruplar (saf)
     technicalDocGenerator.ts     Teknik doc prompt + üretim
     coverageFixUp.ts             Eksik UI öğeleri için hedefli ek üretim
     selectStates.ts              Hangi state görselleri prompt'a girer
@@ -479,8 +482,19 @@ global skora göre. BRD'nin tüm bütçeyi yutması bu sayede engellenir.
 
 ## Generators — Kullanıcı Kılavuzu
 
-`userManualGenerator.ts (188 satır)`:
-- `buildPrompt(ctx, templates)`:
+### Çok sekmeli ekran — sekme başına ayrı üretim + birleştirme
+`generateUserManualComplete(ctx, templates)` (screenProcessor bunu çağırır):
+`tabGrouping.groupStatesByTab` ile state'leri screenshot adı `_tab_<i>`
+deseninden sekmelere böler. **≥2 sekme** varsa → genel-bakış bölümü
+(sekme-dışı state'ler) + HER SEKME için AYRI `generateUserManualSection`
+çağrısı (`focus: { statesOverride, tabLabel }` → odaklı `## <ad> Sekmesi`
+bölümü, ekran girişini tekrarlamaz) → tek dokümanda birleştirilir
+(token/cache toplanır). Tek/sıfır sekmede tek çağrı. Amaç: tek çağrının
+görsel bütçesine (TOTAL_MAX) sıkışıp sekme detayının kaybolmaması — her
+sekme kendi tam görsel setiyle modele girer.
+
+`userManualGenerator.ts`:
+- `buildPrompt(ctx, templates, tabFocus?)`:
   - `brdContext`  = preparedChunks her biri `### Başlık (sourceType)` + içerik
   - `paragraphContext` = paragraphMatches blockquote
   - `apiContext` = `- [METHOD] /path — summary`
