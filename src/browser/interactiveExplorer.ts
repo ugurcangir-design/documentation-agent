@@ -401,24 +401,149 @@ async function runActionButtonPass(
   }
 }
 
+type PushStateFn = (label: string, triggeredBy: string, filename: string, capture?: CaptureOptions) => Promise<void>;
+
+/** Tablo kolon başlıklarına tıklayıp sıralama state'lerini yakalar. */
+async function runColumnHeaderPass(
+  page: Page, basePath: string, log: (m: string) => void,
+  clickedLabels: Set<string>, pushState: PushStateFn
+): Promise<void> {
+  await forEachVisible(
+    page,
+    [
+      'thead th[role="button"]', 'thead th[aria-sort]',
+      'thead th[tabindex]:not([tabindex="-1"])', 'thead [role="button"]',
+      '[role="columnheader"][role="button"]',
+      '[class*="HeaderCell"][role="button"]', '[class*="ColumnHeader"][role="button"]',
+      '[data-testid*="column-header" i]',
+    ].join(", "),
+    MAX.columns, log, "Kolon header", true,
+    async (loc, label, i) => {
+      if (!label || label.length < 2 || label.length > 40) return false;
+      if (clickedLabels.has(`col:${label}`)) return false;
+      clickedLabels.add(`col:${label}`);
+      try { await loc.click({ timeout: ACTION_TIMEOUT }); }
+      catch {
+        try { await loc.click({ timeout: ACTION_TIMEOUT, force: true }); }
+        catch { await loc.evaluate((el: HTMLElement) => el.click()).catch(() => {}); }
+      }
+      await page.waitForTimeout(RENDER_WAIT);
+      await pushState(`Sıralama: "${label}"`, `kolon header tıklandı: ${label}`, `${basePath}_sort_${i}`);
+      log(`  ✓ Kolon sıralama yakalandı: ${label}`);
+      return true;
+    }
+  );
+}
+
+/** Tablo satırındaki aksiyon menüsü (kebab/3-nokta) ve açtığı modalı yakalar. */
+async function runRowActionPass(
+  page: Page, basePath: string, log: (m: string) => void, pushState: PushStateFn
+): Promise<void> {
+  await forEachVisible(
+    page,
+    [
+      'tbody button[aria-label*="action" i]', 'tbody button[aria-label*="more" i]',
+      'tbody button[aria-label*="işlem" i]', 'tbody [aria-haspopup="menu"]',
+      'tbody [aria-haspopup="true"]', 'tbody [class*="kebab" i]',
+      'tbody [class*="MoreVert"]', 'tbody [class*="MoreOptions"]', 'tbody [class*="ellipsis" i]',
+      '[role="row"] button[aria-haspopup]', '[role="row"] [class*="MoreVert"]',
+      'tr button:has(svg):not([disabled])',
+    ].join(", "),
+    MAX.rowActions, log, "Satır aksiyon", true,
+    async (loc, _label, i) => {
+      try { await loc.click({ timeout: ACTION_TIMEOUT }); }
+      catch {
+        try { await loc.click({ timeout: ACTION_TIMEOUT, force: true }); }
+        catch { await loc.evaluate((el: HTMLElement) => el.click()).catch(() => {}); }
+      }
+      await page.waitForTimeout(RENDER_WAIT);
+      await pushState(`Satır aksiyon menüsü`, `tablo satırında aksiyon butonu tıklandı`, `${basePath}_rowaction_${i}`);
+      log(`  ✓ Satır aksiyon menüsü yakalandı`);
+      if (await modalIsOpen(page)) {
+        await pushState(`Modal: satır işlemi`, `satır aksiyon ikonu modal açtı`, `${basePath}_rowmodal_${i}`);
+        log(`  ✓ Satır işlemi modalı yakalandı`);
+        await closeModal(page);
+      }
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(200);
+      return true;
+    }
+  );
+}
+
+/** Satır içi önizleme/düzenle/detay ikonlarına tıklayıp modalı (ve dolu
+ *  hâlini) yakalar. Önce silme/destructive ikonları atlanır. */
+async function runRowEditDrilldown(
+  page: Page, basePath: string, log: (m: string) => void, pushState: PushStateFn
+): Promise<void> {
+  let captured = 0;
+  for (const editSel of [
+    'tbody tr:first-child [aria-label*="view" i]', 'tbody tr:first-child [aria-label*="önizle" i]',
+    'tbody tr:first-child [aria-label*="preview" i]', 'tbody tr:first-child [aria-label*="detay" i]',
+    'tbody tr:first-child [aria-label*="detail" i]', 'tbody tr:first-child [aria-label*="görüntüle" i]',
+    'tbody tr:first-child [aria-label*="edit" i]', 'tbody tr:first-child [aria-label*="düzenle" i]',
+    'tbody tr:first-child [title*="edit" i]', 'tbody tr:first-child [title*="düzenle" i]',
+    'tbody tr:first-child [title*="detay" i]', 'tbody tr:first-child [title*="önizle" i]',
+    'tbody tr:first-child a[href*="edit" i]', 'tbody tr:first-child [class*="edit" i]',
+  ]) {
+    if (captured >= 3) break; // önizleme + düzenle + detay yeter
+    try {
+      const icon = page.locator(editSel).first();
+      if (!(await icon.isVisible({ timeout: 300 }))) continue;
+      const lbl =
+        (await icon.getAttribute("aria-label").catch(() => null)) ||
+        (await icon.getAttribute("title").catch(() => null)) || "Satır işlemi";
+      if (isDestructive(lbl)) continue;
+      log(`Satır ikonu deneniyor: ${lbl} (${editSel})`);
+      await icon.click({ timeout: ACTION_TIMEOUT }).catch(async () => {
+        await icon.click({ timeout: ACTION_TIMEOUT, force: true });
+      });
+      await page.waitForTimeout(RENDER_WAIT + 400);
+      const editModal = await openModalLocator(page);
+      if (editModal) {
+        const clipOpt: CaptureOptions = { clip: editModal };
+        await pushState(`Modal: "${lbl}" (satır)`, `satır ${lbl} ikonu tıklandı`, `${basePath}_rowedit_${captured}`, clipOpt);
+        log(`  ✓ Satır ${lbl} modalı yakalandı`);
+        if (env.fillTestData) {
+          try {
+            const { filledCount } = await fillTestData(page, editModal, log);
+            if (filledCount > 0) {
+              await page.waitForTimeout(400);
+              await pushState(`Modal (dolu): "${lbl}" (satır)`, `satır modalı test verisiyle dolduruldu (${filledCount} alan)`, `${basePath}_rowedit_${captured}_filled`, clipOpt);
+            }
+          } catch { /* noop */ }
+        }
+        await closeModal(page);
+        captured++;
+      }
+    } catch { /* try next */ }
+  }
+}
+
 /**
  * Tek bir sekme aktifken o sekmenin İÇİNİ gerçek kullanıcı gibi gezer:
- * sekmedeki action butonları → modal/popup/alert + form doldurma +
- * doğrulama/submit katmanları, ardından sekmenin inline formunu doldurup
- * okuma submit'i (Ara/Filtrele) ile sonucu yakalar. Her sekme için TAZE
- * etiket seti kullanılır → tab'lar bağımsız keşfedilir. Çağıran yalnız
- * env.deepExplore açıkken kullanır.
+ * sekmedeki action butonları → modal/popup/alert, KOLON SIRALAMA, SATIR
+ * AKSİYONLARI (önizleme/düzenle/detay) ve veri tablosu, ardından inline
+ * formu doldurup okuma submit'i (Ara/Filtrele) ile sonucu yakalar. Her
+ * sekme TAZE etiket + TAZE dedup scope ile bağımsız keşfedilir; böylece
+ * sekmeler benzer görünse de her birinin kendi içeriği yakalanır.
  */
 async function exploreTabContent(
   page: Page,
   tabBase: string,
   tabLabel: string,
   log: (m: string) => void,
-  pushState: (label: string, triggeredBy: string, filename: string, capture?: CaptureOptions) => Promise<void>
+  pushState: PushStateFn
 ): Promise<void> {
+  const tabLabels = new Set<string>();
   // Sekme içi butonlar → modallar/popup/alert + form doldurma + submit
   // katmanları (sekme başına ≤6 modal — toplam patlamasın).
-  await runActionButtonPass(page, tabBase, log, new Set<string>(), pushState, 6);
+  await runActionButtonPass(page, tabBase, log, tabLabels, pushState, 6);
+  // Sekmenin veri tablosu etkileşimleri: kolon sıralama + satır aksiyonları
+  // (önizleme/düzenle/detay/silme menüsü) + satır modal drill-down.
+  await runColumnHeaderPass(page, tabBase, log, tabLabels, pushState);
+  await runRowActionPass(page, tabBase, log, pushState);
+  await runRowEditDrilldown(page, tabBase, log, pushState);
 
   // Sekmenin inline formu (modal değil) — doldur + okuma submit'i ile sonuç.
   if (env.fillTestData) {
@@ -457,11 +582,6 @@ export async function exploreInteractiveStates(
   const states: ScreenState[] = [];
   const log = (m: string) => { onProgress?.(m); console.log(`    [explore] ${m}`); };
   const clickedLabels = new Set<string>();
-  // İçerik-hash'i ile yinelenen görsel ataması: farklı butonlar aynı modalı
-  // açtığında ya da tıklama görünür değişiklik yapmadığında (arka plan aynen
-  // kalır) AYNI screenshot tekrar tekrar yakalanıyordu → kılavuz "hep aynı
-  // ekranı" anlatıyordu. Aynı görüntü ikinci kez gelirse state'e eklenmez.
-  const seenHashes = new Set<string>();
 
   // Wait for SPA to render its interactive content
   log("Sayfa içeriği bekleniyor…");
@@ -476,35 +596,38 @@ export async function exploreInteractiveStates(
   await page.waitForTimeout(1500);
   try { await page.waitForLoadState("networkidle", { timeout: 4000 }); } catch { /* noop */ }
 
-  const pushState = async (
-    label: string,
-    triggeredBy: string,
-    filename: string,
-    capture?: CaptureOptions
-  ) => {
-    const shot = await captureScreenshot(page, filename, capture);
-    const hash = crypto.createHash("md5").update(shot.screenshotBase64).digest("hex");
-    if (seenHashes.has(hash)) {
-      // Bu görüntü zaten yakalandı (aynı modal/aynı arka plan) → ekleme,
-      // dosyayı sil. Aksi halde kılavuza yinelenen görsel girer.
-      log(`  ⊘ yinelenen görsel atlandı: ${label}`);
-      fs.unlink(shot.screenshotPath, () => {});
-      return;
-    }
-    seenHashes.add(hash);
-    states.push({
-      label,
-      triggeredBy,
-      screenshotPath: shot.screenshotPath,
-      screenshotBase64: shot.screenshotBase64,
-    });
-  };
+  // Yinelenen görsel ataması içerik-hash'i (md5) ile yapılır. KRİTİK: dedup
+  // scope'u PER-SCOPE'tur — her sekme KENDİ seenHashes setini alır. Aksi
+  // halde Market/Player/Accumulator gibi sekmelerde GÖRSEL OLARAK BENZER
+  // (ama içerik/sekme olarak farklı) "create" modalleri "yinelenen" sayılıp
+  // siliniyor ve o sekmelerde ekran "yok" oluyordu. Scope içinde ise aynı
+  // butonun aynı modali tekrar tekrar yakalaması engellenir.
+  const makePushState = (seen: Set<string>) =>
+    async (label: string, triggeredBy: string, filename: string, capture?: CaptureOptions) => {
+      const shot = await captureScreenshot(page, filename, capture);
+      const hash = crypto.createHash("md5").update(shot.screenshotBase64).digest("hex");
+      if (seen.has(hash)) {
+        log(`  ⊘ yinelenen görsel atlandı: ${label}`);
+        fs.unlink(shot.screenshotPath, () => {});
+        return;
+      }
+      seen.add(hash);
+      states.push({
+        label,
+        triggeredBy,
+        screenshotPath: shot.screenshotPath,
+        screenshotBase64: shot.screenshotBase64,
+      });
+    };
 
-  // Başlangıç (etkileşimsiz) görünümünü seed'le — buna birebir eşit, yani
-  // "tıkladım ama görünür bir şey değişmedi" türü state'ler de elensin.
+  const mainSeen = new Set<string>();
+  const pushState = makePushState(mainSeen);
+
+  // Başlangıç (etkileşimsiz) görünümünü ana scope'a seed'le — "tıkladım ama
+  // görünür bir şey değişmedi" türü state'ler ana akışta elensin.
   try {
     const baseShot = await captureScreenshot(page, `${basePath}__baseseed`);
-    seenHashes.add(crypto.createHash("md5").update(baseShot.screenshotBase64).digest("hex"));
+    mainSeen.add(crypto.createHash("md5").update(baseShot.screenshotBase64).digest("hex"));
     fs.unlink(baseShot.screenshotPath, () => {});
   } catch { /* noop */ }
 
@@ -564,15 +687,22 @@ export async function exploreInteractiveStates(
     async (loc, label, i) => {
       if (clickedLabels.has(label)) return false;
       await loc.click({ timeout: ACTION_TIMEOUT });
-      await page.waitForTimeout(RENDER_WAIT);
-      // Sekme içeriği tam-sayfa yakalanır (alt-kıvrım dahil).
-      await pushState(`Sekme: "${label || `tab ${i}`}"`, `tab tıklandı: ${label}`, `${basePath}_tab_${i}`, { fullPage: true });
+      // Sekme içeriği async yüklenebilir — tam yüklensin diye biraz daha bekle
+      // (aksi halde önceki sekmenin içeriği yakalanıp "aynı görsel" oluşuyordu).
+      await page.waitForTimeout(RENDER_WAIT + 500);
+      try { await page.waitForLoadState("networkidle", { timeout: 3000 }); } catch { /* noop */ }
       clickedLabels.add(label);
       log(`  ✓ Sekme yakalandı: ${label}`);
-      // Derin keşif: her sekmenin İÇİNİ (butonlar/modallar/formlar) ayrı gez.
+      // Her sekme KENDİ dedup scope'unu alır → benzer görünen ama farklı
+      // sekmelerin içerikleri "yinelenen" diye silinmez.
+      const tabSeen = new Set<string>();
+      const tabPush = makePushState(tabSeen);
+      // Sekme içeriği tam-sayfa yakalanır (alt-kıvrım dahil).
+      await tabPush(`Sekme: "${label || `tab ${i}`}"`, `tab tıklandı: ${label}`, `${basePath}_tab_${i}`, { fullPage: true });
+      // Derin keşif: her sekmenin İÇİNİ (butonlar/modallar/tablo/satır işlemleri) ayrı gez.
       if (env.deepExplore) {
         log(`  ↳ Sekme içi derin keşif: ${label || `tab ${i}`}`);
-        await exploreTabContent(page, `${basePath}_tab_${i}`, label || `tab ${i}`, log, pushState);
+        await exploreTabContent(page, `${basePath}_tab_${i}`, label || `tab ${i}`, log, tabPush);
       }
       return true;
     }
@@ -614,151 +744,12 @@ export async function exploreInteractiveStates(
   // handled by their own passes and would otherwise eat all the slots.
   await runActionButtonPass(page, basePath, log, clickedLabels, pushState);
 
-  // ── 3.5. TABLE COLUMN HEADERS (click to sort) ─────────────────────
-  await forEachVisible(
-    page,
-    [
-      'thead th[role="button"]',
-      'thead th[aria-sort]',
-      'thead th[tabindex]:not([tabindex="-1"])',
-      'thead [role="button"]',
-      '[role="columnheader"][role="button"]',
-      '[class*="HeaderCell"][role="button"]',
-      '[class*="ColumnHeader"][role="button"]',
-      '[data-testid*="column-header" i]',
-    ].join(", "),
-    MAX.columns, log, "Kolon header", true,
-    async (loc, label, i) => {
-      if (!label || label.length < 2 || label.length > 40) return false;
-      if (clickedLabels.has(`col:${label}`)) return false;
-      clickedLabels.add(`col:${label}`);
-
-      try {
-        await loc.click({ timeout: ACTION_TIMEOUT });
-      } catch {
-        try { await loc.click({ timeout: ACTION_TIMEOUT, force: true }); }
-        catch { await loc.evaluate((el: HTMLElement) => el.click()).catch(() => {}); }
-      }
-      await page.waitForTimeout(RENDER_WAIT);
-      await pushState(
-        `Sıralama: "${label}"`,
-        `kolon header tıklandı: ${label}`,
-        `${basePath}_sort_${i}`
-      );
-      log(`  ✓ Kolon sıralama yakalandı: ${label}`);
-      return true;
-    }
-  );
-
-  // ── 3.6. ROW ACTION MENUS (kebab/3-dots) ──────────────────────────
-  await forEachVisible(
-    page,
-    [
-      'tbody button[aria-label*="action" i]',
-      'tbody button[aria-label*="more" i]',
-      'tbody button[aria-label*="işlem" i]',
-      'tbody [aria-haspopup="menu"]',
-      'tbody [aria-haspopup="true"]',
-      'tbody [class*="kebab" i]',
-      'tbody [class*="MoreVert"]',
-      'tbody [class*="MoreOptions"]',
-      'tbody [class*="ellipsis" i]',
-      '[role="row"] button[aria-haspopup]',
-      '[role="row"] [class*="MoreVert"]',
-      'tr button:has(svg):not([disabled])',
-    ].join(", "),
-    MAX.rowActions, log, "Satır aksiyon", true,
-    async (loc, _label, i) => {
-      try {
-        await loc.click({ timeout: ACTION_TIMEOUT });
-      } catch {
-        try { await loc.click({ timeout: ACTION_TIMEOUT, force: true }); }
-        catch { await loc.evaluate((el: HTMLElement) => el.click()).catch(() => {}); }
-      }
-      await page.waitForTimeout(RENDER_WAIT);
-      await pushState(
-        `Satır aksiyon menüsü`,
-        `tablo satırında aksiyon butonu tıklandı`,
-        `${basePath}_rowaction_${i}`
-      );
-      log(`  ✓ Satır aksiyon menüsü yakalandı`);
-
-      // If clicking this row action itself opened a modal, capture it.
-      if (await modalIsOpen(page)) {
-        await pushState(
-          `Modal: satır işlemi`,
-          `satır aksiyon ikonu modal açtı`,
-          `${basePath}_rowmodal_${i}`
-        );
-        log(`  ✓ Satır işlemi modalı yakalandı`);
-        await closeModal(page);
-      }
-
-      await page.keyboard.press("Escape").catch(() => {});
-      await page.waitForTimeout(200);
-      return true;
-    }
-  );
-
-  // ── 3.6b. ROW EDIT/DETAIL ICONS — drill into edit & detail modals ──
-  // This app puts inline icon buttons in each row's ACTIONS column
-  // instead of a kebab menu. Probe edit/detail-labelled icons on the
-  // first row so the edit & detail modals get documented.
-  for (const editSel of [
-    'tbody tr:first-child [aria-label*="edit" i]',
-    'tbody tr:first-child [aria-label*="düzenle" i]',
-    'tbody tr:first-child [aria-label*="detay" i]',
-    'tbody tr:first-child [aria-label*="detail" i]',
-    'tbody tr:first-child [title*="edit" i]',
-    'tbody tr:first-child [title*="düzenle" i]',
-    'tbody tr:first-child [title*="detay" i]',
-    'tbody tr:first-child a[href*="edit" i]',
-    'tbody tr:first-child [class*="edit" i]',
-  ]) {
-    try {
-      const icon = page.locator(editSel).first();
-      if (!(await icon.isVisible({ timeout: 400 }))) continue;
-      const lbl =
-        (await icon.getAttribute("aria-label").catch(() => null)) ||
-        (await icon.getAttribute("title").catch(() => null)) ||
-        "Düzenle";
-      if (isDestructive(lbl)) continue;
-      log(`Satır edit ikonu deneniyor: ${lbl} (${editSel})`);
-      await icon.click({ timeout: ACTION_TIMEOUT }).catch(async () => {
-        await icon.click({ timeout: ACTION_TIMEOUT, force: true });
-      });
-      await page.waitForTimeout(RENDER_WAIT + 400);
-      const editModal = await openModalLocator(page);
-      if (editModal) {
-        const clipOpt: CaptureOptions = { clip: editModal };
-        await pushState(
-          `Modal: "${lbl}" (satır düzenleme/detay)`,
-          `satır ${lbl} ikonu tıklandı`,
-          `${basePath}_rowedit`,
-          clipOpt
-        );
-        log(`  ✓ Satır düzenleme/detay modalı yakalandı: ${lbl}`);
-        // Düzenleme modalı genelde mevcut kayıt verisiyle dolu gelir; boş
-        // alan varsa test verisiyle doldur ve dolu hâli de yakala.
-        if (env.fillTestData) {
-          try {
-            const { filledCount } = await fillTestData(page, editModal, log);
-            if (filledCount > 0) {
-              await page.waitForTimeout(400);
-              await pushState(
-                `Modal (dolu): "${lbl}" (satır düzenleme/detay)`,
-                `düzenleme modalı test verisiyle dolduruldu (${filledCount} alan)`,
-                `${basePath}_rowedit_filled`,
-                clipOpt
-              );
-            }
-          } catch { /* noop */ }
-        }
-        await closeModal(page);
-        break;
-      }
-    } catch { /* try next */ }
-  }
+  // ── 3.5/3.6/3.6b. VERİ TABLOSU — kolon sıralama + satır aksiyonları +
+  //    satır önizleme/düzenle/detay drill-down. (Aynı fonksiyonlar her
+  //    sekme için exploreTabContent içinde de çağrılır.)
+  await runColumnHeaderPass(page, basePath, log, clickedLabels, pushState);
+  await runRowActionPass(page, basePath, log, pushState);
+  await runRowEditDrilldown(page, basePath, log, pushState);
 
   // ── 4. DATE PICKERS ──────────────────────────────────────────────
   await forEachVisible(
