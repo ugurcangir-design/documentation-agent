@@ -547,6 +547,16 @@ satır 141. Eşleşen butonların priority=2, diğerleri 1.
 - Her durum için `screenshotCapture` ile PNG +
   `StoredScreenState{ label, triggeredBy, screenshotPath }`
 
+### Yinelenen görsel dedup + modal kapatma (kritik)
+- **İçerik-hash dedup:** `pushState` her görselin md5'ini tutar; aynı görüntü
+  ikinci kez gelirse state'e EKLENMEZ (dosya silinir). Başlangıç görünümü
+  seed'lenir. Aksi halde farklı butonlar aynı modalı/aynı arka planı
+  açtığında kılavuz "hep aynı ekranı" anlatıyordu.
+- **`closeModal` çok-yollu + tekrarlı** (Escape / kapat-iptal / backdrop,
+  ≤4 tur) ve `runActionButtonPass` her turdan önce kalmış modalı kapatır;
+  kapatılamazsa kalan butonları atlar. Modal kapanmazsa sonraki butonlar
+  altında kalıp aynı modal tekrar yakalanıyordu (kök neden).
+
 ### Test-verisi doldurma + submit katmanları (formFiller)
 Modal/panel açıldığında **boş form yerine dolu form** yakalanır:
 `fillTestData(page, scope)` görünür alanları tür-duyarlı güvenli örnek
