@@ -601,15 +601,20 @@ sokar: `kayit` (cap 4), `uyari` (cap 3), `sonuc` (cap 3), `dolu` (cap 6),
 için eleme sırasında korunur.
 
 ### Sekme-içi derin keşif (env.deepExplore, default açık)
-`interactiveExplorer.exploreTabContent` her sekme aktifken o sekmenin
-İÇİNİ gerçek kullanıcı gibi gezer: sekme butonları → modal/popup/alert +
-**veri tablosu etkileşimleri** (`runColumnHeaderPass` sıralama +
-`runRowActionPass` satır menüsü + `runRowEditDrilldown` önizleme/düzenle/
-detay ≤3) + inline form doldurma + okuma-submit sonucu. Bu pass
-fonksiyonları ana akışta da çağrılır (tek kaynak). Her sekme TAZE etiket +
-TAZE dedup scope ile bağımsız; state dosyaları `${base}_tab_${i}_*`. Sekme
-geçişinde async içerik için ek bekleme + networkidle. Sekme görselleri
-fullPage. DEEP_EXPLORE=false → yalnız aktif sekme gezilir.
+`interactiveExplorer.exploreContentArea` = TEK KAYNAK içerik keşfi:
+dropdown → action button (create/add modal) → `runColumnHeaderPass` (kolon
+sıralama) → `runRowActionPass` (satır menüsü) → `runRowEditDrilldown`
+(önizleme/düzenle/detay ≤3) → tarih/checkbox/toggle/input → accordion →
+inline form doldurma + okuma/yazma submit. Çağrılma:
+- **Sekme varsa:** her sekme için ayrı (TAZE dedup scope + TAZE clickedLabels),
+  state dosyaları `${base}_tab_${i}_*`. Ana içerik keşfi ATLANIR
+  (`tabsExplored` guard) — aksi halde aktif sekme iki kez yakalanıp kılavuza
+  yinelenen görsel giriyordu (çapraz-scope tekrar; veri kanıtlı bug).
+- **Sekme yoksa:** bir kez `${base}_*`.
+Hover (tooltip) + fallback bir kez çalışır. Sekme geçişinde async içerik için
+ek bekleme + networkidle. Sekme dedup anahtarı `tab:label:i`. DEEP_EXPLORE
+=false → sekmeler tek tek gezilmez. Tab selector'ı geniş (role=tablist
+çocukları, Bootstrap nav-link, [class*=tab-item/link/header]).
 
 ### Global chrome dışlama (profil/dil/header)
 `interactiveExplorer.isInNavOrSidebar` sidebar + üst bar (header/topbar/
