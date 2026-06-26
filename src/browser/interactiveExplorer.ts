@@ -697,6 +697,103 @@ async function exploreContentArea(
   }
 }
 
+const TAB_SELECTOR = [
+  '[role="tab"]',
+  '[role="tablist"] > a', '[role="tablist"] > button', '[role="tablist"] > li',
+  '[role="tablist"] > [role="presentation"]',
+  '.ant-tabs-tab', '.MuiTab-root',
+  '.nav-tabs > li > a', '.nav-tabs > li > button',
+  '.nav-tabs .nav-link', '.nav-pills .nav-link', '.nav-link[data-toggle="tab"]',
+  'ul[class*="tabs" i] > li', 'ul[class*="Tabs"] > li', 'ul[class*="tab" i] > li > a',
+  '[class*="tab-item" i]', '[class*="TabItem"]', '[class*="tab-link" i]',
+  '[class*="tab-button"]', '[class*="TabButton"]', '[class*="tab-header" i]',
+  '[class*="segment" i][role="button"]', '[class*="SegmentedControl"] button',
+  '[class*="ButtonGroup"] button[aria-pressed]', '.btn-group > button',
+  '[data-testid*="tab" i]',
+].join(", ");
+
+/**
+ * Sekmeleri GERÇEKTEN tek tek simüle eder. KRİTİK: bu uygulamalarda sekmeler
+ * çoğunlukla URL query-param tabanlıdır (örn. `?tab=1`). Sadece DOM tıklaması
+ * kırılgan; bu yüzden her sekmenin tıklayınca gittiği URL öğrenilir, sonra
+ * her sekmeye `page.goto(url)` ile AÇIKÇA gidilip içeriği gezilir (güvenilir).
+ * URL değişmiyorsa (saf JS sekme) tıklamaya geri düşülür. Dönüş: gezilen
+ * sekme sayısı.
+ */
+async function exploreTabs(
+  page: Page,
+  basePath: string,
+  log: (m: string) => void,
+  makePushState: (seen: Set<string>) => PushStateFn
+): Promise<number> {
+  const homeUrl = page.url();
+  const root = page.locator(TAB_SELECTOR);
+  const count = await root.count().catch(() => 0);
+  if (count === 0) return 0;
+
+  // Faz 1 — görünür sekmeleri ve tıklayınca gittikleri URL'leri öğren.
+  const tabs: { index: number; label: string; url: string }[] = [];
+  const seenLabels = new Set<string>();
+  for (let i = 0; i < count && tabs.length < MAX.tabs; i++) {
+    const el = root.nth(i);
+    try {
+      if (!(await el.isVisible({ timeout: 300 }).catch(() => false))) continue;
+      if (await isInNavOrSidebar(el)) continue;
+      const label = ((await safeText(el)) || `Sekme ${i + 1}`).trim().slice(0, 40);
+      const before = page.url();
+      await el.click({ timeout: ACTION_TIMEOUT }).catch(async () => {
+        await el.click({ timeout: ACTION_TIMEOUT, force: true });
+      });
+      await page.waitForTimeout(500);
+      const after = page.url();
+      // Etiket+URL tekilleştir (aynı sekmeyi iki kez gezme).
+      const key = `${label}|${after}`;
+      if (seenLabels.has(key)) continue;
+      seenLabels.add(key);
+      tabs.push({ index: tabs.length, label, url: after });
+    } catch { /* sonraki */ }
+  }
+
+  // En az 2 ayrı sekme yoksa (tek sekmeli ekran) → ana akış zaten kapsar.
+  const distinctUrls = new Set(tabs.map((t) => t.url));
+  if (tabs.length < 2) {
+    log(`  (sekme bulunamadı / tek sekme — ana içerik keşfi uygulanır)`);
+    await page.goto(homeUrl, { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(RENDER_WAIT);
+    return 0;
+  }
+
+  log(`  ${tabs.length} sekme tespit edildi (${distinctUrls.size} ayrı URL): ${tabs.map((t) => t.label).join(", ")}`);
+
+  // Faz 2 — her sekmeye AÇIKÇA git ve içeriğini gez (taze dedup scope).
+  for (const t of tabs) {
+    const urlChanges = t.url !== homeUrl;
+    log(`Sekme '${t.label}'${urlChanges ? ` → ${t.url}` : " (URL değişmiyor, tıklama ile)"}`);
+    if (urlChanges) {
+      await page.goto(t.url, { waitUntil: "networkidle", timeout: 15000 })
+        .catch(async () => { await page.goto(t.url, { timeout: 15000 }).catch(() => {}); });
+    } else {
+      // URL değişmeyen sekme — öğeyi yeniden bul ve tıkla.
+      const el = page.locator(TAB_SELECTOR).nth(t.index);
+      await el.click({ timeout: ACTION_TIMEOUT }).catch(() => {});
+    }
+    await page.waitForTimeout(RENDER_WAIT + 500);
+    try { await page.waitForLoadState("networkidle", { timeout: 3000 }); } catch { /* noop */ }
+
+    const tabPush = makePushState(new Set<string>());
+    await tabPush(`Sekme: "${t.label}"`, `sekmeye gidildi: ${t.label}${urlChanges ? ` (${t.url})` : ""}`, `${basePath}_tab_${t.index}`, { fullPage: true });
+    if (env.deepExplore) {
+      log(`  ↳ Sekme içi derin keşif: ${t.label}`);
+      await exploreContentArea(page, `${basePath}_tab_${t.index}`, log, new Set<string>(), tabPush, 6);
+    }
+  }
+
+  // Ana görünüme dön.
+  await page.goto(homeUrl, { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(RENDER_WAIT);
+  return tabs.length;
+}
+
 export async function exploreInteractiveStates(
   page: Page,
   basePath: string,
@@ -792,60 +889,18 @@ export async function exploreInteractiveStates(
     log("  ⚠ Filtre paneli açan kontrol bulunamadı — filtre alanı zaten açık olabilir");
   }
 
-  // ── 1. TABS ──────────────────────────────────────────────────────
-  // Her sekme: tıkla → tam-sayfa yakala → o sekmenin İÇİNİ (kendi dedup
-  // scope'uyla) baştan sona gez. Sekme varsa ana içerik keşfi TEKRAR
-  // çalışmaz (aşağıda guard) — aksi halde aktif sekme iki kez yakalanıp
-  // kılavuza "aynı görsel arka arkaya" giriyordu.
-  const tabsCaptured = await forEachVisible(
-    page,
-    [
-      '[role="tab"]',
-      '[role="tablist"] > a', '[role="tablist"] > button', '[role="tablist"] > li',
-      '[role="tablist"] > [role="presentation"]',
-      '.ant-tabs-tab', '.MuiTab-root',
-      '.nav-tabs > li > a', '.nav-tabs > li > button',
-      '.nav-tabs .nav-link', '.nav-pills .nav-link', '.nav-link[data-toggle="tab"]',
-      'ul[class*="tabs" i] > li', 'ul[class*="Tabs"] > li',
-      'ul[class*="tab" i] > li > a',
-      '[class*="tab-item" i]', '[class*="TabItem"]', '[class*="tab-link" i]',
-      '[class*="tab-button"]', '[class*="TabButton"]', '[class*="tab-header" i]',
-      '[class*="segment" i][role="button"]',
-      '[class*="SegmentedControl"] button',
-      '[class*="ButtonGroup"] button[aria-pressed]',
-      '.btn-group > button',
-      '[data-testid*="tab" i]',
-    ].join(", "),
-    MAX.tabs, log, "Tab", false,
-    async (loc, label, i) => {
-      if (clickedLabels.has(`tab:${label}:${i}`)) return false;
-      await loc.click({ timeout: ACTION_TIMEOUT });
-      // Sekme içeriği async yüklenebilir — tam yüklensin diye biraz daha bekle
-      // (aksi halde önceki sekmenin içeriği yakalanıp "aynı görsel" oluşuyordu).
-      await page.waitForTimeout(RENDER_WAIT + 500);
-      try { await page.waitForLoadState("networkidle", { timeout: 3000 }); } catch { /* noop */ }
-      clickedLabels.add(`tab:${label}:${i}`);
-      log(`  ✓ Sekme yakalandı: ${label}`);
-      // Her sekme KENDİ dedup scope'unu alır → benzer görünen ama farklı
-      // sekmelerin içerikleri "yinelenen" diye silinmez.
-      const tabPush = makePushState(new Set<string>());
-      await tabPush(`Sekme: "${label || `tab ${i}`}"`, `tab tıklandı: ${label}`, `${basePath}_tab_${i}`, { fullPage: true });
-      if (env.deepExplore) {
-        log(`  ↳ Sekme içi derin keşif: ${label || `tab ${i}`}`);
-        await exploreContentArea(page, `${basePath}_tab_${i}`, log, new Set<string>(), tabPush, 6);
-      }
-      return true;
-    }
-  );
-  const tabsExplored = tabsCaptured > 0 && env.deepExplore;
+  // ── 1. TABS (URL-tabanlı, güvenilir) ─────────────────────────────
+  // Sekmeler genelde ?tab=N URL'i değiştirir; her sekmeye AÇIKÇA gidip
+  // (page.goto) içeriğini ayrı dedup scope'uyla gezeriz. Sekme varsa ana
+  // içerik keşfi TEKRAR çalışmaz (aktif sekme iki kez yakalanmasın).
+  const tabCount = await exploreTabs(page, basePath, log, makePushState);
+  const tabsExplored = tabCount >= 2;
 
-  // ── 2. ANA İÇERİK KEŞFİ — yalnız SEKME YOKSA (sekme varsa her sekme
-  //    exploreContentArea ile zaten gezildi; burada tekrar çalışırsa aktif
-  //    sekme iki kez yakalanır → kılavuzda yinelenen görseller).
+  // ── 2. ANA İÇERİK KEŞFİ — yalnız SEKME YOKSA.
   if (!tabsExplored) {
     await exploreContentArea(page, basePath, log, clickedLabels, pushState, MAX.modals);
   } else {
-    log(`  (${tabsCaptured} sekme ayrı ayrı gezildi — ana içerik keşfi atlandı, tekrar önlendi)`);
+    log(`  (${tabCount} sekme ayrı ayrı gezildi — ana içerik keşfi atlandı, tekrar önlendi)`);
   }
 
   // ── 8. HELP / INFO ICONS (hover) ─────────────────────────────────

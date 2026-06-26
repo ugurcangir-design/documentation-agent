@@ -35,8 +35,7 @@ function buildCombinedMarkdown(docs: StoredDocument[], title: string): string {
   for (const doc of docs) {
     parts.push(`\n---\n\n# ${doc.screenTitle}\n`);
     parts.push(`**URL:** \`${doc.screenPath}\`\n`);
-    parts.push(`\n## Kullanıcı Kılavuzu\n\n${doc.userManualContent}\n`);
-    parts.push(`\n## Teknik Döküman\n\n${doc.technicalDocContent}\n`);
+    parts.push(`\n${doc.userManualContent}\n`);
   }
   return parts.join("\n");
 }
@@ -44,15 +43,11 @@ function buildCombinedMarkdown(docs: StoredDocument[], title: string): string {
 function buildHtml(docs: StoredDocument[], title: string): string {
   const sections = docs.map((doc) => {
     const userHtml = marked.parse(doc.userManualContent) as string;
-    const techHtml = marked.parse(doc.technicalDocContent) as string;
     return `
       <section class="page">
         <h1>${escapeHtml(doc.screenTitle)}</h1>
         <p class="meta">URL: <code>${escapeHtml(doc.screenPath)}</code></p>
-        <h2>Kullanıcı Kılavuzu</h2>
         <div>${userHtml}</div>
-        <h2>Teknik Döküman</h2>
-        <div>${techHtml}</div>
       </section>
     `;
   }).join("\n");
@@ -174,10 +169,6 @@ router.post("/zip", (req: Request, res: Response) => {
       zip.addFile(
         `${folder}/kullanici-kilavuzu.md`,
         Buffer.from(`# ${doc.screenTitle} — Kullanıcı Kılavuzu\n\n${doc.userManualContent}`, "utf-8")
-      );
-      zip.addFile(
-        `${folder}/teknik-dokuman.md`,
-        Buffer.from(`# ${doc.screenTitle} — Teknik Döküman\n\n${doc.technicalDocContent}`, "utf-8")
       );
 
       const shotName = path.basename(doc.screenshotPath);

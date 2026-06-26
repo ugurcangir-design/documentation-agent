@@ -11,7 +11,6 @@ import { v4 as uuid } from "uuid";
 import { analyzeScreen } from "../../analysis/screenAnalyzer";
 import { buildScreenContext } from "../../analysis/screenContextBuilder";
 import { generateUserManualComplete } from "../../generator/userManualGenerator";
-import { generateTechnicalDocSection } from "../../generator/technicalDocGenerator";
 import { computeCoverage, type CoverageReport } from "../../quality/coverageCheck";
 import { computeVerifiedCoverage } from "../../quality/verifiedCoverage";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
@@ -84,40 +83,26 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     const analysis = await analyzeScreen(screen);
     const context = buildScreenContext(screen, analysis, allSections, allEndpoints);
 
-    setProgress(`Kullanıcı kılavuzu + teknik döküman yazılıyor: ${screenTitle}`);
+    setProgress(`Kullanıcı kılavuzu yazılıyor: ${screenTitle}`);
 
-    const [userManual, technical] = await Promise.all([
-      generateUserManualComplete(context, templateContents),
-      generateTechnicalDocSection(context, templateContents),
-    ]);
+    // Yalnız KULLANICI KILAVUZU üretilir — teknik doküman özelliği kaldırıldı.
+    const userManual = await generateUserManualComplete(context, templateContents);
 
     // Coverage scope = analyzer'ın çıkardığı UI öğeleri, sidebar nav hariç.
     const inScopeForCoverage = analysis.uiElements.filter((el) => !isSidebarNav(el));
 
     let umContent = userManual.content;
-    let tdContent = technical.content;
 
-    // İlk coverage hesabı: LLM-judge etkinse Haiku ile "anlamlı anlatıldı
-    // mı?" doğrulaması yap; fix-up turu daha doğru hedeflere yönelir.
-    // Fix-up iterasyonlarında raw computeCoverage kullanılır (hız +
-    // maliyet; fix-up zaten eklemeyi vaadediyor, substring yeter).
-    const initialCoverage = env.coverageLlmJudge
-      ? (await Promise.all([
-          computeVerifiedCoverage(inScopeForCoverage, umContent, "userManual"),
-          computeVerifiedCoverage(inScopeForCoverage, tdContent, "technicalDoc"),
-        ]))
-      : [computeCoverage(inScopeForCoverage, umContent), computeCoverage(inScopeForCoverage, tdContent)];
-    let umCoverage = initialCoverage[0] as CoverageReport;
-    let tdCoverage = initialCoverage[1] as CoverageReport;
+    const initialUmCoverage = env.coverageLlmJudge
+      ? await computeVerifiedCoverage(inScopeForCoverage, umContent, "userManual")
+      : computeCoverage(inScopeForCoverage, umContent);
+    let umCoverage = initialUmCoverage;
     let umExtraTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
-    let tdExtraTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
     let umFixUpAdded = 0;
-    let tdFixUpAdded = 0;
 
     console.log(
       `[docjob ${jobId}] Coverage (initial${env.coverageLlmJudge ? ", LLM-judged" : ""}): ` +
-      `userManual=${umCoverage.coveragePct}% (${umCoverage.coveredElements}/${umCoverage.totalElements})  ` +
-      `technicalDoc=${tdCoverage.coveragePct}% (${tdCoverage.coveredElements}/${tdCoverage.totalElements})`
+      `userManual=${umCoverage.coveragePct}% (${umCoverage.coveredElements}/${umCoverage.totalElements})`
     );
 
     const labelToElement = new Map(inScopeForCoverage.map((el) => [el.label.toLowerCase(), el]));
@@ -202,13 +187,6 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       umFixUpAdded = r.addedTotal;
       umExtraTokens = { input: r.tokensIn, output: r.tokensOut, cacheRead: r.cacheRead, cacheCreate: r.cacheCreate };
     }
-    {
-      const r = await fixUpLoop("technicalDoc", tdContent, tdCoverage);
-      tdContent = r.content;
-      tdCoverage = r.coverage;
-      tdFixUpAdded = r.addedTotal;
-      tdExtraTokens = { input: r.tokensIn, output: r.tokensOut, cacheRead: r.cacheRead, cacheCreate: r.cacheCreate };
-    }
 
     if (umCoverage.missing.length > 0) {
       console.log(`[docjob ${jobId}] UM kalan eksikler: ${umCoverage.missing.join(", ")}`);
@@ -226,20 +204,14 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       userManualContent: umContent + buildTrace({
         ...traceArgs, coverage: umCoverage, fixUpAdded: umFixUpAdded, truncated: !!userManual.truncated,
       }),
-      technicalDocContent: tdContent + buildTrace({
-        ...traceArgs, coverage: tdCoverage, fixUpAdded: tdFixUpAdded, truncated: !!technical.truncated,
-      }),
+      technicalDocContent: "", // teknik doküman özelliği kaldırıldı
       status: "draft",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      inputTokens: userManual.inputTokens + technical.inputTokens + umExtraTokens.input + tdExtraTokens.input,
-      outputTokens: userManual.outputTokens + technical.outputTokens + umExtraTokens.output + tdExtraTokens.output,
-      cacheReadTokens:
-        (userManual.cacheReadTokens ?? 0) + (technical.cacheReadTokens ?? 0) +
-        umExtraTokens.cacheRead + tdExtraTokens.cacheRead,
-      cacheCreationTokens:
-        (userManual.cacheCreationTokens ?? 0) + (technical.cacheCreationTokens ?? 0) +
-        umExtraTokens.cacheCreate + tdExtraTokens.cacheCreate,
+      inputTokens: userManual.inputTokens + umExtraTokens.input,
+      outputTokens: userManual.outputTokens + umExtraTokens.output,
+      cacheReadTokens: (userManual.cacheReadTokens ?? 0) + umExtraTokens.cacheRead,
+      cacheCreationTokens: (userManual.cacheCreationTokens ?? 0) + umExtraTokens.cacheCreate,
     });
 
     const completed = incCompleted();

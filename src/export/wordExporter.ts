@@ -244,24 +244,7 @@ export async function exportToWord(
     );
   }
 
-  // Technical doc section
-  children.push(
-    new Paragraph({
-      text: "Teknik Döküman",
-      heading: HeadingLevel.HEADING_1,
-      spacing: { before: 400, after: 200 },
-    })
-  );
-
-  for (const doc of docs) {
-    children.push(
-      ...parseMarkdownToParagraphs(doc.technicalDocContent)
-    );
-
-    children.push(
-      new Paragraph({ text: "", pageBreakBefore: true })
-    );
-  }
+  // Teknik doküman bölümü kaldırıldı — yalnız Kullanıcı Kılavuzu.
 
   const document = new Document({
     numbering: {
