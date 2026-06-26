@@ -5,6 +5,9 @@ interface ProgressViewProps {
   streamUrl: string;
   total?: number;
   onComplete?: () => void;
+  /** Terminal HATA (failed/cancelled) olduğunda çağrılır — çağıran tarafın
+   *  "çalışıyor" durumunu sıfırlayıp yeniden denemeye izin vermesi için. */
+  onError?: (message: string) => void;
   onCancel?: () => void;
   onPause?: () => Promise<void> | void;
   onResume?: () => Promise<void> | void;
@@ -14,6 +17,7 @@ export default function ProgressView({
   streamUrl,
   total = 0,
   onComplete,
+  onError,
   onCancel,
   onPause,
   onResume,
@@ -26,8 +30,10 @@ export default function ProgressView({
   const [waitDismissed, setWaitDismissed] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const endedRef = useRef(false);
 
   useEffect(() => {
+    endedRef.current = false;
     const es = new EventSource(streamUrl);
 
     es.onmessage = (e) => {
@@ -53,15 +59,27 @@ export default function ProgressView({
       // hatasıdır (job sürer) — burada job'ı bitmiş sayma.
       if (event.type === "complete" || event.type === "failed" || event.type === "cancelled") {
         setDone(true);
-        if (event.type !== "complete") setEndedWithError(true);
+        endedRef.current = true;
         es.close();
-        if (event.type === "complete") onComplete?.();
+        if (event.type === "complete") {
+          onComplete?.();
+        } else {
+          setEndedWithError(true);
+          onError?.(event.message || "İşlem başarısız oldu");
+        }
       }
     };
 
     es.onerror = () => {
+      // Terminal olay zaten geldiyse (normal kapanış) bir şey yapma.
+      if (endedRef.current) return;
+      endedRef.current = true;
       setLogs((prev) => [...prev, "Bağlantı kesildi."]);
+      setDone(true);
+      setEndedWithError(true);
       es.close();
+      // Çağıran "çalışıyor" durumunu sıfırlasın — aksi halde ekran takılır.
+      onError?.("Sunucuyla bağlantı kesildi. İşlem durdu — yeniden deneyin.");
     };
 
     return () => es.close();

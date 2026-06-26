@@ -74,6 +74,14 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
     }
   }
 
+  // Keşif HATA ile bitti (sayfa yüklenemedi, bağlantı koptu, vb.) → durumu
+  // sıfırla ki ekran takılmasın ve kullanıcı yeniden başlatabilsin.
+  function handleDiscoveryError(message: string) {
+    setDiscovering(false);
+    setDiscoveryJobId(null);
+    toast.show(`Keşif başarısız: ${message}`, "error");
+  }
+
   function handleDiscoveryComplete() {
     setDiscovering(false);
     setDiscoveryJobId(null);
@@ -260,6 +268,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
           <ProgressView
             streamUrl={`/api/discovery/${discoveryJobId}/stream`}
             onComplete={handleDiscoveryComplete}
+            onError={handleDiscoveryError}
             onPause={async () => { await jobControl.pause(discoveryJobId); }}
             onResume={async () => { await jobControl.resume(discoveryJobId); }}
             onCancel={async () => {
