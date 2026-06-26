@@ -409,49 +409,20 @@ export default function DocumentsPage({
               </div>
             </div>
 
-            {/* Tabs */}
+            {/* Başlık şeridi — yalnız Kullanıcı Kılavuzu (teknik doküman kaldırıldı) */}
             <div className="flex border-b border-gray-200 bg-white">
-              <button
-                onClick={() => setActiveTab("userManual")}
-                className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "userManual"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-              >
+              <span className="px-5 py-3 text-sm font-medium border-b-2 border-blue-500 text-blue-600">
                 Kullanıcı Kılavuzu
-              </button>
-              <button
-                onClick={() => setActiveTab("technicalDoc")}
-                className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "technicalDoc"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Teknik Döküman
-              </button>
+              </span>
             </div>
 
             {/* Editor */}
             <div className="flex-1 overflow-hidden">
-              {activeTab === "userManual" ? (
-                <MarkdownEditor
-                  value={editContent.userManualContent}
-                  onChange={(v) =>
-                    handleContentChange("userManualContent", v)
-                  }
-                  readOnly={activeDoc.status === "published"}
-                />
-              ) : (
-                <MarkdownEditor
-                  value={editContent.technicalDocContent}
-                  onChange={(v) =>
-                    handleContentChange("technicalDocContent", v)
-                  }
-                  readOnly={activeDoc.status === "published"}
-                />
-              )}
+              <MarkdownEditor
+                value={editContent.userManualContent}
+                onChange={(v) => handleContentChange("userManualContent", v)}
+                readOnly={activeDoc.status === "published"}
+              />
             </div>
           </>
         ) : (

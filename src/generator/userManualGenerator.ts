@@ -82,7 +82,8 @@ export function buildScreenshotEmbedBlock(
     `\n\n# ${totalImages} GÖRSEL VERİLDİ — TAMAMINI EMBED ET\n\n${imageTable}\n\n` +
     placement +
     `\n**Kural:** En az ${minEmbeds} embed. Path'leri AYNEN yukarıdaki tablodaki gibi kullan. ` +
-    `EKRAN GÖRÜNTÜSÜ OLMADAN KILAVUZ YAZMA — en azından ana ekran görselini embed etmek ZORUNLUDUR.\n\n` +
+    `EKRAN GÖRÜNTÜSÜ OLMADAN KILAVUZ YAZMA — en azından ana ekran görselini embed etmek ZORUNLUDUR.\n` +
+    `**Anlatım düzeni (ÇOK ÖNEMLİ):** Her görseli, o görselin NE gösterdiğini/hangi adım olduğunu anlatan açıklamanın HEMEN ALTINA koy. ASLA iki veya daha fazla görseli arka arkaya (aralarında açıklama olmadan) yığma. Akış şöyle olmalı: önce adımı yaz ("1. Şu butona tıklayın…"), sonra o adımın görselini embed et, sonra sonucu açıkla, sonra bir sonraki adım… Bir insanın ekranı adım adım kullanıp her ekranı göstererek anlatması gibi. Görsel yığını + tüm açıklama en üstte/altta = YANLIŞ.\n\n` +
     `**Yasak — global sayfa şablonu:** Görsellerde sol sidebar menüsü (başka sayfalara giden linkler) ve üst bardaki **profil/hesap menüsü, dil seçici (Türkçe/English), bildirim zili, oturumu kapat** gibi kontroller görünebilir — bunlar bu ekranın değil, uygulamanın GENEL ŞABLONUNUN parçasıdır. URL'i ${screenPath} olan bu ekranı anlatırken bunları BAHSETME, listeleme, görsellerini embed ETME.\n`
   );
 }
