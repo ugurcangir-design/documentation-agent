@@ -131,20 +131,33 @@ async function closeModal(page: Page): Promise<boolean> {
     await page.waitForTimeout(250);
     if (!(await modalIsOpen(page))) return true;
 
-    // 2. Kapat / İptal butonu
-    const closeBtn = page.locator(
-      'button[aria-label*="close" i], button[aria-label*="kapat" i], ' +
-      '[role="dialog"] button:has-text("İptal"), [role="dialog"] button:has-text("Kapat"), ' +
-      '[role="dialog"] button:has-text("Cancel"), [role="dialog"] button:has-text("Vazgeç"), ' +
-      '.modal-close, .ant-modal-close, .MuiDialog-root [aria-label*="close" i], [class*="CloseIcon"]'
-    ).first();
-    try {
-      if (await closeBtn.isVisible({ timeout: 300 })) {
-        await closeBtn.click({ timeout: ACTION_TIMEOUT, force: true });
-        await page.waitForTimeout(300);
-        if (!(await modalIsOpen(page))) return true;
-      }
-    } catch { /* noop */ }
+    // 2. Kapat / İptal / "×" butonu — ilk GÖRÜNÜR eşleşeni dene (sadece .first()
+    //    değil; kapat ikonu modalın sonunda olabilir).
+    const closeSelectors = [
+      'button[aria-label*="close" i]', 'button[aria-label*="kapat" i]',
+      'button[title*="close" i]', 'button[title*="kapat" i]',
+      '[role="dialog"] button:has-text("İptal")', '[role="dialog"] button:has-text("Kapat")',
+      '[role="dialog"] button:has-text("Cancel")', '[role="dialog"] button:has-text("Vazgeç")',
+      '[role="dialog"] button:has-text("Çıkış")', '[role="dialog"] button:has-text("×")',
+      '[role="dialog"] button:has-text("✕")',
+      '.modal-close', '.ant-modal-close', '.MuiDialog-root [aria-label*="close" i]',
+      '[class*="CloseIcon"]', '[class*="close-button" i]', '[class*="CloseButton"]',
+      '[data-dismiss="modal"]', '[data-bs-dismiss="modal"]',
+      '[role="dialog"] [class*="close" i]',
+    ];
+    let clickedClose = false;
+    for (const sel of closeSelectors) {
+      try {
+        const btn = page.locator(sel).first();
+        if (await btn.isVisible({ timeout: 150 }).catch(() => false)) {
+          await btn.click({ timeout: ACTION_TIMEOUT, force: true });
+          await page.waitForTimeout(300);
+          clickedClose = true;
+          if (!(await modalIsOpen(page))) return true;
+        }
+      } catch { /* sonraki selector */ }
+    }
+    if (clickedClose && !(await modalIsOpen(page))) return true;
 
     // 3. Backdrop / overlay'a tıkla (modalın dışına)
     try {
@@ -156,8 +169,28 @@ async function closeModal(page: Page): Promise<boolean> {
         await page.waitForTimeout(250);
       }
     } catch { /* noop */ }
+
+    // 4. Köşeye tıkla (click-outside-to-close modalleri için son çare)
+    try {
+      await page.mouse.click(5, 5);
+      await page.waitForTimeout(200);
+    } catch { /* noop */ }
   }
   return !(await modalIsOpen(page));
+}
+
+/** Modal hiçbir yöntemle kapanmıyorsa sayfayı MEVCUT URL'e reload ederek
+ *  durumu sıfırlar (modal kesin temizlenir, ?tab=N gibi query korunur).
+ *  Reload sonrası true döner; başarısızsa false. */
+async function resetViaReload(page: Page, log: (m: string) => void): Promise<boolean> {
+  try {
+    log(`  ↻ modal kapanmadı — sayfa yeniden yükleniyor (durum sıfırlanıyor)`);
+    await page.goto(page.url(), { waitUntil: "domcontentloaded", timeout: 15000 });
+    await page.waitForTimeout(RENDER_WAIT);
+    return !(await modalIsOpen(page));
+  } catch {
+    return false;
+  }
 }
 
 /** Iterate visible locators up to a limit. Re-queries the locator on each
@@ -288,10 +321,13 @@ async function runActionButtonPass(
 
     // Önceki turdan kalmış açık modal varsa kapat — yoksa bu butona basamaz
     // (overlay engeller) ve hâlâ açık olan eski modal yeniden yakalanır.
+    // Kapatılamazsa ATLAMAK yerine sayfayı reload edip DEVAM et (kalan
+    // butonlar da yakalansın). Reload da çözmezse o zaman bırak.
     if (await modalIsOpen(page)) {
-      const closed = await closeModal(page);
+      let closed = await closeModal(page);
+      if (!closed) closed = await resetViaReload(page, log);
       if (!closed) {
-        log(`  ⚠ açık modal kapatılamadı, kalan action butonları atlanıyor`);
+        log(`  ⚠ açık modal hiçbir yöntemle (kapat/backdrop/reload) kapatılamadı — kalan action butonları atlanıyor`);
         break;
       }
       await page.waitForTimeout(200);
