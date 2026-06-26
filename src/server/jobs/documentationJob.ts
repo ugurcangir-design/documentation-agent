@@ -11,6 +11,7 @@
  */
 
 import { jobStore } from "../store/jobStore";
+import { documentStore } from "../store/documentStore";
 import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
 import { loadJobContext } from "./contextLoader";
@@ -84,20 +85,40 @@ export async function runDocumentationJob(
   const wasCancelled = jobCancellation.isCancelled(jobId);
   jobCancellation.clear(jobId);
 
+  // GERÇEKTEN kaç doküman üretildi? `completed` sayacı hem başarı hem hata
+  // ekranını sayar (screenProcessor catch'te de artar). documentStore'a
+  // bakmak doğru ölçüdür: hiç doküman yoksa "Tüm dökümanlar oluşturuldu"
+  // demek yanıltıcıydı (kullanıcı başarı görüp Dökümanlar sayfasını boş
+  // buluyordu — örn. Claude kullanım limiti / auth / analiz hatası).
+  const createdDocs = documentStore.getByJobId(jobId).length;
+  const allFailed = !wasCancelled && createdDocs === 0 && total > 0;
+  const partial = !wasCancelled && createdDocs > 0 && createdDocs < total;
+
+  let status: "completed" | "failed";
+  let message: string;
+  let eventType: "complete" | "failed" | "cancelled";
+  let error: string | undefined;
+
+  if (wasCancelled) {
+    status = "failed"; eventType = "cancelled";
+    message = "Kullanıcı tarafından iptal edildi"; error = "Cancelled by user";
+  } else if (allFailed) {
+    status = "failed"; eventType = "failed";
+    message = "Hiçbir doküman üretilemedi — üretim hatası (örn. Claude kullanım limiti, kimlik doğrulama veya analiz hatası). Sunucu loglarına / Geçmiş'e bakın.";
+    error = message;
+  } else if (partial) {
+    status = "completed"; eventType = "complete";
+    message = `${createdDocs}/${total} doküman üretildi (bazı ekranlar başarısız — eksikler için 'Eksikleri Üret').`;
+  } else {
+    status = "completed"; eventType = "complete";
+    message = "Tüm dökümanlar oluşturuldu";
+  }
+
   jobStore.update(jobId, {
-    status: wasCancelled ? "failed" : "completed",
+    status,
     completedAt: new Date().toISOString(),
-    progress: {
-      current: completed,
-      total,
-      message: wasCancelled ? "Kullanıcı tarafından iptal edildi" : "Tüm dökümanlar oluşturuldu",
-    },
-    ...(wasCancelled ? { error: "Cancelled by user" } : {}),
+    progress: { current: completed, total, message },
+    ...(error ? { error } : {}),
   });
-  emitJobEvent(jobId, {
-    type: wasCancelled ? "cancelled" : "complete",
-    message: wasCancelled ? "İptal edildi" : "Tüm dökümanlar oluşturuldu",
-    current: completed,
-    total,
-  });
+  emitJobEvent(jobId, { type: eventType, message, current: completed, total });
 }
