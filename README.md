@@ -41,7 +41,8 @@ Kaynak dosya: [`client/public/kilavuz.html`](client/public/kilavuz.html)
 ## Mimari Notları
 
 Geliştiriciler için kod yapısı, RAG mekaniği, job yaşam döngüsü ve
-çekirdek davranışlar **[CLAUDE.md](CLAUDE.md)** dosyasındadır.
+çekirdek davranışlar **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+dosyasındadır. Özet ve kurallar: [CLAUDE.md](CLAUDE.md).
 
 ## Komutlar
 
@@ -56,4 +57,4 @@ Geliştiriciler için kod yapısı, RAG mekaniği, job yaşam döngüsü ve
 
 Yerel kullanım modeli: API'lar CSRF guard (`X-DocAgent` header) +
 localhost-only CORS ile korunur, `.env` `0o600` modunda yazılır, ayar
-yazımı allowlist'lidir. Detay: CLAUDE.md → Bilinen Kısıtlamalar.
+yazımı allowlist'lidir. Detay: docs/ARCHITECTURE.md → Bilinen Kısıtlamalar.

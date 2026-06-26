@@ -1,0 +1,43 @@
+# Bağımlılıklar
+node_modules/
+client/node_modules/
+
+# Build / üretilmiş çıktı
+dist/
+build/
+.next/
+client/dist/
+dist-electron/
+coverage/
+*.tsbuildinfo
+
+# Lock / minify / sourcemap
+package-lock.json
+yarn.lock
+*.lock
+*.min.js
+*.map
+*.js.map
+
+# Loglar & VCS
+*.log
+.git/
+data/logs/
+
+# Büyük üretilmiş/veri dosyaları (projeye özgü — agent taramamalı)
+data/screenshots/
+data/db/
+data/output/
+data/exports/
+data/cache/
+data/references/
+data/brd/
+data/swagger/
+assets/icon.icns
+
+# Gizli / OS
+.env
+.env.*
+!.env.example
+**/.DS_Store
+.DS_Store
