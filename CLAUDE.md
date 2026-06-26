@@ -611,10 +611,19 @@ inline form doldurma + okuma/yazma submit. Çağrılma:
   (`tabsExplored` guard) — aksi halde aktif sekme iki kez yakalanıp kılavuza
   yinelenen görsel giriyordu (çapraz-scope tekrar; veri kanıtlı bug).
 - **Sekme yoksa:** bir kez `${base}_*`.
-Hover (tooltip) + fallback bir kez çalışır. Sekme geçişinde async içerik için
-ek bekleme + networkidle. Sekme dedup anahtarı `tab:label:i`. DEEP_EXPLORE
-=false → sekmeler tek tek gezilmez. Tab selector'ı geniş (role=tablist
-çocukları, Bootstrap nav-link, [class*=tab-item/link/header]).
+Sekme tespiti URL-tabanlı (`exploreTabs`): sekmeler genelde `?tab=N` URL'i
+değiştirir; her sekmenin tıklayınca gittiği URL öğrenilir, sonra her sekmeye
+`page.goto(url)` ile AÇIKÇA gidilir (DOM tıklamasından güvenilir). URL
+değişmeyen sekmeler için tıklamaya düşer. Entegrasyon testi:
+`tests/tabExploration.integration.test.ts` (Playwright + yerel fixture).
+Hover + fallback bir kez. DEEP_EXPLORE=false → sekmeler tek tek gezilmez.
+
+**Teknik doküman KALDIRILDI:** screenProcessor yalnız kullanıcı kılavuzu
+üretir (`technicalDocContent=""`); DocumentsPage'de teknik sekme yok;
+export'lar (md/pdf/zip/docx) yalnız kullanıcı kılavuzu içerir.
+
+**Anlatım düzeni:** prompt her görseli kendi açıklamasının hemen altına
+koymaya zorlar (arka arkaya görsel yığını yasak — adım→görsel→sonuç akışı).
 
 ### Global chrome dışlama (profil/dil/header)
 `interactiveExplorer.isInNavOrSidebar` sidebar + üst bar (header/topbar/
