@@ -299,7 +299,8 @@ function mergeResults(a: GenerationResult, b: GenerationResult, joiner = "\n\n")
  */
 export async function generateUserManualComplete(
   ctx: ScreenContext,
-  templates: string[] = []
+  templates: string[] = [],
+  onProgress?: (msg: string) => void
 ): Promise<GenerationResult> {
   const { baseStates, tabs } = groupStatesByTab(ctx.screen.states ?? []);
 
@@ -309,13 +310,19 @@ export async function generateUserManualComplete(
   }
 
   console.log(`[userManual] ${tabs.length} sekme tespit edildi → sekme başına ayrı üretim + birleştirme`);
+  // İlerleme: çok sekmeli üretim N+1 sıralı Claude çağrısı = uzun sürebilir.
+  // Her adımda mesaj yayınla ki UI "donmuş %0" görünmesin.
+  const total = tabs.length + 1;
 
   // 1. Genel bakış — sekmeye ait olmayan state'lerle (ana görsel + ortak alanlar).
+  onProgress?.(`Bölüm 1/${total}: genel bakış yazılıyor`);
   const overviewCtx: ScreenContext = { ...ctx, screen: { ...ctx.screen, states: baseStates } };
   let merged = await generateUserManualSection(overviewCtx, templates);
 
   // 2. Her sekme için ayrı, odaklı bölüm üret ve ekle.
-  for (const tab of tabs) {
+  for (let i = 0; i < tabs.length; i++) {
+    const tab = tabs[i] as (typeof tabs)[number];
+    onProgress?.(`Bölüm ${i + 2}/${total}: '${tab.label}' sekmesi yazılıyor`);
     try {
       const section = await generateUserManualSection(ctx, templates, {
         statesOverride: tab.states,
