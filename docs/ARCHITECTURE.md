@@ -412,6 +412,14 @@ Her tur:
 - Yeni kapsam **eski kapsam ≥** ise kabul, gerileme reddedilir
 - İlerleme yoksa erken çık
 
+**Çok-sekmeli ekranda hedef = YALNIZ GENEL BAKIŞ:** coverage `analysis.
+uiElements` (ana ekran, 1 görsel) üzerinden ölçülür → bu öğeler genel bakış
+bölümüne aittir. `generateUserManualComplete` `overviewContent`/`tabsContent`
+ayrık döndürür; screenProcessor coverage-judge + fix-up'ı yalnız
+`overviewContent`'te çalıştırır, sonra `fixedOverview + SECTION_JOINER +
+tabsContent` birleştirir. Sekme bölümleri yeniden yazılmaz → ~8× token
+tasarrufu + yapı/kalite korunur. Tek/sıfır sekmede tüm doc üzerinde (eskisi gibi).
+
 ### Üretim Bilgisi dipnotu (trace)
 Doküman sonuna eklenir:
 - Referans bölümleri (kaynak tipi dökümü: BRD/Confluence/Jira/…)
