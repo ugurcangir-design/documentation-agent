@@ -131,7 +131,14 @@ function buildPrompt(
     )
     .join("\n");
 
-  const templateBlock = templates.length > 0
+  // YALIN MOD (sekme bölümleri): sekmeye göre değişmeyen ağır bağlamı
+  // (16KB BRD/Confluence RAG + 7KB stil şablonu + API endpoint'leri) sekme
+  // çağrılarından çıkar — bu içerik GENEL BAKIŞ bölümüne aittir; sekme
+  // bölümleri görsellerden anlatılır. Üslubu zaten genel bakış belirler.
+  // 8 çağrıda ~%50 token tasarrufu; kalite/doğruluk korunur.
+  const lean = !!tabFocus;
+
+  const templateBlock = (templates.length > 0 && !lean)
     ? `\n\n### ÖRNEK ŞABLON KILAVUZ — BU FORMAT VE ÜSLUBA UY\n\nAşağıdaki örnek dökümanı dikkatle incele. Senin yazacağın kılavuz **bu dökümanın anlatım üslubu, paragraf-cümle yapısı, başlık tarzı ve detay seviyesinde** olmalı. İçeriği KOPYALAMA — sadece formu örnek al.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 7000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n\nÖZELLIKLE DİKKAT ET:\n- Şablon adımları nasıl numaralandırıyor → aynı şekilde yap\n- Şablon ne kadar açıklayıcı (her butonu ayrı paragraf mı, kısa madde mi)\n- Şablonun \"sen/siz\" hitabı nasıl → onu kullan\n- Şablonda kullanılan terimleri (örn: 'panel', 'sekme', 'kayıt') benimse\n`
     : "";
 
@@ -148,8 +155,10 @@ function buildPrompt(
     url: `/screenshots/${basename(s.screenshotPath)}`,
   }));
 
+  // Sekme bölümünde ekranın ana keşif görseli gereksiz — sekmenin kendi
+  // tam-sayfa görseli zaten state'lerde var. Ana görseli atla (token tasarrufu).
   const stateBlock = buildScreenshotEmbedBlock(
-    ctx.screen.screenshotPath ? mainImgUrl : null,
+    ctx.screen.screenshotPath && !lean ? mainImgUrl : null,
     stateImageList,
     ctx.screen.path
   );
@@ -172,6 +181,12 @@ function buildPrompt(
 - Bu sekmeye ait HİÇBİR işlem, alan, buton, mesaj veya detay atlanmasın.`
     : `Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine, SEKMEYE hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.`;
 
+  // Sekme bölümlerinde ağır iş-bağlamı yok; yalnız hedefli paragraf
+  // eşleşmeleri (küçük, doğruluğu artıran) korunur.
+  const contextBlock = lean
+    ? (paragraphContext ? `\n\n# İLGİLİ NOTLAR\n${paragraphContext}` : "")
+    : `\n\n# BRD / CONFLUENCE BAĞLAMI\n\n${brdContext || "_(yok)_"}${paragraphContext}\n\n# API ENDPOINT'LERİ\n\n${apiContext || "_(yok)_"}`;
+
   const prompt = `**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}${tabFocus ? `\n**Aktif Sekme:** ${tabFocus.label}` : ""}
 **Amaç:** ${ctx.analysis.purpose}
 **Hedef kullanıcı:** ${ctx.analysis.targetAudience || "Genel kullanıcı"}
@@ -182,15 +197,7 @@ ${uiElementsBlock}
 
 # İŞ AKIŞLARI — HER BİRİ İÇİN 'ADIM ADIM KULLANIM' ALTINA ALT BAŞLIK AÇ (${ctx.analysis.workflows.length} adet)
 
-${workflowsBlock || "_(akış tespit edilmedi — 3-5 ana akışı görsellerden çıkar)_"}
-
-# BRD / CONFLUENCE BAĞLAMI
-
-${brdContext || "_(yok)_"}${paragraphContext}
-
-# API ENDPOINT'LERİ
-
-${apiContext || "_(yok)_"}
+${workflowsBlock || "_(akış tespit edilmedi — 3-5 ana akışı görsellerden çıkar)_"}${contextBlock}
 ${stateBlock}
 ---
 
@@ -243,8 +250,9 @@ export async function generateUserManualSection(
     const result = await callClaude({
       prompt,
       cachedPrefix,
-      imageBase64: ctx.screen.screenshotBase64,
-      imagePath: ctx.screen.screenshotPath,
+      // Sekme bölümünde ekranın ana keşif görselini gönderme (sekmenin kendi
+      // tam-sayfa görseli zaten `images` içinde) — vision token tasarrufu.
+      ...(tabFocus ? {} : { imageBase64: ctx.screen.screenshotBase64, imagePath: ctx.screen.screenshotPath }),
       images: stateImages,
       maxTokens: cfg.maxTokens ?? 8000,
     });
