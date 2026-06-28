@@ -86,7 +86,9 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     setProgress(`Kullanıcı kılavuzu yazılıyor: ${screenTitle}`);
 
     // Yalnız KULLANICI KILAVUZU üretilir — teknik doküman özelliği kaldırıldı.
-    const userManual = await generateUserManualComplete(context, templateContents);
+    // Çok sekmeli ekranlarda sekme-başına ilerleme mesajı yayınla (UI donmasın).
+    const userManual = await generateUserManualComplete(context, templateContents,
+      (msg) => setProgress(`${screenTitle} — ${msg}`));
 
     // Coverage scope = analyzer'ın çıkardığı UI öğeleri, sidebar nav hariç.
     const inScopeForCoverage = analysis.uiElements.filter((el) => !isSidebarNav(el));

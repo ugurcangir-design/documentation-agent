@@ -326,10 +326,29 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     let out = "";
     let err = "";
 
+    // ZAMAN AŞIMI: CLI çağrısı (özellikle büyük prompt + çok görsel) takılırsa
+    // exit olayı hiç gelmez → promise sonsuza dek askıda kalır, job %0'da donar.
+    // Süre dolunca süreci öldür ve reject et. CLAUDE_CLI_TIMEOUT_MS ile ayar.
+    const timeoutMs = Number(process.env.CLAUDE_CLI_TIMEOUT_MS) || 360_000; // 6 dk
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { proc.kill("SIGKILL"); } catch { /* noop */ }
+      for (const f of tempFiles) fs.unlink(f, () => {});
+      reject(new Error(
+        `claude CLI zaman aşımı (${Math.round(timeoutMs / 1000)}s) — yanıt gelmedi. ` +
+        `Prompt/görsel çok büyük olabilir veya CLI takıldı.`
+      ));
+    }, timeoutMs);
+
     proc.stdout.on("data", (d: Buffer) => { out += d.toString(); });
     proc.stderr.on("data", (d: Buffer) => { err += d.toString(); });
 
     proc.on("error", (e) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       for (const f of tempFiles) fs.unlink(f, () => {});
       const code = (e as NodeJS.ErrnoException).code;
       if (code === "ENOENT") {
@@ -343,6 +362,9 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     });
 
     proc.on("exit", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       for (const f of tempFiles) fs.unlink(f, () => {});
 
       // CLI exit≠0 olduğunda asıl hata genelde STDOUT'taki JSON'da durur
