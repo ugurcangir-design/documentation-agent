@@ -491,7 +491,16 @@ deseninden sekmelere böler. **≥2 sekme** varsa → genel-bakış bölümü
 bölümü, ekran girişini tekrarlamaz) → tek dokümanda birleştirilir
 (token/cache toplanır). Tek/sıfır sekmede tek çağrı. Amaç: tek çağrının
 görsel bütçesine (TOTAL_MAX) sıkışıp sekme detayının kaybolmaması — her
-sekme kendi tam görsel setiyle modele girer.
+sekme kendi tam görsel setiyle modele girer. İlerleme: `onProgress`
+callback ile "Bölüm i/N" mesajı (screenProcessor → setProgress).
+
+**YALIN SEKME MODU (token tasarrufu):** `buildPrompt`'ta `tabFocus` varsa
+sekmeye göre değişmeyen ağır bağlam ÇIKARILIR — BRD/Confluence RAG
+(preparedChunks), API endpoint'leri ve stil şablonu (bunlar genel-bakışa
+ait). Ekranın ana keşif görseli de gönderilmez (sekmenin kendi tam-sayfa
+görseli yeterli). UI öğeleri + iş akışları + hedefli paragraf eşleşmeleri
+KORUNUR (doğruluk korunur). Sekme prompt'u ~45K → ~20K; ekran başına ~40K+
+token tasarrufu. Test: `tests/userManualLean.test.ts`.
 
 `userManualGenerator.ts`:
 - `buildPrompt(ctx, templates, tabFocus?)`:
