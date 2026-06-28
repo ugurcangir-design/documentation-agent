@@ -10,7 +10,7 @@ import { v4 as uuid } from "uuid";
 
 import { analyzeScreen } from "../../analysis/screenAnalyzer";
 import { buildScreenContext } from "../../analysis/screenContextBuilder";
-import { generateUserManualComplete } from "../../generator/userManualGenerator";
+import { generateUserManualComplete, SECTION_JOINER } from "../../generator/userManualGenerator";
 import { computeCoverage, type CoverageReport } from "../../quality/coverageCheck";
 import { computeVerifiedCoverage } from "../../quality/verifiedCoverage";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
@@ -93,11 +93,17 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     // Coverage scope = analyzer'ın çıkardığı UI öğeleri, sidebar nav hariç.
     const inScopeForCoverage = analysis.uiElements.filter((el) => !isSidebarNav(el));
 
-    let umContent = userManual.content;
+    // Coverage + fix-up HEDEFİ: çok-sekmeli ekranda yalnız GENEL BAKIŞ bölümü
+    // (ana ekran öğeleri oraya aittir; sekme bölümleri kendi görsellerinden
+    // zaten eksiksiz üretilir). Böylece Haiku-judge + Sonnet fix-up dokümanın
+    // ~1/8'ini işler (~8× token tasarrufu) ve sekme bölümleri yeniden yazılmaz.
+    const isMultiTab = userManual.overviewContent !== undefined;
+    const tabsContent = userManual.tabsContent ?? "";
+    let coverageTarget = isMultiTab ? (userManual.overviewContent as string) : userManual.content;
 
     const initialUmCoverage = env.coverageLlmJudge
-      ? await computeVerifiedCoverage(inScopeForCoverage, umContent, "userManual")
-      : computeCoverage(inScopeForCoverage, umContent);
+      ? await computeVerifiedCoverage(inScopeForCoverage, coverageTarget, "userManual")
+      : computeCoverage(inScopeForCoverage, coverageTarget);
     let umCoverage = initialUmCoverage;
     let umExtraTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
     let umFixUpAdded = 0;
@@ -183,12 +189,18 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     }
 
     {
-      const r = await fixUpLoop("userManual", umContent, umCoverage);
-      umContent = r.content;
+      const r = await fixUpLoop("userManual", coverageTarget, umCoverage);
+      coverageTarget = r.content; // düzeltilmiş genel bakış (çok-sekmede)
       umCoverage = r.coverage;
       umFixUpAdded = r.addedTotal;
       umExtraTokens = { input: r.tokensIn, output: r.tokensOut, cacheRead: r.cacheRead, cacheCreate: r.cacheCreate };
     }
+
+    // Nihai içerik: çok-sekmede düzeltilmiş genel bakış + DOKUNULMAMIŞ sekme
+    // bölümleri; tek/sıfır sekmede düzeltilmiş tek doküman.
+    const umContent = isMultiTab && tabsContent
+      ? coverageTarget + SECTION_JOINER + tabsContent
+      : coverageTarget;
 
     if (umCoverage.missing.length > 0) {
       console.log(`[docjob ${jobId}] UM kalan eksikler: ${umCoverage.missing.join(", ")}`);

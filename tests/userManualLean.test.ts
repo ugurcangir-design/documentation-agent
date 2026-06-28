@@ -13,7 +13,7 @@ vi.mock("../src/llm/claudeClient", () => ({
   isPromptTooLong: () => false,
 }));
 
-import { generateUserManualSection, generateUserManualComplete } from "../src/generator/userManualGenerator";
+import { generateUserManualSection, generateUserManualComplete, SECTION_JOINER } from "../src/generator/userManualGenerator";
 import type { ScreenContext } from "../src/types/documentation";
 
 function makeCtx(): ScreenContext {
@@ -118,5 +118,39 @@ describe("paralel sekme üretimi — sıra korunur (kalite/token etkisiz)", () =
     expect(iA).toBeGreaterThan(iP);
     // 4 çağrı: genel bakış + 3 sekme (paralel ama hepsi yapılır).
     expect(calls).toHaveLength(4);
+  });
+
+  it("çok-sekmede overviewContent + tabsContent ayrık döner; content = overview + joiner + tabs", async () => {
+    const res = await generateUserManualComplete(multiTabCtx(), []);
+    expect(res.overviewContent).toBeDefined();
+    expect(res.tabsContent).toBeDefined();
+    expect(res.overviewContent).toContain("Genel Bakış");
+    expect(res.tabsContent).toContain("Market Sekmesi");
+    expect(res.tabsContent).toContain("Accumulator Sekmesi");
+    // Birleşik içerik tam olarak genel bakış + ayraç + sekmeler olmalı.
+    expect(res.content).toBe(res.overviewContent! + SECTION_JOINER + res.tabsContent!);
+  });
+});
+
+describe("tek/sıfır sekme — ayrık parçalar yok (tam doc üzerinde coverage)", () => {
+  beforeEach(() => { calls.length = 0; });
+
+  function singleTabCtx(): ScreenContext {
+    return {
+      screen: {
+        path: "/x", url: "http://x", title: "X",
+        screenshotPath: "/s/m.png", screenshotBase64: "M",
+        states: [{ label: 'Sekme: "Tek"', triggeredBy: "tab", screenshotPath: "/s/x_tab_0.png", screenshotBase64: "T0" }],
+      },
+      analysis: { screenTitle: "X", purpose: "p", targetAudience: "a", uiElements: [], workflows: [] },
+      preparedChunks: [], paragraphMatches: [], relatedEndpoints: [], relatedSections: [],
+    } as unknown as ScreenContext;
+  }
+
+  it("1 sekme → tek çağrı, overviewContent/tabsContent undefined", async () => {
+    const res = await generateUserManualComplete(singleTabCtx(), []);
+    expect(res.overviewContent).toBeUndefined();
+    expect(res.tabsContent).toBeUndefined();
+    expect(calls).toHaveLength(1);
   });
 });

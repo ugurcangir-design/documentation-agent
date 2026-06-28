@@ -15,7 +15,16 @@ export interface GenerationResult {
   cacheCreationTokens?: number;
   /** True when Claude hit max_tokens — doküman muhtemelen yarım kaldı. */
   truncated?: boolean;
+  /** Çok-sekmeli üretimde (≥2 sekme) genel bakış bölümü — ayrık tutulur ki
+   *  coverage + fix-up YALNIZ burada çalışsın (sekme bölümleri yeniden
+   *  yazılmaz; ~8× token tasarrufu). Tek/sıfır sekmede undefined. */
+  overviewContent?: string;
+  /** Çok-sekmeli üretimde birleştirilmiş sekme bölümleri (fix-up DOKUNMAZ). */
+  tabsContent?: string;
 }
+
+/** Genel bakış + sekme bölümlerini tek metinde birleştiren ayraç. */
+export const SECTION_JOINER = "\n\n---\n\n";
 
 /**
  * Prompt'u iki parçaya böler — `cachedPrefix` (rol + output structure +
@@ -361,9 +370,24 @@ export async function generateUserManualComplete(
   if (!overview.ok) throw overview.e;
 
   // SIRALI birleştirme: genel bakış → tab0 → tab1 … (paralellik sırayı bozmaz).
-  let merged = overview.r;
-  for (const r of tabResults) {
-    if (r) merged = mergeResults(merged, r, "\n\n---\n\n");
-  }
-  return merged;
+  // Genel bakış + sekmeler AYRIK tutulur: coverage/fix-up yalnız genel bakışta
+  // çalışacak (screenProcessor `overviewContent`/`tabsContent` kullanır).
+  const tabSections = tabResults.filter((r): r is GenerationResult => r !== null);
+  const overviewContent = overview.r.content;
+  const tabsContent = tabSections.map((r) => r.content).join(SECTION_JOINER);
+
+  // Token + truncated toplama (genel bakış + tüm sekmeler).
+  let acc = overview.r;
+  for (const r of tabSections) acc = mergeResults(acc, r, SECTION_JOINER);
+
+  return {
+    content: tabsContent ? overviewContent + SECTION_JOINER + tabsContent : overviewContent,
+    inputTokens: acc.inputTokens,
+    outputTokens: acc.outputTokens,
+    cacheReadTokens: acc.cacheReadTokens ?? 0,
+    cacheCreationTokens: acc.cacheCreationTokens ?? 0,
+    ...(acc.truncated ? { truncated: true } : {}),
+    overviewContent,
+    tabsContent,
+  };
 }
