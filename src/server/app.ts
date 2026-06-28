@@ -127,20 +127,33 @@ app.post("/api/heartbeat", (_req, res) => {
   res.json({ ok: true });
 });
 
+// Aktif (running/pending) job varsa server KAPANMAMALI — uzun süren bir
+// doküman üretimi sırasında sekme kapanır/odak kaybederse iş ölmesin.
+function hasActiveJob(): boolean {
+  return jobStore.getAll().some((j) => j.status === "running" || j.status === "pending");
+}
+
 // Sent via navigator.sendBeacon on `pagehide`. A refresh fires this too,
 // so we wait out a grace period — the reloaded page's first heartbeat
 // cancels the countdown. Only a real tab close leaves no reconnect.
 app.post("/api/heartbeat/leave", (_req, res) => {
   res.json({ ok: true });
   if (leaveTimer) return; // already counting down
-  leaveTimer = setTimeout(() => {
+  const check = () => {
+    if (hasActiveJob()) {
+      console.log("[server] sekme kapandı ama aktif job var — çıkış ertelendi");
+      leaveTimer = setTimeout(check, LEAVE_GRACE); // job bitince tekrar dene
+      return;
+    }
     console.log("[server] browser tab closed (no reconnect) — exiting");
     process.exit(0);
-  }, LEAVE_GRACE);
+  };
+  leaveTimer = setTimeout(check, LEAVE_GRACE);
 });
 
 setInterval(() => {
   if (lastHeartbeat && Date.now() - lastHeartbeat > HEARTBEAT_FALLBACK) {
+    if (hasActiveJob()) return; // aktif job varken çökme-yedeği çıkışı ertele
     console.log("[server] no heartbeat for 15min — exiting (crash fallback)");
     process.exit(0);
   }
