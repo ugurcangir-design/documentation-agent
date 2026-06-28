@@ -5,12 +5,15 @@ const calls: Array<{ prompt: string; cachedPrefix?: string; imageBase64?: string
 vi.mock("../src/llm/claudeClient", () => ({
   callClaude: vi.fn(async (opts: { prompt: string; cachedPrefix?: string; imageBase64?: string; images?: unknown[] }) => {
     calls.push(opts);
-    return { text: "## Bölüm\n\nİçerik", inputTokens: 10, outputTokens: 5 };
+    // Sekme adını prompt'tan türet → ordering testi içerikten doğrulayabilsin.
+    const m = /\*\*Aktif Sekme:\*\* (.+)/.exec(opts.prompt);
+    const text = m ? `## ${m[1]} Sekmesi\n\nİçerik` : `# Genel Bakış\n\nİçerik`;
+    return { text, inputTokens: 10, outputTokens: 5 };
   }),
   isPromptTooLong: () => false,
 }));
 
-import { generateUserManualSection } from "../src/generator/userManualGenerator";
+import { generateUserManualSection, generateUserManualComplete } from "../src/generator/userManualGenerator";
 import type { ScreenContext } from "../src/types/documentation";
 
 function makeCtx(): ScreenContext {
@@ -77,5 +80,43 @@ describe("userManual yalın sekme modu (token tasarrufu)", () => {
     await generateUserManualSection(makeCtx(), ["STİL ŞABLONU ".repeat(100)], { tabLabel: "Market", statesOverride: makeCtx().screen.states ?? [] });
     const tabLen = (calls[0]!.cachedPrefix || "").length + calls[0]!.prompt.length;
     expect(tabLen).toBeLessThan(overviewLen * 0.7); // en az %30 küçülme
+  });
+});
+
+describe("paralel sekme üretimi — sıra korunur (kalite/token etkisiz)", () => {
+  beforeEach(() => { calls.length = 0; });
+
+  function multiTabCtx(): ScreenContext {
+    const tabState = (i: number, label: string) =>
+      ({ label: `Sekme: "${label}"`, triggeredBy: "tab", screenshotPath: `/s/x_tab_${i}.png`, screenshotBase64: `T${i}` });
+    return {
+      screen: {
+        path: "/risk", url: "http://x/risk", title: "Risk",
+        screenshotPath: "/s/main.png", screenshotBase64: "MAIN",
+        states: [tabState(0, "Market"), tabState(1, "Player"), tabState(2, "Accumulator")],
+      },
+      analysis: {
+        screenTitle: "Risk", purpose: "p", targetAudience: "a",
+        uiElements: [{ label: "Ekle", type: "button", description: "d", isGlobalNav: false }],
+        workflows: [],
+      },
+      preparedChunks: [], paragraphMatches: [], relatedEndpoints: [], relatedSections: [],
+    } as unknown as ScreenContext;
+  }
+
+  it("3 sekme paralel üretilse de birleştirme sırası genel bakış → Market → Player → Accumulator", async () => {
+    process.env.TAB_GEN_CONCURRENCY = "3";
+    const res = await generateUserManualComplete(multiTabCtx(), []);
+    const b = res.content;
+    const iOv = b.indexOf("Genel Bakış");
+    const iM = b.indexOf("Market Sekmesi");
+    const iP = b.indexOf("Player Sekmesi");
+    const iA = b.indexOf("Accumulator Sekmesi");
+    expect(iOv).toBeGreaterThanOrEqual(0);
+    expect(iM).toBeGreaterThan(iOv);
+    expect(iP).toBeGreaterThan(iM);
+    expect(iA).toBeGreaterThan(iP);
+    // 4 çağrı: genel bakış + 3 sekme (paralel ama hepsi yapılır).
+    expect(calls).toHaveLength(4);
   });
 });

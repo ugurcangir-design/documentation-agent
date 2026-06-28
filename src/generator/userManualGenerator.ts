@@ -317,31 +317,53 @@ export async function generateUserManualComplete(
     return generateUserManualSection(ctx, templates);
   }
 
-  console.log(`[userManual] ${tabs.length} sekme tespit edildi → sekme başına ayrı üretim + birleştirme`);
-  // İlerleme: çok sekmeli üretim N+1 sıralı Claude çağrısı = uzun sürebilir.
-  // Her adımda mesaj yayınla ki UI "donmuş %0" görünmesin.
+  // Eşzamanlılık: bölümler PARALEL üretilir (süre kısalır). Token/kalite
+  // ETKİLENMEZ — aynı prompt'lar, sıralı (genel bakış → tab0 → tab1 …)
+  // birleştirme korunur. CLI backend her çağrıyı ayrı süreçte çalıştırır.
+  // Not: documentationJob ekranları CONCURRENCY=3 ile işler; bu çarpan
+  // sekme eşzamanlılığıyla çoğalır → varsayılan 3 makul (TAB_GEN_CONCURRENCY).
+  const concurrency = Math.max(1, Number(process.env.TAB_GEN_CONCURRENCY) || 3);
   const total = tabs.length + 1;
+  let doneCount = 0;
+  const tick = (label: string) => onProgress?.(`Bölüm ${++doneCount}/${total} tamamlandı: ${label}`);
+  console.log(`[userManual] ${tabs.length} sekme → ${total} bölüm, ${concurrency}'lü paralel üretim`);
 
-  // 1. Genel bakış — sekmeye ait olmayan state'lerle (ana görsel + ortak alanlar).
-  onProgress?.(`Bölüm 1/${total}: genel bakış yazılıyor`);
+  // Genel bakış (sekme-dışı state'ler) tab'larla EŞZAMANLI başlatılır.
   const overviewCtx: ScreenContext = { ...ctx, screen: { ...ctx.screen, states: baseStates } };
-  let merged = await generateUserManualSection(overviewCtx, templates);
+  const overviewP = generateUserManualSection(overviewCtx, templates)
+    .then((r) => { tick("genel bakış"); return { ok: true as const, r }; })
+    .catch((e: Error) => ({ ok: false as const, e }));
 
-  // 2. Her sekme için ayrı, odaklı bölüm üret ve ekle.
-  for (let i = 0; i < tabs.length; i++) {
-    const tab = tabs[i] as (typeof tabs)[number];
-    onProgress?.(`Bölüm ${i + 2}/${total}: '${tab.label}' sekmesi yazılıyor`);
-    try {
-      const section = await generateUserManualSection(ctx, templates, {
-        statesOverride: tab.states,
-        tabLabel: tab.label,
-      });
-      merged = mergeResults(merged, section, "\n\n---\n\n");
-      console.log(`[userManual]   ✓ '${tab.label}' sekmesi bölümü üretildi (${tab.states.length} görsel)`);
-    } catch (e) {
-      console.warn(`[userManual]   ✗ '${tab.label}' sekmesi üretilemedi: ${(e as Error).message}`);
+  // Sekme bölümleri: sınırlı eşzamanlılık, SIRA index ile korunur.
+  const tabResults: (GenerationResult | null)[] = new Array(tabs.length).fill(null);
+  let cursor = 0;
+  const runner = async () => {
+    while (cursor < tabs.length) {
+      const i = cursor++;
+      const tab = tabs[i] as (typeof tabs)[number];
+      try {
+        tabResults[i] = await generateUserManualSection(ctx, templates, {
+          statesOverride: tab.states,
+          tabLabel: tab.label,
+        });
+        console.log(`[userManual]   ✓ '${tab.label}' sekmesi üretildi (${tab.states.length} görsel)`);
+      } catch (e) {
+        console.warn(`[userManual]   ✗ '${tab.label}' sekmesi üretilemedi: ${(e as Error).message}`);
+        tabResults[i] = null;
+      }
+      tick(tab.label);
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, tabs.length) }, runner));
 
+  // Genel bakış kritik — başarısızsa ekran hatası (sekme hatası tolere edilir).
+  const overview = await overviewP;
+  if (!overview.ok) throw overview.e;
+
+  // SIRALI birleştirme: genel bakış → tab0 → tab1 … (paralellik sırayı bozmaz).
+  let merged = overview.r;
+  for (const r of tabResults) {
+    if (r) merged = mergeResults(merged, r, "\n\n---\n\n");
+  }
   return merged;
 }
