@@ -43,13 +43,34 @@ export default function DocumentsPage({
   const toast = useToast();
 
   const load = useCallback(async () => {
-    const g = await docsApi.getGrouped();
-    setGrouped(g);
+    try {
+      const g = await docsApi.getGrouped();
+      setGrouped(g);
+    } catch {
+      /* sessiz — bir sonraki yenilemede tekrar denenir */
+    }
   }, []);
 
+  // Mount'ta ve YENİ bir job tamamlandığında (autoSelectJobId değişince) yükle.
+  // Kritik: kullanıcı zaten Dökümanlar sayfasındayken üretim biterse liste
+  // bayat kalmasın (eskiden yalnız mount'ta yükleniyordu → "1 var ama görünmüyor").
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, autoSelectJobId]);
+
+  // Sekmeye geri dönünce + doküman düzenlenmiyorken periyodik yenile —
+  // arka planda biten üretim otomatik görünsün (düzenleme bozulmaz).
+  useEffect(() => {
+    const onFocus = () => { if (!dirty) load(); };
+    window.addEventListener("focus", onFocus);
+    const interval = setInterval(() => {
+      if (!activeDocId && !dirty) load();
+    }, 5000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      clearInterval(interval);
+    };
+  }, [load, dirty, activeDocId]);
 
   // Auto-select the document produced by the just-completed job
   useEffect(() => {
