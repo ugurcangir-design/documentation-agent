@@ -54,6 +54,7 @@ describe("userManual yalın sekme modu (token tasarrufu)", () => {
     expect(c.prompt).toContain("API ENDPOINT");
     expect(c.imageBase64).toBe("MAINIMG");
     expect((c.cachedPrefix || "")).toContain("ÖRNEK ŞABLON");
+    expect((c.cachedPrefix || "")).toContain("Şu yapıyı kullan"); // tam çıktı yapısı (standart başlıklar) genel bakışta VAR
   });
 
   it("SEKME: ağır bağlam, API, şablon ve ana görsel ÇIKARILIR (yalın)", async () => {
@@ -70,6 +71,8 @@ describe("userManual yalın sekme modu (token tasarrufu)", () => {
     expect(c.imageBase64).toBeUndefined();           // ana görsel gönderilmedi
     expect((c.cachedPrefix || "")).toContain("ÖRNEK ŞABLON");   // stil şablonu KORUNUR (benzerlik)
     expect((c.cachedPrefix || "")).toContain("(özet)");         // ama ÖZET (kısa) tutulur
+    expect((c.cachedPrefix || "")).not.toContain("Şu yapıyı kullan"); // standart çıktı yapısı BASTIRILDI → sekmeler tekrarlamaz
+    expect(c.prompt).toContain("TEKRAR YASAK");        // ortak/standart bölüm üretme yasağı var
     expect(c.prompt).toContain("Market Sekmesi");     // odak korunuyor
     expect(c.prompt).toContain("UI ÖĞELERİ");          // UI öğeleri korunuyor (kalite)
   });

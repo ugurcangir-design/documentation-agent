@@ -24,9 +24,16 @@ export function buildPromptHeader(cfg: PromptCfg): string {
   return parts.join("\n");
 }
 
-export function buildPromptFooter(cfg: PromptCfg): string {
+export function buildPromptFooter(
+  cfg: PromptCfg,
+  opts: { skipStructure?: boolean } = {}
+): string {
   const parts: string[] = [];
-  if (cfg.outputStructure) {
+  // Sekme bölümleri için tam çıktı yapısı (tüm standart başlıklar) ATLANIR —
+  // aksi halde her sekme 'Filtreler', 'Modallar', 'Sık Sorular' gibi standart
+  // bölümleri yeniden üretiyor → tekrar + token israfı. Bu başlıklar genel
+  // bakışa aittir.
+  if (cfg.outputStructure && !opts.skipStructure) {
     parts.push(`Şu yapıyı kullan:\n\n${cfg.outputStructure}`);
   }
   if (cfg.rules && cfg.rules.length > 0) {
