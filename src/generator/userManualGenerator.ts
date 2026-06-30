@@ -140,16 +140,20 @@ function buildPrompt(
     )
     .join("\n");
 
-  // YALIN MOD (sekme bölümleri): sekmeye göre değişmeyen ağır bağlamı
-  // (16KB BRD/Confluence RAG + 7KB stil şablonu + API endpoint'leri) sekme
-  // çağrılarından çıkar — bu içerik GENEL BAKIŞ bölümüne aittir; sekme
-  // bölümleri görsellerden anlatılır. Üslubu zaten genel bakış belirler.
-  // 8 çağrıda ~%50 token tasarrufu; kalite/doğruluk korunur.
+  // YALIN MOD (sekme bölümleri): sekmeye göre değişmeyen AĞIR bağlamı
+  // (16KB BRD/Confluence RAG + API endpoint'leri) sekme çağrılarından çıkar —
+  // bu içerik GENEL BAKIŞ bölümüne aittir; sekme bölümleri görsellerden
+  // anlatılır. ANCAK stil şablonu sekmelerde de KALMALI: aksi halde dokümanın
+  // büyük kısmı (sekme bölümleri) örnek şablonun üslup/formatına benzemiyordu.
+  // Sekmelerde şablon DAHA KISA tutulur (stil çapası yeter, tam metin gerekmez).
   const lean = !!tabFocus;
+  const tmplLimit = lean ? 3500 : 7000;
 
-  const templateBlock = (templates.length > 0 && !lean)
-    ? `\n\n### ÖRNEK ŞABLON KILAVUZ — BU FORMAT VE ÜSLUBA UY\n\nAşağıdaki örnek dökümanı dikkatle incele. Senin yazacağın kılavuz **bu dökümanın anlatım üslubu, paragraf-cümle yapısı, başlık tarzı ve detay seviyesinde** olmalı. İçeriği KOPYALAMA — sadece formu örnek al.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1} ---\n${t.slice(0, 7000)}`).join("\n\n")}\n--- ŞABLON SONU ---\n\nÖZELLIKLE DİKKAT ET:\n- Şablon adımları nasıl numaralandırıyor → aynı şekilde yap\n- Şablon ne kadar açıklayıcı (her butonu ayrı paragraf mı, kısa madde mi)\n- Şablonun \"sen/siz\" hitabı nasıl → onu kullan\n- Şablonda kullanılan terimleri (örn: 'panel', 'sekme', 'kayıt') benimse\n`
-    : "";
+  const templateBlock = templates.length === 0
+    ? ""
+    : `\n\n### ÖRNEK ŞABLON KILAVUZ — BU FORMAT VE ÜSLUBA UY\n\n${lean
+        ? "Bu sekme bölümü, dökümanın genel bakış bölümüyle AYNI üsluba ve aşağıdaki örnek şablonun anlatım/format tarzına uymalı."
+        : "Aşağıdaki örnek dökümanı dikkatle incele. Senin yazacağın kılavuz **bu dökümanın anlatım üslubu, paragraf-cümle yapısı, başlık tarzı ve detay seviyesinde** olmalı."} İçeriği KOPYALAMA — sadece formu örnek al.\n\n${templates.map((t, i) => `--- ŞABLON ${i + 1}${lean ? " (özet)" : ""} ---\n${t.slice(0, tmplLimit)}`).join("\n\n")}\n--- ŞABLON SONU ---\n\nÖZELLIKLE DİKKAT ET:\n- Şablon adımları nasıl numaralandırıyor → aynı şekilde yap\n- Şablon ne kadar açıklayıcı (her butonu ayrı paragraf mı, kısa madde mi)\n- Şablonun \"sen/siz\" hitabı nasıl → onu kullan\n- Şablonda kullanılan terimleri (örn: 'panel', 'sekme', 'kayıt') benimse\n`;
 
   // Build URL-based image catalog. Express serves files from
   // data/screenshots/ at /screenshots/<basename>.
