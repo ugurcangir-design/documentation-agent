@@ -94,6 +94,27 @@ function escapeHtml(s: string): string {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c));
 }
 
+/**
+ * HTML'deki `/screenshots/<ad>` görsel referanslarını base64 data-URI ile
+ * GÖMER. PDF, `page.setContent` ile (origin'siz) üretildiğinden `/screenshots/`
+ * yolları çözülemiyordu → görseller boş çıkıyordu. Data-URI sunucuya bağımlı
+ * değil; PDF'te tüm ekran görüntüleri kayıpsız yer alır. path.basename ile
+ * traversal engellenir; dosya yoksa referans olduğu gibi bırakılır.
+ */
+export function inlineScreenshots(html: string, shotsDir: string): string {
+  return html.replace(/(["(])\/screenshots\/([^")\s]+)/g, (m, pre: string, name: string) => {
+    try {
+      const safe = path.basename(decodeURIComponent(name));
+      const fp = path.join(shotsDir, safe);
+      if (!fs.existsSync(fp)) return m;
+      const b64 = fs.readFileSync(fp).toString("base64");
+      return `${pre}data:image/png;base64,${b64}`;
+    } catch {
+      return m;
+    }
+  });
+}
+
 // ── POST /api/export/docx ──────────────────────────────────────────
 router.post("/docx", async (req: Request, res: Response) => {
   const { documentIds, title = "Uygulama Dökümanları" } = req.body as { documentIds: string[]; title?: string };
@@ -134,7 +155,8 @@ router.post("/pdf", async (req: Request, res: Response) => {
   if (!docs.length) { res.status(404).json({ error: "No documents found" }); return; }
 
   try {
-    const html = buildHtml(docs, title);
+    const shotsDir = path.join(process.cwd(), "data", "screenshots");
+    const html = inlineScreenshots(buildHtml(docs, title), shotsDir);
     const browser = await chromium.launch();
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });
