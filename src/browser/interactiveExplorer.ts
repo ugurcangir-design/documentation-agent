@@ -33,7 +33,7 @@ const MODAL_SELECTORS = [
 ];
 
 const MAX = {
-  tabs: 8, dropdowns: 5, modals: 10, dates: 4,
+  tabs: 12, dropdowns: 5, modals: 10, dates: 4,
   checkboxes: 4, toggles: 3, inputs: 4, hovers: 5,
   accordions: 3, fallback: 6,
   columns: 4, rowActions: 3,
@@ -773,7 +773,11 @@ async function exploreTabs(
   for (let i = 0; i < count && tabs.length < MAX.tabs; i++) {
     const el = root.nth(i);
     try {
-      if (!(await el.isVisible({ timeout: 300 }).catch(() => false))) continue;
+      // Taşan (yatay kaydırmalı) sekme çubuğunda Retailer gibi sondaki
+      // sekmeler görünür alanda olmayabilir → görünür alana kaydır, yoksa
+      // isVisible false dönüp sekme ATLANIYORDU.
+      await el.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+      if (!(await el.isVisible({ timeout: 500 }).catch(() => false))) continue;
       if (await isInNavOrSidebar(el)) continue;
       const label = ((await safeText(el)) || `Sekme ${i + 1}`).trim().slice(0, 40);
       const before = page.url();
