@@ -64,11 +64,17 @@ export default function HistoryPage() {
   async function deleteOne(id: string) {
     if (!confirm("Bu job kaydını silmek istediğinden emin misin?")) return;
     try {
-      await fetch(`/api/jobs/${id}`, { method: "DELETE", headers: { "X-DocAgent": "1" } });
-      load();
+      const r = await fetch(`/api/jobs/${id}`, { method: "DELETE", headers: { "X-DocAgent": "1" } });
+      // r.ok kontrol edilmezse sunucu hatası 'silindi' diye yutuluyordu →
+      // kullanıcı job'un kalmaya devam ettiğini "silinemiyor" diye görüyordu.
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || `Silme başarısız (HTTP ${r.status})`);
+      }
+      await load();
       toast.show("Job silindi", "success");
     } catch (e) {
-      toast.show((e as Error).message, "error");
+      toast.show(`Silme hatası: ${(e as Error).message}`, "error");
     }
   }
 
@@ -81,9 +87,10 @@ export default function HistoryPage() {
         headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
         body: JSON.stringify({ status: ["completed", "failed"] }),
       });
+      if (!r.ok) throw new Error(`Temizleme başarısız (HTTP ${r.status})`);
       const d = await r.json() as { removed: number };
       toast.show(`${d.removed} job silindi`, "success");
-      load();
+      await load();
     } catch (e) {
       toast.show((e as Error).message, "error");
     } finally {
@@ -100,9 +107,10 @@ export default function HistoryPage() {
         headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
         body: JSON.stringify({ status: ["completed", "failed", "running", "pending"] }),
       });
+      if (!r.ok) throw new Error(`Temizleme başarısız (HTTP ${r.status})`);
       const d = await r.json() as { removed: number };
       toast.show(`${d.removed} job silindi`, "success");
-      load();
+      await load();
     } catch (e) {
       toast.show((e as Error).message, "error");
     } finally {
