@@ -39,6 +39,8 @@ data/references/documents/*
 !data/references/documents/.gitkeep
 data/references/templates/*
 !data/references/templates/.gitkeep
+data/references/jira/*
+!data/references/jira/.gitkeep
 data/references/_tmp/
 dist-electron/
 dist/
