@@ -179,20 +179,25 @@ function buildPrompt(
   // Job-stable prefix — bu metin aynı job içinde her ekran için byte-byte
   // aynıdır → cache hit. Header + (varsa) şablon bloğu + output structure
   // + kurallar burada.
+  // Sekme bölümlerinde TAM çıktı yapısını (standart başlıklar) BASTIR —
+  // aksi halde her sekme 'Filtreler', 'Modallar', 'Sık Sorular' gibi standart
+  // bölümleri yeniden üretip dökümanı tekrarla dolduruyordu. Bu başlıklar
+  // genel bakışta bir kez yer alır.
   const cachedPrefix = [
     buildPromptHeader(cfg),
     templateBlock,
-    buildPromptFooter(cfg),
+    buildPromptFooter(cfg, { skipStructure: lean }),
   ].filter((s) => s && s.trim().length > 0).join("\n\n");
 
   // Per-screen dynamic prompt — retrieval + ekran-spesifik içerik.
   const finalInstruction = tabFocus
     ? `Bu çıktı, '${ctx.analysis.screenTitle}' ekranının **'${tabFocus.label}' SEKMESİNE** ait bölümdür.
-- Çıktı SADECE \`## ${tabFocus.label} Sekmesi\` markdown başlığıyla başlasın. Ekranın genel girişini/başlığını TEKRARLAMA (o ayrı ana bölümde yazıldı).
-- YALNIZCA bu sekmeye ait, sana verilen sekme görsellerinde görünen alanları, butonları, tabloları, filtreleri, modalları, popup/alert ve mesajları anlat. Diğer sekmeleri anlatma.
-- Aşağıdaki 5 boyutlu eksiksizlik bu sekme için de ZORUNLU: her adım numaralı, her modal/mesaj kendi görseliyle, veri girişi somut örnekli.
-- Bu sekmeye ait HİÇBİR işlem, alan, buton, mesaj veya detay atlanmasın.`
-    : `Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine, SEKMEYE hakim olabilmeli. Hiçbir UI öğesi atlanmamalı.`;
+- Çıktı SADECE \`## ${tabFocus.label} Sekmesi\` başlığıyla başlasın, tek bir odaklı bölüm olsun.
+- YALNIZCA bu sekmeye ÖZGÜ içeriği anlat: bu sekmenin görsellerinde görünen tablo/sütunlar, filtreler, satır işlemleri (önizleme/düzenle/sil), butonlar, modallar, popup/alert ve mesajlar. İçeride gerektiği kadar \`###\` alt başlık kullan (örn. bu sekmenin tablosu, bu sekmenin filtreleri).
+- **TEKRAR YASAK:** Diğer sekmelerde de bulunan ORTAK/standart bölümleri burada ÜRETME — özellikle 'Bu Ekran Ne İşe Yarar?', 'Ekrana İlk Bakış', 'Sık Sorular ve İpuçları' bölümlerini EKLEME (bunlar genel bakışta bir kez yazıldı). Genel girişi/ekran tanıtımını tekrarlama.
+- Bu sekmenin diğer sekmelerden FARKLI olan içeriğine odaklan; her sekmede aynı olan genel bilgiyi yazma.
+- Bu sekmeye ait hiçbir işlem/alan/buton/mesaj atlanmasın; her görsel kendi açıklamasının yanında.`
+    : `Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine, SEKMEYE hakim olabilmeli. Hiçbir UI öğesi atlanmamalı. 'Sık Sorular ve İpuçları' gibi ortak bölümler burada BİR KEZ yer alsın (sekme bölümlerinde tekrarlanmayacak).`;
 
   // Sekme bölümlerinde ağır iş-bağlamı yok; yalnız hedefli paragraf
   // eşleşmeleri (küçük, doğruluğu artıran) korunur.
