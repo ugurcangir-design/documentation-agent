@@ -766,13 +766,16 @@ publishMarkdown(spaceKey, title, markdown, parentPageId?) →
 ```
 POST /api/export/docx       title + docs[] → .docx (docx paketi)
 POST /api/export/markdown   tek birleşik .md (TOC + her ekran)
-POST /api/export/pdf        marked → HTML → Playwright HTML→PDF
+POST /api/export/pdf        marked → HTML → inlineScreenshots → Playwright
+                              HTML→PDF. inlineScreenshots `/screenshots/<ad>`
+                              referanslarını base64 data-URI ile GÖMER
+                              (setContent origin'siz; aksi halde görseller boş).
 POST /api/export/zip        bundle:
                               <slug>.md (birleşik)
                               <screen-slug>/kullanici-kilavuzu.md
-                              <screen-slug>/teknik-dokuman.md
                               screenshots/*
 ```
+(Teknik doküman kaldırıldı — export'lar yalnız kullanıcı kılavuzu içerir.)
 
 ---
 
