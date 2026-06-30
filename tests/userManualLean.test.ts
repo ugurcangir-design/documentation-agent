@@ -65,10 +65,11 @@ describe("userManual yalın sekme modu (token tasarrufu)", () => {
     });
     expect(calls).toHaveLength(1);
     const c = calls[0]!;
-    expect(c.prompt).not.toContain("BRD / CONFLUENCE BAĞLAMI");
-    expect(c.prompt).not.toContain("API ENDPOINT");
+    expect(c.prompt).not.toContain("BRD / CONFLUENCE BAĞLAMI"); // ağır RAG çıkarıldı
+    expect(c.prompt).not.toContain("API ENDPOINT");             // API çıkarıldı
     expect(c.imageBase64).toBeUndefined();           // ana görsel gönderilmedi
-    expect((c.cachedPrefix || "")).not.toContain("ÖRNEK ŞABLON"); // şablon çıkarıldı
+    expect((c.cachedPrefix || "")).toContain("ÖRNEK ŞABLON");   // stil şablonu KORUNUR (benzerlik)
+    expect((c.cachedPrefix || "")).toContain("(özet)");         // ama ÖZET (kısa) tutulur
     expect(c.prompt).toContain("Market Sekmesi");     // odak korunuyor
     expect(c.prompt).toContain("UI ÖĞELERİ");          // UI öğeleri korunuyor (kalite)
   });
