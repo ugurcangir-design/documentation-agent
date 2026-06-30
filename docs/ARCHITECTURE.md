@@ -510,7 +510,13 @@ sekmeye göre değişmeyen ağır bağlam ÇIKARILIR — BRD/Confluence RAG
 ait). Ekranın ana keşif görseli de gönderilmez (sekmenin kendi tam-sayfa
 görseli yeterli). UI öğeleri + iş akışları + hedefli paragraf eşleşmeleri
 KORUNUR (doğruluk korunur). Sekme prompt'u ~45K → ~20K; ekran başına ~40K+
-token tasarrufu. Test: `tests/userManualLean.test.ts`.
+token tasarrufu. Stil şablonu sekmelerde ÖZET (3500 char) kalır (genel
+bakış 7000) — doküman örnek şablona benzesin diye.
+**Standart başlık tekrarı önlenir:** `buildPromptFooter(cfg, {skipStructure})`
+ile tam çıktı yapısı (Filtreler/Modallar/Sık Sorular/Ekrana İlk Bakış…)
+sekme çağrılarına EKLENMEZ — yalnız genel bakışta bir kez. Sekme talimatı
+ortak/standart bölümleri üretmeyi yasaklar (aksi halde her sekme bu
+başlıkları tekrarlıyordu). Test: `tests/userManualLean.test.ts`.
 
 `userManualGenerator.ts`:
 - `buildPrompt(ctx, templates, tabFocus?)`:
