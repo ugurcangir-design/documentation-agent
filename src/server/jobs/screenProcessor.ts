@@ -15,6 +15,7 @@ import { computeCoverage, type CoverageReport } from "../../quality/coverageChec
 import { computeVerifiedCoverage } from "../../quality/verifiedCoverage";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
 import { isSidebarNav } from "../../quality/sidebarNav";
+import { isUsageLimitError } from "../../llm/claudeClient";
 import { screenStore, type StoredScreen } from "../store/screenStore";
 import { documentStore } from "../store/documentStore";
 import { jobStore } from "../store/jobStore";
@@ -245,12 +246,24 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     const errStack = (err as Error).stack;
     console.error(`[docjob ${jobId}] ERROR for ${screenTitle}: ${errMsg}`);
     if (errStack) console.error(errStack);
-    emitJobEvent(jobId, {
-      type: "error",
-      message: `Hata (${screenTitle}): ${errMsg}`,
-      current: completed,
-      total,
-    });
+
+    // Abonelik/kullanım limiti → yarım doküman YOK (generateUserManualComplete
+    // temiz fırlattı). Kullanıcıya NET, eyleme dönük mesaj; job'a kaydet ki
+    // finalize terminal mesajı da bunu göstersin.
+    if (isUsageLimitError(err)) {
+      const limitMsg =
+        "⛔ Claude kullanım limiti nedeniyle üretim durdu — yarım doküman oluşturulmadı. " +
+        "Limit sıfırlanınca veya Ayarlar'dan API moduna geçince Geçmiş → 'Eksikleri Üret' ile tamamlayın.";
+      jobStore.update(jobId, { error: limitMsg });
+      emitJobEvent(jobId, { type: "error", message: `${screenTitle}: ${limitMsg}`, current: completed, total });
+    } else {
+      emitJobEvent(jobId, {
+        type: "error",
+        message: `Hata (${screenTitle}): ${errMsg}`,
+        current: completed,
+        total,
+      });
+    }
   }
 }
 
