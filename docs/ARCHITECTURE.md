@@ -255,6 +255,12 @@ env.claudeCliBin  = 'claude'
 isPromptTooLong(err) → boolean         // generator backoff için
 isTransientError(err) → boolean        // retry (529/429/timeout/ECONNRESET/
                                        //   ECONNREFUSED) — export, test'li
+isUsageLimitError(err) → boolean       // haftalık/kullanım/quota/billing limiti
+                                       //   (geçici DEĞİL). Üretimde limit →
+                                       //   generateUserManualComplete TEMİZ
+                                       //   fırlatır (yarım doküman YOK);
+                                       //   screenProcessor ekranı failed +
+                                       //   job'a net mesaj → 'Eksikleri Üret'.
 friendlyCliError(out,err,code)         // CLI exit≠0 / is_error:true → stdout
                                        //   JSON'dan anlamlı mesaj; 401 auth
                                        //   ipucu. Jenerik "exit 1" gizlemez.
