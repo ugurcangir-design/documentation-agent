@@ -38,6 +38,15 @@ function resolveClaudeBin(configured: string): string {
   return configured; // let spawn throw ENOENT with the original name
 }
 
+/** Kalite-kritik üretim: ekran analizi, kılavuz üretimi, fix-up, bölüm düzenleme.
+ *  CLI backend'de `model` verilmezse kullanıcının kişisel `claude` CLI
+ *  varsayılanı (kendi `/model` ayarı) devreye girer — DocAgent'ın üretim
+ *  kalitesi/maliyeti ilgisiz bir terminal ayarına bağlı kalmasın diye her
+ *  çağrı bu sabiti açıkça geçer. */
+export const MODEL_QUALITY = "claude-sonnet-4-6";
+/** Ucuz/hızlı doğrulama-yargı görevleri (örn. coverage judge). */
+export const MODEL_FAST = "claude-haiku-4-5";
+
 export interface ClaudeImage {
   base64?: string;
   path?: string;
@@ -241,7 +250,7 @@ async function callApi(opts: ClaudeCallOptions): Promise<ClaudeResult> {
 
   const maxTokens = opts.maxTokens ?? 8000;
   const response = await client.messages.create({
-    model: opts.model ?? "claude-sonnet-4-6",
+    model: opts.model ?? MODEL_QUALITY,
     max_tokens: maxTokens,
     messages: [{ role: "user", content }],
   });

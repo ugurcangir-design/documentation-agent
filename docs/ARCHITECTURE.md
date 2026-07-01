@@ -73,7 +73,6 @@ src/
                                   (generateUserManualComplete: sekme başına
                                   ayrı çağrı + birleştirme)
     tabGrouping.ts               State'leri _tab_<i>'den sekmeye gruplar (saf)
-    technicalDocGenerator.ts     Teknik doc prompt + üretim
     coverageFixUp.ts             Eksik UI öğeleri için hedefli ek üretim
     selectStates.ts              Hangi state görselleri prompt'a girer
     sectionRegenerator.ts        Tek bölümü Claude ile yeniden yaz
@@ -238,10 +237,22 @@ Boot'ta running/pending job'lar `failed` olarak temizlenir.
 ## llm/claudeClient.ts — Claude Backend
 
 ```ts
-MODEL_ANALIZ = "claude-sonnet-4-6"           // tüm üretim (satır 164)
+MODEL_QUALITY = "claude-sonnet-4-6"   // kalite-kritik üretim (analiz, kılavuz, fix-up, bölüm düzenleme)
+MODEL_FAST    = "claude-haiku-4-5"    // ucuz/hızlı doğrulama-yargı (coverage judge)
 env.claudeBackend = 'cli' (varsayılan) | 'api'
 env.claudeCliBin  = 'claude'
 ```
+
+**Her `callClaude()` çağrısı `model` alanını açıkça geçer** (screenAnalyzer,
+userManualGenerator, coverageFixUp, sectionRegenerator → `MODEL_QUALITY`;
+verifiedCoverage'ın `judgeCovered` → `MODEL_FAST`). Bu bilinçli bir tercih:
+CLI backend'de `model` verilmezse `--model` flag'i hiç eklenmez ve `claude`
+süreci kullanıcının **kişisel** `claude` CLI varsayılanını (kendi `/model`
+ayarı) kullanır — DocAgent'ın üretim kalitesi/maliyeti ilgisiz bir terminal
+ayarına bağlı kalmasın diye artık her görev kendi modelini sabitler. Ucuz
+modele indirgeme yalnız judge (Haiku) için yapılır; diğer görevler kaliteyi
+doğrudan etkilediği için Sonnet'te kalır (bkz. `tests/claudeClient.test.ts`
+"model sabitleri" — regresyon koruması).
 
 İki yol:
 - **CLI**: `spawn(claude, [prompt, --output-format=json])` — Claude Code'un
@@ -385,10 +396,8 @@ buildScreenContext(screen, analysis, allSections, allEndpoints)
    → paragraphMatches (max 9, minHits 2)
    → relatedEndpoints (top 12)
 
-await Promise.all([
-  generateUserManualSection(context, templates),
-  generateTechnicalDocSection(context, templates),
-])
+generateUserManualComplete(context, templates, onProgress)
+  // teknik doküman üretimi kaldırıldı — yalnız kullanıcı kılavuzu üretilir
 ```
 
 ### Coverage + Fix-up
@@ -541,8 +550,6 @@ başlıkları tekrarlıyordu). Test: `tests/userManualLean.test.ts`.
   - `runWithBudget(allStates, 7000)` → fail (`isPromptTooLong`) →
   - `runWithBudget(max(5,half), 3500)` → fail →
   - `runWithBudget(4, 1500)` (minimal)
-
-`technicalDocGenerator.ts (139 satır)`: aynı pattern; template ilk 4000 char.
 
 Sidebar-nav filtre: `src/quality/sidebarNav.ts` → `isSidebarNav(el)`.
 Birincil kaynak: `analyzeScreen` her UI öğesine `isGlobalNav: boolean`

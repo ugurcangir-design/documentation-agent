@@ -1,5 +1,5 @@
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
-import { callClaude } from "../llm/claudeClient";
+import { callClaude, MODEL_QUALITY } from "../llm/claudeClient";
 
 export interface SectionRegenerateResult {
   newContent: string;
@@ -84,7 +84,7 @@ ${instruction}
 
 Sadece "${sectionHeading}" bölümünün yeni halini yaz. Başlığı da dahil et (\`${"#".repeat(target.level)} ${sectionHeading}\` ile başla). Başka bölüm yazma, açıklama ekleme — sadece bölümün yeni hali.`;
 
-  const result = await callClaude({ prompt, maxTokens: 2000 });
+  const result = await callClaude({ prompt, maxTokens: 2000, model: MODEL_QUALITY });
 
   const lines = fullDocument.split("\n");
   const before = lines.slice(0, target.startLine);
