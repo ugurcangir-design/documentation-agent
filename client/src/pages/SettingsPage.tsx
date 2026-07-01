@@ -112,7 +112,10 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json", "X-DocAgent": "1" },
         body: JSON.stringify(values),
       });
-      if (!res.ok) throw new Error("Kayıt başarısız");
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error((d as { error?: string }).error || `Kayıt başarısız (HTTP ${res.status})`);
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
       setConfigured(
@@ -121,7 +124,14 @@ export default function SettingsPage() {
           .map(([k]) => k)
       );
     } catch (e) {
-      setError((e as Error).message);
+      // "Failed to fetch" = sunucuya ulaşılamıyor (uygulama arka planda/
+      // uykuda kapanmış olabilir). Ham mesaj yerine eyleme dönük açıklama.
+      const msg = (e as Error).message;
+      setError(
+        /failed to fetch|networkerror|load failed/i.test(msg)
+          ? "Sunucuya ulaşılamadı — uygulama arka planda kapanmış olabilir. Masaüstündeki DocAgent ikonuna tekrar tıklayıp bu sayfayı yenileyin (Cmd+R)."
+          : msg
+      );
     } finally {
       setSaving(false);
     }

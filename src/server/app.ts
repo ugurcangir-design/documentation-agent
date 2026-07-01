@@ -114,7 +114,12 @@ let lastHeartbeat: number | null = null;
 let leaveTimer: NodeJS.Timeout | null = null;
 
 const LEAVE_GRACE = 30_000;              // tab gone → exit unless a tab reconnects
-const HEARTBEAT_FALLBACK = 15 * 60_000;  // crash fallback (survives bg throttling)
+// Crash/uyku yedeği: sekme temiz kapanınca `pagehide` beacon → 30sn'de çıkar.
+// Bu yedek yalnız beacon HİÇ gelmezse (tarayıcı çöktü / makine uzun uyudu /
+// sekme askıya alındı) devreye girer. 15dk çok kısaydı: kullanıcı kısa süre
+// uzaklaşınca (öğle arası, kısa uyku) sunucu ölüyor, dönünce "Failed to fetch"
+// alıyordu. 60dk daha toleranslı; temiz kapanış zaten 30sn beacon ile hızlı.
+const HEARTBEAT_FALLBACK = 60 * 60_000;  // 60 dk (çökme/uyku yedeği)
 const CHECK_INTERVAL = 30_000;
 
 app.post("/api/heartbeat", (_req, res) => {
