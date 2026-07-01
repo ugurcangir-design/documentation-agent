@@ -11,6 +11,9 @@ vi.mock("../src/llm/claudeClient", () => ({
     return { text, inputTokens: 10, outputTokens: 5 };
   }),
   isPromptTooLong: () => false,
+  isUsageLimitError: () => false,
+  MODEL_QUALITY: "claude-sonnet-4-6",
+  MODEL_FAST: "claude-haiku-4-5",
 }));
 
 import { generateUserManualSection, generateUserManualComplete, SECTION_JOINER } from "../src/generator/userManualGenerator";

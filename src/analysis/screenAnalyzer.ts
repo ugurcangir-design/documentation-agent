@@ -1,7 +1,7 @@
 import { DiscoveredScreen, ScreenAnalysis } from "../types/screen";
 import { loadPromptConfig } from "../config/promptConfig";
 import { analysisCache, hashScreenshot } from "../server/store/analysisCache";
-import { callClaude } from "../llm/claudeClient";
+import { callClaude, MODEL_QUALITY } from "../llm/claudeClient";
 
 const JSON_SCHEMA_HINT = `JSON şeması:
 {
@@ -74,6 +74,7 @@ ${JSON_SCHEMA_HINT}`;
     // kesilince ya parse hatası ya da Claude'un sessizce öğe kısması olur →
     // kılavuzda eksik alan/buton. 8000 token ~100+ öğeye yer açar.
     maxTokens: cfg.maxTokens ?? 8000,
+    model: MODEL_QUALITY,
   });
 
   const jsonMatch = result.text.match(/\{[\s\S]*\}/);

@@ -14,6 +14,8 @@ vi.mock("../src/llm/claudeClient", () => ({
   isPromptTooLong: () => false,
   isUsageLimitError: (e: unknown) =>
     /weekly limit|usage limit|kullanım limiti|quota|billing/i.test((e as Error)?.message ?? ""),
+  MODEL_QUALITY: "claude-sonnet-4-6",
+  MODEL_FAST: "claude-haiku-4-5",
 }));
 
 import { generateUserManualComplete } from "../src/generator/userManualGenerator";

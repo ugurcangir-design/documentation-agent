@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { isPromptTooLong, isTransientError, friendlyCliError, isUsageLimitError } from "../src/llm/claudeClient";
+import { isPromptTooLong, isTransientError, friendlyCliError, isUsageLimitError, MODEL_QUALITY, MODEL_FAST } from "../src/llm/claudeClient";
+
+describe("model sabitleri", () => {
+  // Regresyon: bu değerler yanlışlıkla değişirse tüm üretim görevleri
+  // (CLI backend'de) kullanıcının kişisel `/model` ayarına sessizce döner.
+  it("MODEL_QUALITY ve MODEL_FAST beklenen model kimlikleridir", () => {
+    expect(MODEL_QUALITY).toBe("claude-sonnet-4-6");
+    expect(MODEL_FAST).toBe("claude-haiku-4-5");
+    expect(MODEL_QUALITY).not.toBe(MODEL_FAST);
+  });
+});
 
 describe("isUsageLimitError", () => {
   it("abonelik/kullanım limiti hatalarını yakalar", () => {

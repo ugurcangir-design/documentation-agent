@@ -9,7 +9,7 @@
  */
 
 import type { UIElement } from "../types/screen";
-import { callClaude } from "../llm/claudeClient";
+import { callClaude, MODEL_QUALITY } from "../llm/claudeClient";
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
 
 export interface FixUpResult {
@@ -83,6 +83,7 @@ export async function runCoverageFixUp(input: FixUpInput): Promise<FixUpResult> 
   const result = await callClaude({
     prompt: buildPrompt(input),
     maxTokens: 6000,
+    model: MODEL_QUALITY,
   });
 
   // Strip any 'Üretim Bilgisi' footer the model might have copied —

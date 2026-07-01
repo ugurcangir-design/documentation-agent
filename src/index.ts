@@ -15,7 +15,6 @@ import { analyzeScreen } from "./analysis/screenAnalyzer";
 import { buildScreenContext } from "./analysis/screenContextBuilder";
 
 import { generateUserManualSection } from "./generator/userManualGenerator";
-import { generateTechnicalDocSection } from "./generator/technicalDocGenerator";
 
 import { publishToConfluence } from "./publisher/confluencePublisher";
 
@@ -118,16 +117,15 @@ async function main(): Promise<void> {
         console.log(`    Generating user manual section...`);
         const userManualSection = await generateUserManualSection(context);
 
-        console.log(`    Generating technical doc section...`);
-        const technicalDocSection = await generateTechnicalDocSection(context);
-
         // generate*Section GenerationResult döndürür ({ content, tokens… });
         // ScreenDocumentation yalnız markdown metin (.content) bekler.
+        // Teknik doküman özelliği kaldırıldı — boş placeholder (web app
+        // akışıyla tutarlı, bkz. src/server/jobs/screenProcessor.ts).
         screenDocs.push({
           screen,
           analysis,
           userManualSection: userManualSection.content,
-          technicalDocSection: technicalDocSection.content,
+          technicalDocSection: "",
         });
 
         console.log(`    Done.`);

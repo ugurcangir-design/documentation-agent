@@ -17,10 +17,10 @@
  */
 
 import type { UIElement } from "../types/screen";
-import { callClaude } from "../llm/claudeClient";
+import { callClaude, MODEL_FAST } from "../llm/claudeClient";
 import { computeCoverage, type CoverageReport } from "./coverageCheck";
 
-const JUDGE_MODEL = "claude-haiku-4-5";
+const JUDGE_MODEL = MODEL_FAST;
 
 interface JudgeVerdict {
   label: string;

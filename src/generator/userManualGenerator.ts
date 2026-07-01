@@ -1,7 +1,7 @@
 import { ScreenContext } from "../types/documentation";
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
 import { loadPromptConfig, buildPromptHeader, buildPromptFooter } from "../config/promptConfig";
-import { callClaude, isPromptTooLong, isUsageLimitError } from "../llm/claudeClient";
+import { callClaude, isPromptTooLong, isUsageLimitError, MODEL_QUALITY } from "../llm/claudeClient";
 import { selectRepresentativeStates } from "./selectStates";
 import { isSidebarNav } from "../quality/sidebarNav";
 import type { ScreenState } from "../types/screen";
@@ -273,6 +273,7 @@ export async function generateUserManualSection(
       ...(tabFocus ? {} : { imageBase64: ctx.screen.screenshotBase64, imagePath: ctx.screen.screenshotPath }),
       images: stateImages,
       maxTokens: cfg.maxTokens ?? 8000,
+      model: MODEL_QUALITY,
     });
     const out: GenerationResult = {
       content: cleanGeneratedMarkdown(result.text),
