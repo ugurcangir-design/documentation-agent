@@ -93,6 +93,9 @@ export async function runDocumentationJob(
   const createdDocs = documentStore.getByJobId(jobId).length;
   const allFailed = !wasCancelled && createdDocs === 0 && total > 0;
   const partial = !wasCancelled && createdDocs > 0 && createdDocs < total;
+  // screenProcessor bir limit/hata durumunda job.error'a NET mesaj yazdı;
+  // terminal mesajda onu göstererek kullanıcıyı bilgilendir.
+  const recordedError = jobStore.getById(jobId)?.error;
 
   let status: "completed" | "failed";
   let message: string;
@@ -104,11 +107,15 @@ export async function runDocumentationJob(
     message = "Kullanıcı tarafından iptal edildi"; error = "Cancelled by user";
   } else if (allFailed) {
     status = "failed"; eventType = "failed";
-    message = "Hiçbir doküman üretilemedi — üretim hatası (örn. Claude kullanım limiti, kimlik doğrulama veya analiz hatası). Sunucu loglarına / Geçmiş'e bakın.";
+    message = recordedError ??
+      "Hiçbir doküman üretilemedi — üretim hatası (örn. Claude kullanım limiti, kimlik doğrulama veya analiz hatası). Sunucu loglarına / Geçmiş'e bakın.";
     error = message;
   } else if (partial) {
     status = "completed"; eventType = "complete";
-    message = `${createdDocs}/${total} doküman üretildi (bazı ekranlar başarısız — eksikler için 'Eksikleri Üret').`;
+    message = recordedError
+      ? `${createdDocs}/${total} doküman üretildi — ${recordedError}`
+      : `${createdDocs}/${total} doküman üretildi (bazı ekranlar başarısız — eksikler için 'Eksikleri Üret').`;
+    if (recordedError) error = recordedError;
   } else {
     status = "completed"; eventType = "complete";
     message = "Tüm dökümanlar oluşturuldu";

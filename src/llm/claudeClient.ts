@@ -106,6 +106,23 @@ export function isPromptTooLong(err: unknown): boolean {
   );
 }
 
+/** Abonelik/kullanım limiti (haftalık kota, plan limiti) — geçici DEĞİL,
+ *  retry ile çözülmez; kullanıcı limit sıfırlanana kadar bekler ya da API
+ *  moduna geçer. Üretim bu durumda YARIM doküman üretmemeli, temiz durup
+ *  kullanıcıyı bilgilendirmeli. */
+export function isUsageLimitError(err: unknown): boolean {
+  const msg = (err as Error)?.message?.toLowerCase() ?? "";
+  return (
+    msg.includes("weekly limit") ||
+    msg.includes("usage limit") ||
+    msg.includes("hit your limit") ||
+    msg.includes("kullanım limiti") ||
+    msg.includes("quota") ||
+    msg.includes("insufficient_quota") ||
+    msg.includes("billing")
+  );
+}
+
 async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }

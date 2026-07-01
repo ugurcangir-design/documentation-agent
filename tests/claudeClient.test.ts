@@ -1,5 +1,24 @@
 import { describe, it, expect } from "vitest";
-import { isPromptTooLong, isTransientError, friendlyCliError } from "../src/llm/claudeClient";
+import { isPromptTooLong, isTransientError, friendlyCliError, isUsageLimitError } from "../src/llm/claudeClient";
+
+describe("isUsageLimitError", () => {
+  it("abonelik/kullanım limiti hatalarını yakalar", () => {
+    for (const m of [
+      "You've hit your weekly limit · resets 7am",
+      "usage limit reached",
+      "Claude kullanım limiti doldu",
+      "insufficient_quota",
+      "billing hard limit reached",
+    ]) {
+      expect(isUsageLimitError(new Error(m))).toBe(true);
+    }
+  });
+  it("normal hataları limit sanmaz", () => {
+    expect(isUsageLimitError(new Error("prompt is too long"))).toBe(false);
+    expect(isUsageLimitError(new Error("network error"))).toBe(false);
+    expect(isUsageLimitError(undefined)).toBe(false);
+  });
+});
 
 describe("isPromptTooLong", () => {
   it("yaygın 'prompt too long' varyasyonlarını yakalar", () => {

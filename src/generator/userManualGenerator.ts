@@ -1,7 +1,7 @@
 import { ScreenContext } from "../types/documentation";
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
 import { loadPromptConfig, buildPromptHeader, buildPromptFooter } from "../config/promptConfig";
-import { callClaude, isPromptTooLong } from "../llm/claudeClient";
+import { callClaude, isPromptTooLong, isUsageLimitError } from "../llm/claudeClient";
 import { selectRepresentativeStates } from "./selectStates";
 import { isSidebarNav } from "../quality/sidebarNav";
 import type { ScreenState } from "../types/screen";
@@ -355,8 +355,13 @@ export async function generateUserManualComplete(
   // Sekme bölümleri: sınırlı eşzamanlılık, SIRA index ile korunur.
   const tabResults: (GenerationResult | null)[] = new Array(tabs.length).fill(null);
   let cursor = 0;
+  // Abonelik/kullanım limiti hatası → YARIM doküman üretme; tüm üretimi
+  // durdur ve fırlat (screenProcessor ekranı 'failed' yapar → kullanıcı
+  // bilir + limit sıfırlanınca 'Eksikleri Üret' ile tam üretir).
+  let limitError: Error | null = null;
   const runner = async () => {
     while (cursor < tabs.length) {
+      if (limitError) return; // başka runner limit yakaladı → dur
       const i = cursor++;
       const tab = tabs[i] as (typeof tabs)[number];
       try {
@@ -366,6 +371,12 @@ export async function generateUserManualComplete(
         });
         console.log(`[userManual]   ✓ '${tab.label}' sekmesi üretildi (${tab.states.length} görsel)`);
       } catch (e) {
+        if (isUsageLimitError(e)) {
+          limitError = e as Error;
+          cursor = tabs.length; // kalan sekmeleri deneme (hepsi limit'e takılır)
+          console.warn(`[userManual]   ⛔ Kullanım limiti — üretim durduruldu: ${(e as Error).message}`);
+          return;
+        }
         console.warn(`[userManual]   ✗ '${tab.label}' sekmesi üretilemedi: ${(e as Error).message}`);
         tabResults[i] = null;
       }
@@ -377,6 +388,9 @@ export async function generateUserManualComplete(
   // Genel bakış kritik — başarısızsa ekran hatası (sekme hatası tolere edilir).
   const overview = await overviewP;
   if (!overview.ok) throw overview.e;
+
+  // Limit hatası oluştuysa YARIM doküman ÜRETME — temiz fırlat.
+  if (limitError) throw limitError;
 
   // SIRALI birleştirme: genel bakış → tab0 → tab1 … (paralellik sırayı bozmaz).
   // Genel bakış + sekmeler AYRIK tutulur: coverage/fix-up yalnız genel bakışta
