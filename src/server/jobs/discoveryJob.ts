@@ -101,6 +101,12 @@ export async function runDiscoveryJob(
             );
           } catch (err) {
             console.warn("exploreInteractiveStates manual URL error:", (err as Error).message);
+            // Sessizce geçme — ekran SIFIR state ile kaydedilecek. Uyarı
+            // olmazsa kullanıcı sekmelerin neden hiç keşfedilmediğini anlayamaz.
+            emitJobEvent(jobId, {
+              type: "error",
+              message: `⚠️ "${title}" ekranında test-user simülasyonu başarısız oldu — sekmeler/etkileşimler eksik kalmış olabilir: ${(err as Error).message}`,
+            });
           }
 
           discoveredScreens.push({

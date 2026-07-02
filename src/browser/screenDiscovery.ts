@@ -131,6 +131,12 @@ async function discoverAtDepth(
         }
       } catch (err) {
         console.warn(`    Interactive exploration error: ${(err as Error).message}`);
+        // Sessizce geçme — bu ekran SIFIR state ile kaydedilecek (hiç sekme/
+        // etkileşim keşfedilmemiş görünecek). Kullanıcı bunu görmezse üretilen
+        // kılavuz neden eksik olduğunu asla anlayamaz.
+        options.onProgress?.(
+          `⚠️ "${title}" ekranında test-user simülasyonu başarısız oldu — sekmeler/etkileşimler eksik kalmış olabilir: ${(err as Error).message}`
+        );
       }
     }
 

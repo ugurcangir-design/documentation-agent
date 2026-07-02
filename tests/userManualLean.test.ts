@@ -2,11 +2,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // callClaude'u mock'la — gönderilen prompt + görselleri yakala.
 const calls: Array<{ prompt: string; cachedPrefix?: string; imageBase64?: string; images?: unknown[] }> = [];
+// Sekme adı → kalan başarısızlık sayısı (retry testleri bunu doldurur).
+const failPlan: Record<string, number> = {};
 vi.mock("../src/llm/claudeClient", () => ({
   callClaude: vi.fn(async (opts: { prompt: string; cachedPrefix?: string; imageBase64?: string; images?: unknown[] }) => {
     calls.push(opts);
     // Sekme adını prompt'tan türet → ordering testi içerikten doğrulayabilsin.
     const m = /\*\*Aktif Sekme:\*\* (.+)/.exec(opts.prompt);
+    const label = m?.[1];
+    if (label && (failPlan[label] ?? 0) > 0) {
+      failPlan[label]!--;
+      throw new Error(`simulated failure for ${label}`);
+    }
     const text = m ? `## ${m[1]} Sekmesi\n\nİçerik` : `# Genel Bakış\n\nİçerik`;
     return { text, inputTokens: 10, outputTokens: 5 };
   }),
@@ -47,7 +54,7 @@ function makeCtx(): ScreenContext {
 }
 
 describe("userManual yalın sekme modu (token tasarrufu)", () => {
-  beforeEach(() => { calls.length = 0; });
+  beforeEach(() => { calls.length = 0; for (const k of Object.keys(failPlan)) delete failPlan[k]; });
 
   it("GENEL BAKIŞ: ağır bağlam (BRD/API) ve ana görsel GÖNDERİLİR", async () => {
     await generateUserManualSection(makeCtx(), ["STİL ŞABLONU ".repeat(100)]);
@@ -107,7 +114,7 @@ describe("userManual yalın sekme modu (token tasarrufu)", () => {
 });
 
 describe("paralel sekme üretimi — sıra korunur (kalite/token etkisiz)", () => {
-  beforeEach(() => { calls.length = 0; });
+  beforeEach(() => { calls.length = 0; for (const k of Object.keys(failPlan)) delete failPlan[k]; });
 
   function multiTabCtx(): ScreenContext {
     const tabState = (i: number, label: string) =>
@@ -173,10 +180,30 @@ describe("paralel sekme üretimi — sıra korunur (kalite/token etkisiz)", () =
       expect(c.prompt).not.toContain("ORTAK MEKANİKLER — BURADA BİR KEZ ANLAT");
     }
   });
+
+  it("sekme geçici hatada BİR KEZ retry edilir; 2. denemede başarılıysa failedTabs boş kalır", async () => {
+    failPlan["Player"] = 1; // ilk deneme başarısız, 2. deneme başarılı
+    const res = await generateUserManualComplete(multiTabCtx(), []);
+    expect(res.failedTabs).toBeUndefined();
+    expect(res.tabsContent).toContain("Player Sekmesi"); // sonunda üretildi
+    // Player için 2 çağrı yapıldı (1 başarısız + 1 başarılı), toplam 5 çağrı.
+    const playerCalls = calls.filter((c) => /\*\*Aktif Sekme:\*\* Player/.test(c.prompt));
+    expect(playerCalls).toHaveLength(2);
+  }, 10000);
+
+  it("sekme 2 denemede de başarısız olursa failedTabs'a girer; DİĞER sekmeler ve genel bakış etkilenmez", async () => {
+    failPlan["Player"] = 2; // ilk VE ikinci deneme de başarısız
+    const res = await generateUserManualComplete(multiTabCtx(), []);
+    expect(res.failedTabs).toEqual(["Player"]);
+    expect(res.overviewContent).toContain("Genel Bakış"); // genel bakış etkilenmedi
+    expect(res.tabsContent).toContain("Market Sekmesi");   // diğer sekmeler etkilenmedi
+    expect(res.tabsContent).toContain("Accumulator Sekmesi");
+    expect(res.tabsContent).not.toContain("Player Sekmesi"); // kayıp sekme içerikte yok
+  }, 10000);
 });
 
 describe("tek/sıfır sekme — ayrık parçalar yok (tam doc üzerinde coverage)", () => {
-  beforeEach(() => { calls.length = 0; });
+  beforeEach(() => { calls.length = 0; for (const k of Object.keys(failPlan)) delete failPlan[k]; });
 
   function singleTabCtx(): ScreenContext {
     return {
