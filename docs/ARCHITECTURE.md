@@ -334,9 +334,25 @@ DEEP_EXPLORE = true                // her sekmenin İÇİNİ ayrı derinlemesine
 Lazy getter — Ayarlar'dan değiştirilince sunucu restart gerekmez.
 
 ### promptConfig.ts
-`data/prompts/config.json` → `{ userManual: {…}, technicalDoc: {…}, …}`. Her
-prompt için: `role`, `outputStructure`, `instructions`, `rules[]`, `language`,
-`maxTokens`. Boş ise generator kendi defaults'ı kullanır.
+`data/prompts/config.json` → `{ userManual: {…}, screenAnalysis: {…} }`
+(technicalDoc kaydı özellikle birlikte kaldırıldı). Her prompt için: `role`,
+`outputStructure`, `instructions`, `rules[]`, `language`, `maxTokens`. Boş ise
+generator kendi defaults'ı kullanır. PromptsPage bu dosyayı PUT ile düzenler —
+dosya hem git'te hem canlı config'tir.
+
+**Kılavuz içerik standardı** (`tests/promptConfig.test.ts` regresyon korur):
+- outputStructure zorunlu bölümleri: Bu Ekran Ne İşe Yarar? → **Ekrana Erişim**
+  (menü yolu/URL; rol bilgisi yalnız bağlamda varsa) → Ekrana İlk Bakış →
+  Adım Adım Kullanım → Filtreler → Satır İşlemleri → Modallar →
+  **Uyarı ve Hata Mesajları** (yalnız görsel/bağlam kanıtlı mesajlar) →
+  Sık Sorular. Ekranda karşılığı olmayan bölüm TAMAMEN atlanır.
+- Veri doğruluğu kuralları: **UYDURMA YASAK** (kanıtsız davranış/alan/mesaj/
+  değer yazılmaz), UI metinleri görseldeki yazımla **BİREBİR**, dokümanın
+  tamamında **TEK terim** (terminoloji tutarlılığı).
+- Sekme bölümleri STANDART alt-başlık şeması kullanır (userManualGenerator
+  sekme talimatı): `### Sütunlar` → `### Sekmeye Özgü Filtreler` →
+  `### <İşlem Adı>` (numaralı adımlar) → `### Uyarı ve Hata Mesajları`;
+  ad türetme ('Tablo Görünümü'/'Tablo Sütunları' varyasyonları) yasak.
 
 ---
 
