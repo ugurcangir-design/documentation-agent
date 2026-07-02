@@ -558,6 +558,29 @@ madde listesi olarak verilir, 'Tablo Görünümü' gibi genel bölüm yazılmaz
 (eskiden her sekme tablo mekaniğini + sayfa-başına-kayıt'ı yeniden
 anlatıyordu). Test: `tests/userManualLean.test.ts` "ortak mekanikler".
 
+**Sekme hatası artık SESSİZCE kaybolmaz (kritik düzeltme):** eskiden bir
+sekme çağrısı kullanım-limiti DIŞI bir hatayla (örn. CLI zaman aşımı 360s —
+gerçek olayda 7 sekmeden 2'si böyle kayboldu, job yine `completed` görünüyordu)
+başarısız olursa sessizce atlanır, doküman o sekme hiç anlatılmamış halde
+"başarıyla" tamamlanırdı. Şimdi: `runner()` içinde kullanım-limiti DIŞI hatada
+2sn bekleyip **BİR KEZ retry** edilir (CLI/kaynak çakışması geçici olabilir);
+2. deneme de başarısızsa sekme adı `GenerationResult.failedTabs?: string[]`'e
+eklenir. `screenProcessor.ts` bunu görürse: (1) dokümanın EN BAŞINA `⚠️ EKSİK
+İÇERİK UYARISI` bloğu ekler (sekme adlarıyla), (2) `emitJobEvent(type:"error")`
+ile canlı progress akışına düşürür, (3) sunucu logunda özet basar. Doküman
+yine oluşturulur (kısmi kayıp izole — diğer sekmeler/genel bakış etkilenmez)
+ama artık kullanıcı eksikliği KAÇIRAMAZ. Test: `tests/userManualLean.test.ts`
+"sekme geçici hatada BİR KEZ retry edilir" / "2 denemede de başarısız".
+
+Aynı sessiz-yutma deseni **keşif aşamasında** da vardı: `screenDiscovery.ts`
+(~L124) ve `discoveryJob.ts` (~L94) `exploreInteractiveStates` hatasını yalnız
+`console.warn` ile yutuyordu — ekran SIFIR state ile (hiç sekme keşfedilmemiş)
+kaydediliyor, discovery UI'da hiçbir iz kalmıyordu (üretim tarafında hata bile
+oluşmaz — en sinsi versiyon, çünkü kılavuz sekme içermez ama neden hiç
+belli olmaz). Her iki catch bloğuna `onProgress`/`emitJobEvent` uyarısı
+eklendi: discovery durmaz (ekran yine temel görüntüyle kaydedilir) ama
+kullanıcı canlı akışta "⚠️ ... test-user simülasyonu başarısız" uyarısını görür.
+
 `userManualGenerator.ts`:
 - `buildPrompt(ctx, templates, tabFocus?, overviewTabs?)`:
   - `brdContext`  = preparedChunks her biri `### Başlık (sourceType)` + içerik
