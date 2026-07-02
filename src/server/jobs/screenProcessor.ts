@@ -210,13 +210,32 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     const usedTemplates = referenceStore.getDocuments("template").map((t) => t.originalName);
     const traceArgs = { context, usedTemplates, stateCount };
 
+    // Bir veya daha fazla sekme 2 denemeden sonra da üretilemediyse doküman
+    // EKSİK — bunu sessizce geçmek yerine (eski davranış: 'tamamlandı' görünüp
+    // sekme kılavuzdan tamamen kaybolurdu) dokümanın EN BAŞINA kaçırılamaz bir
+    // uyarı basıyoruz + canlı progress akışına bildiriyoruz.
+    const failedTabs = userManual.failedTabs ?? [];
+    if (failedTabs.length > 0) {
+      const tabList = failedTabs.join(", ");
+      console.warn(`[docjob ${jobId}] ${screenTitle}: şu sekmeler üretilemedi (2 deneme sonrası): ${tabList} — doküman EKSİK`);
+      emitJobEvent(jobId, {
+        type: "error",
+        message: `Uyarı (${screenTitle}): şu sekme(ler) üretilemedi — doküman EKSİK: ${tabList}. Discovery/Kılavuz sayfasından bu ekranı yeniden üretin.`,
+        current: getCompleted(),
+        total,
+      });
+    }
+    const missingTabsWarning = failedTabs.length > 0
+      ? `> ⚠️ **EKSİK İÇERİK UYARISI:** Şu sekme(ler) teknik bir hata nedeniyle üretilemedi ve bu dokümanda YOK: **${failedTabs.join(", ")}**. Bu dokümanı kullanmadan önce Discovery/Kılavuz sayfasından bu ekranı yeniden seçip üretin.\n\n---\n\n`
+      : "";
+
     documentStore.create({
       id: uuid(),
       jobId,
       screenPath,
       screenTitle: analysis.screenTitle || screenTitle,
       screenshotPath: storedScreen.screenshotPath,
-      userManualContent: umContent + buildTrace({
+      userManualContent: missingTabsWarning + umContent + buildTrace({
         ...traceArgs, coverage: umCoverage, fixUpAdded: umFixUpAdded, truncated: !!userManual.truncated,
       }),
       technicalDocContent: "", // teknik doküman özelliği kaldırıldı

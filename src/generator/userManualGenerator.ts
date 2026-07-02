@@ -21,10 +21,18 @@ export interface GenerationResult {
   overviewContent?: string;
   /** Çok-sekmeli üretimde birleştirilmiş sekme bölümleri (fix-up DOKUNMAZ). */
   tabsContent?: string;
+  /** 2 denemeden sonra da üretilemeyen sekmelerin etiketleri — bu doküman
+   *  bu sekmeler için EKSİK. screenProcessor bunu görünür bir uyarıya çevirir
+   *  (sessiz kayıp değil). Yalnız ≥1 kalıcı hatada dolu döner. */
+  failedTabs?: string[];
 }
 
 /** Genel bakış + sekme bölümlerini tek metinde birleştiren ayraç. */
 export const SECTION_JOINER = "\n\n---\n\n";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 /**
  * Prompt'u iki parçaya böler — `cachedPrefix` (rol + output structure +
@@ -376,6 +384,10 @@ export async function generateUserManualComplete(
 
   // Sekme bölümleri: sınırlı eşzamanlılık, SIRA index ile korunur.
   const tabResults: (GenerationResult | null)[] = new Array(tabs.length).fill(null);
+  // Kalıcı olarak (retry sonrası da) üretilemeyen sekmeler — bu doküman EKSİK
+  // kalır; screenProcessor bunu doküman içine görünür bir uyarı olarak basar
+  // (aksi halde sekme sessizce kaybolup 'başarılı' görünüyordu — gerçek olay).
+  const failedTabs: string[] = [];
   let cursor = 0;
   // Abonelik/kullanım limiti hatası → YARIM doküman üretme; tüm üretimi
   // durdur ve fırlat (screenProcessor ekranı 'failed' yapar → kullanıcı
@@ -386,11 +398,12 @@ export async function generateUserManualComplete(
       if (limitError) return; // başka runner limit yakaladı → dur
       const i = cursor++;
       const tab = tabs[i] as (typeof tabs)[number];
+      const attempt = async () => generateUserManualSection(ctx, templates, {
+        statesOverride: tab.states,
+        tabLabel: tab.label,
+      });
       try {
-        tabResults[i] = await generateUserManualSection(ctx, templates, {
-          statesOverride: tab.states,
-          tabLabel: tab.label,
-        });
+        tabResults[i] = await attempt();
         console.log(`[userManual]   ✓ '${tab.label}' sekmesi üretildi (${tab.states.length} görsel)`);
       } catch (e) {
         if (isUsageLimitError(e)) {
@@ -399,8 +412,25 @@ export async function generateUserManualComplete(
           console.warn(`[userManual]   ⛔ Kullanım limiti — üretim durduruldu: ${(e as Error).message}`);
           return;
         }
-        console.warn(`[userManual]   ✗ '${tab.label}' sekmesi üretilemedi: ${(e as Error).message}`);
-        tabResults[i] = null;
+        // Geçici hata olabilir (örn. CLI zaman aşımı — kaynak çakışması).
+        // Sessizce vazgeçmeden ÖNCE bir kez daha dene; sekmeyi kaybetmek
+        // (kılavuzda hiç anlatılmaması) sessiz-tekrar-denemekten daha kötü.
+        console.warn(`[userManual]   ✗ '${tab.label}' 1. deneme başarısız: ${(e as Error).message} — 2sn sonra tekrar denenecek`);
+        await sleep(2000);
+        try {
+          tabResults[i] = await attempt();
+          console.log(`[userManual]   ✓ '${tab.label}' sekmesi 2. denemede üretildi (${tab.states.length} görsel)`);
+        } catch (e2) {
+          if (isUsageLimitError(e2)) {
+            limitError = e2 as Error;
+            cursor = tabs.length;
+            console.warn(`[userManual]   ⛔ Kullanım limiti (2. deneme) — üretim durduruldu: ${(e2 as Error).message}`);
+            return;
+          }
+          console.error(`[userManual]   ✗ '${tab.label}' sekmesi 2 denemede de üretilemedi: ${(e2 as Error).message} — KILAVUZDA EKSİK KALACAK`);
+          tabResults[i] = null;
+          failedTabs.push(tab.label);
+        }
       }
       tick(tab.label);
     }
@@ -434,5 +464,6 @@ export async function generateUserManualComplete(
     ...(acc.truncated ? { truncated: true } : {}),
     overviewContent,
     tabsContent,
+    ...(failedTabs.length > 0 ? { failedTabs } : {}),
   };
 }
