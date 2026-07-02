@@ -194,7 +194,13 @@ function buildPrompt(
   const finalInstruction = tabFocus
     ? `Bu çıktı, '${ctx.analysis.screenTitle}' ekranının **'${tabFocus.label}' SEKMESİNE** ait bölümdür.
 - Çıktı SADECE \`## ${tabFocus.label} Sekmesi\` başlığıyla başlasın, tek bir odaklı bölüm olsun.
-- YALNIZCA bu sekmeye ÖZGÜ içeriği anlat: bu sekmenin görsellerinde görünen filtreler, satır işlemleri (önizleme/düzenle/sil), butonlar, modallar, popup/alert ve mesajlar. İçeride gerektiği kadar \`###\` alt başlık kullan.
+- YALNIZCA bu sekmeye ÖZGÜ içeriği anlat: bu sekmenin görsellerinde görünen filtreler, satır işlemleri (önizleme/düzenle/sil), butonlar, modallar, popup/alert ve mesajlar.
+- **STANDART ALT BAŞLIKLAR — bu adları ve sırayı kullan (ekranda karşılığı olmayanı tamamen atla):**
+  1. \`### Sütunlar\` — kısa madde listesi (sütun adı → içerik)
+  2. \`### Sekmeye Özgü Filtreler\` — yalnız bu sekmede olan filtreler (varsa)
+  3. \`### <İşlem Adı>\` — her işlem akışı (ekleme/düzenleme/silme/önizleme…) numaralı adımlarla AYRI alt başlık
+  4. \`### Uyarı ve Hata Mesajları\` — bu sekmeye özgü, görsellerde görülen mesajlar (varsa)
+  Başka ad türetme ('Tablo Görünümü', 'Tablo Sütunları' gibi varyasyonlar YASAK) — her sekmede aynı adlar kullanılacak.
 - **TEKRAR YASAK:** Diğer sekmelerde de bulunan ORTAK/standart bölümleri burada ÜRETME — özellikle 'Bu Ekran Ne İşe Yarar?', 'Ekrana İlk Bakış', 'Sık Sorular ve İpuçları' bölümlerini EKLEME (bunlar genel bakışta bir kez yazıldı). Genel girişi/ekran tanıtımını tekrarlama.
 - **EKRAN-GENELİ MEKANİKLER YASAK:** Sayfalama, 'sayfa başına kayıt sayısı' seçimi, tablo sıralama/arama gibi TÜM SEKMELERDE AYNI çalışan mekanikleri BURADA ANLATMA — bunlar dokümanın genel bakış bölümünde bir kez anlatıldı. Gerekirse tek cümleyle referans ver: "Sayfalama ve tablo kullanımı için Genel Bakış bölümüne bakın."
 - **Tablo sütunları:** 'Tablo Görünümü' gibi genel bir bölüm YAZMA. Bu sekmenin tablosunun sütunlarını KISA bir madde listesi olarak ver (sütun adı → içerik); yalnızca bu sekmeye özgü sütun/davranış varsa onu vurgula. Sütunların genel davranışını (sıralama vb.) yeniden anlatma.

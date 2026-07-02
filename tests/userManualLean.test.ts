@@ -80,6 +80,22 @@ describe("userManual yalın sekme modu (token tasarrufu)", () => {
     expect(c.prompt).toContain("UI ÖĞELERİ");          // UI öğeleri korunuyor (kalite)
   });
 
+  it("SEKME: standart alt-başlık şeması dayatılır (adlandırma varyasyonu yasak)", async () => {
+    await generateUserManualSection(makeCtx(), [], {
+      statesOverride: [
+        { label: 'Sekme: "Market"', triggeredBy: "tab", screenshotPath: "/s/x_tab_0.png", screenshotBase64: "TAB0" },
+      ],
+      tabLabel: "Market",
+    });
+    const c = calls[0]!;
+    expect(c.prompt).toContain("STANDART ALT BAŞLIKLAR");
+    expect(c.prompt).toContain("### Sütunlar");
+    expect(c.prompt).toContain("### Sekmeye Özgü Filtreler");
+    expect(c.prompt).toContain("### Uyarı ve Hata Mesajları");
+    expect(c.prompt).toContain("karşılığı olmayanı tamamen atla"); // koşullu — boş bölüm/uydurma yok
+    expect(c.prompt).toContain("varyasyonlar YASAK");  // 'Tablo Görünümü' vb. türetme yasağı
+  });
+
   it("yalın sekme prompt'u genel bakıştan belirgin ölçüde KISA olmalı", async () => {
     await generateUserManualSection(makeCtx(), ["STİL ŞABLONU ".repeat(100)]);
     const overviewLen = (calls[0]!.cachedPrefix || "").length + calls[0]!.prompt.length;

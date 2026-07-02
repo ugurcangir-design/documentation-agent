@@ -16,7 +16,6 @@ type AllPrompts = Record<string, PromptConfig>;
 
 const PROMPT_DESCRIPTIONS: Record<string, string> = {
   userManual: "Son kullanıcıya yönelik kılavuz bölümü. Teknik olmayan, sade dil.",
-  technicalDoc: "Geliştirici ve analistlere yönelik teknik döküman bölümü.",
   screenAnalysis: "Ekran görüntüsünü analiz ederek JSON çıktısı üretir. Doğrudan değiştirme.",
 };
 
