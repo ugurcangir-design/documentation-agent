@@ -100,7 +100,8 @@ export function buildScreenshotEmbedBlock(
 function buildPrompt(
   ctx: ScreenContext,
   templates: string[],
-  tabFocus?: { label: string }
+  tabFocus?: { label: string },
+  overviewTabs?: string[]
 ): { cachedPrefix: string; prompt: string } {
   const cfg = loadPromptConfig("userManual");
 
@@ -193,11 +194,18 @@ function buildPrompt(
   const finalInstruction = tabFocus
     ? `Bu çıktı, '${ctx.analysis.screenTitle}' ekranının **'${tabFocus.label}' SEKMESİNE** ait bölümdür.
 - Çıktı SADECE \`## ${tabFocus.label} Sekmesi\` başlığıyla başlasın, tek bir odaklı bölüm olsun.
-- YALNIZCA bu sekmeye ÖZGÜ içeriği anlat: bu sekmenin görsellerinde görünen tablo/sütunlar, filtreler, satır işlemleri (önizleme/düzenle/sil), butonlar, modallar, popup/alert ve mesajlar. İçeride gerektiği kadar \`###\` alt başlık kullan (örn. bu sekmenin tablosu, bu sekmenin filtreleri).
+- YALNIZCA bu sekmeye ÖZGÜ içeriği anlat: bu sekmenin görsellerinde görünen filtreler, satır işlemleri (önizleme/düzenle/sil), butonlar, modallar, popup/alert ve mesajlar. İçeride gerektiği kadar \`###\` alt başlık kullan.
 - **TEKRAR YASAK:** Diğer sekmelerde de bulunan ORTAK/standart bölümleri burada ÜRETME — özellikle 'Bu Ekran Ne İşe Yarar?', 'Ekrana İlk Bakış', 'Sık Sorular ve İpuçları' bölümlerini EKLEME (bunlar genel bakışta bir kez yazıldı). Genel girişi/ekran tanıtımını tekrarlama.
+- **EKRAN-GENELİ MEKANİKLER YASAK:** Sayfalama, 'sayfa başına kayıt sayısı' seçimi, tablo sıralama/arama gibi TÜM SEKMELERDE AYNI çalışan mekanikleri BURADA ANLATMA — bunlar dokümanın genel bakış bölümünde bir kez anlatıldı. Gerekirse tek cümleyle referans ver: "Sayfalama ve tablo kullanımı için Genel Bakış bölümüne bakın."
+- **Tablo sütunları:** 'Tablo Görünümü' gibi genel bir bölüm YAZMA. Bu sekmenin tablosunun sütunlarını KISA bir madde listesi olarak ver (sütun adı → içerik); yalnızca bu sekmeye özgü sütun/davranış varsa onu vurgula. Sütunların genel davranışını (sıralama vb.) yeniden anlatma.
 - Bu sekmenin diğer sekmelerden FARKLI olan içeriğine odaklan; her sekmede aynı olan genel bilgiyi yazma.
 - Bu sekmeye ait hiçbir işlem/alan/buton/mesaj atlanmasın; her görsel kendi açıklamasının yanında.`
-    : `Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine, SEKMEYE hakim olabilmeli. Hiçbir UI öğesi atlanmamalı. 'Sık Sorular ve İpuçları' gibi ortak bölümler burada BİR KEZ yer alsın (sekme bölümlerinde tekrarlanmayacak).`;
+    : `Bu ekran için KULLANICI KILAVUZU yaz. Kullanıcı sadece bu dökümana bakarak ekrandaki her butona, alana, filtreye, satır işlemine, SEKMEYE hakim olabilmeli. Hiçbir UI öğesi atlanmamalı. 'Sık Sorular ve İpuçları' gibi ortak bölümler burada BİR KEZ yer alsın (sekme bölümlerinde tekrarlanmayacak).${overviewTabs && overviewTabs.length > 0 ? `
+
+**ORTAK MEKANİKLER — BURADA BİR KEZ ANLAT:** Bu ekranda şu sekmeler var: ${overviewTabs.join(", ")}. Her sekme için AYRI bölümler ayrıca üretilecek; SEN yalnız genel bakışı yazıyorsun. TÜM SEKMELERDE ORTAK olan mekanikleri BURADA, net alt başlıklarla BİR KEZ anlat — sekme bölümleri bunları tekrarlamayacak, buraya referans verecek:
+- Tablo kullanımı: sıralama, arama, kayıt görünümü (ortak sütunlar varsa burada listele)
+- Sayfalama ve 'sayfa başına kayıt sayısı' seçimi (ekran geneli sabit bir kontrol — yalnız burada anlat)
+- Tüm sekmelerde aynı çalışan filtre davranışı ve satır işlemleri (önizleme/düzenle/sil)` : ""}`;
 
   // Sekme bölümlerinde ağır iş-bağlamı yok; yalnız hedefli paragraf
   // eşleşmeleri (küçük, doğruluğu artıran) korunur.
@@ -239,6 +247,11 @@ export interface ManualFocus {
   statesOverride?: ScreenState[];
   /** Sekme bölümü üretiliyorsa sekmenin adı (çıktı '## <ad> Sekmesi'). */
   tabLabel?: string;
+  /** ÇOK-SEKMELİ ekranın GENEL BAKIŞ çağrısında sekme adları — prompt'a
+   *  "ortak mekanikleri (sayfalama, sayfa-başına-kayıt, tablo kullanımı)
+   *  burada BİR KEZ anlat" talimatı ekler; sekme bölümleri bunları
+   *  tekrarlamak yerine buraya referans verir. */
+  overviewTabs?: string[];
 }
 
 export async function generateUserManualSection(
@@ -264,7 +277,7 @@ export async function generateUserManualSection(
       path: s.screenshotPath,
       label: s.label,
     }));
-    const { cachedPrefix, prompt } = buildPrompt(trimmedCtx, useTemplates, tabFocus);
+    const { cachedPrefix, prompt } = buildPrompt(trimmedCtx, useTemplates, tabFocus, focus?.overviewTabs);
     const result = await callClaude({
       prompt,
       cachedPrefix,
@@ -348,8 +361,10 @@ export async function generateUserManualComplete(
   console.log(`[userManual] ${tabs.length} sekme → ${total} bölüm, ${concurrency}'lü paralel üretim`);
 
   // Genel bakış (sekme-dışı state'ler) tab'larla EŞZAMANLI başlatılır.
+  // overviewTabs: genel bakış "ortak mekanikleri bir kez anlat" görevini alır
+  // (sekme bölümleri sayfalama/tablo mekaniği yazmak yerine buraya referans verir).
   const overviewCtx: ScreenContext = { ...ctx, screen: { ...ctx.screen, states: baseStates } };
-  const overviewP = generateUserManualSection(overviewCtx, templates)
+  const overviewP = generateUserManualSection(overviewCtx, templates, { overviewTabs: tabs.map((t) => t.label) })
     .then((r) => { tick("genel bakış"); return { ok: true as const, r }; })
     .catch((e: Error) => ({ ok: false as const, e }));
 

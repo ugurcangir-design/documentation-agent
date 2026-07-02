@@ -137,6 +137,26 @@ describe("paralel sekme üretimi — sıra korunur (kalite/token etkisiz)", () =
     // Birleşik içerik tam olarak genel bakış + ayraç + sekmeler olmalı.
     expect(res.content).toBe(res.overviewContent! + SECTION_JOINER + res.tabsContent!);
   });
+
+  it("ortak mekanikler: genel bakış 'BİR KEZ anlat' görevini + sekme adlarını alır; sekmeler ekran-geneli mekanik yasağını alır", async () => {
+    await generateUserManualComplete(multiTabCtx(), []);
+    const overviewCall = calls.find((c) => !/\*\*Aktif Sekme:\*\*/.test(c.prompt))!;
+    const tabCalls = calls.filter((c) => /\*\*Aktif Sekme:\*\*/.test(c.prompt));
+    // Genel bakış: ortak mekanikleri (sayfalama, sayfa-başına-kayıt, tablo)
+    // BİR KEZ anlatma talimatı + sekme adları listelenir.
+    expect(overviewCall.prompt).toContain("ORTAK MEKANİKLER");
+    expect(overviewCall.prompt).toContain("sayfa başına kayıt sayısı");
+    expect(overviewCall.prompt).toContain("Market, Player, Accumulator");
+    // Sekmeler: sayfalama/sayfa-başına-kayıt/tablo-mekaniği YAZMA yasağı +
+    // genel bakışa referans talimatı.
+    expect(tabCalls).toHaveLength(3);
+    for (const c of tabCalls) {
+      expect(c.prompt).toContain("EKRAN-GENELİ MEKANİKLER YASAK");
+      expect(c.prompt).toContain("sayfa başına kayıt sayısı");
+      expect(c.prompt).toContain("Genel Bakış bölümüne bakın");
+      expect(c.prompt).not.toContain("ORTAK MEKANİKLER — BURADA BİR KEZ ANLAT");
+    }
+  });
 });
 
 describe("tek/sıfır sekme — ayrık parçalar yok (tam doc üzerinde coverage)", () => {
