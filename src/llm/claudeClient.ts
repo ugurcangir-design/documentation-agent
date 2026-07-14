@@ -83,6 +83,15 @@ export interface ClaudeCallOptions {
    *  `CLAUDE_CLI_TIMEOUT_MS` (varsayılan 360s) kullanılır — MCP tarayıcı
    *  gezintisi daha uzun sürebileceği için liveAppMcp.ts bunu geçer. */
   timeoutMs?: number;
+  /** Spawn edilen `claude` sürecinin PATH'ine PREPEND edilecek ek dizinler.
+   *  MCP kullanılırken kritik: `claude`, `npx @playwright/mcp`'yi spawn eder,
+   *  npx'in de `node`'u bulması gerekir; paketlenmiş .app'te PATH minimal
+   *  olduğundan node/npx dizini burada eklenmezse MCP sessizce çalışmaz. */
+  extraPathDirs?: string[];
+  /** Prompt'u argv (`--print <prompt>`) yerine STDIN üzerinden geçir. MCP
+   *  çağrısında ZORUNLU: prompt `APP_PASSWORD` içerir; argv `ps` çıktısında
+   *  diğer yerel süreçlere görünür, stdin görünmez. */
+  promptViaStdin?: boolean;
 }
 
 export interface ClaudeResult {
@@ -335,10 +344,19 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
       `Aşağıdaki görüntüleri sırayla Read tool ile oku ve hepsini birlikte analiz et:\n${list}\n\n${prompt}`;
   }
 
+  const claudeBin = resolveClaudeBin(env.claudeCliBin);
+  if (claudeBin !== env.claudeCliBin) {
+    console.log(`[claude] CLI resolved: ${env.claudeCliBin} → ${claudeBin}`);
+  }
+
   return new Promise<ClaudeResult>((resolve, reject) => {
-    // Pass the prompt as the value of --print (positional doesn't work
-    // when stdin is closed; CLI requires the prompt as an argument).
-    const args = ["--print", prompt, "--output-format", "json"];
+    // Prompt transport: normalde `--print <prompt>` argv (mevcut davranış).
+    // promptViaStdin=true ise prompt STDIN'e yazılır (MCP çağrısı şifre içerir;
+    // argv `ps` çıktısında görünür, stdin görünmez).
+    const useStdin = !!opts.promptViaStdin;
+    const args = useStdin
+      ? ["--print", "--output-format", "json"]
+      : ["--print", prompt, "--output-format", "json"];
     if (imagePaths.length > 0) args.push("--allowed-tools", "Read");
     if (opts.model) args.push("--model", opts.model);
     // MCP (örn. canlı uygulama tarayıcı gözlemi) — --allowedTools verilmezse
@@ -349,10 +367,6 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
       args.push("--allowedTools", ...opts.allowedTools);
     }
 
-    const claudeBin = resolveClaudeBin(env.claudeCliBin);
-    if (claudeBin !== env.claudeCliBin) {
-      console.log(`[claude] CLI resolved: ${env.claudeCliBin} → ${claudeBin}`);
-    }
     // CLI backend yerel Claude Code OTURUMUNU kullanır. Ortamda (özellikle
     // .env'den process.env'e yüklenmiş) bir ANTHROPIC_API_KEY varsa, claude
     // CLI oturum yerine o anahtarı kullanır — anahtar eski/geçersizse 401.
@@ -360,12 +374,34 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     // (API anahtarı kullanmak isteyen CLAUDE_BACKEND=api seçmelidir).
     const cliEnv: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: "0" };
     delete cliEnv.ANTHROPIC_API_KEY;
-    const proc = spawn(claudeBin, args, {
-      env: cliEnv,
-      // Explicitly: no stdin, pipe stdout/stderr. Otherwise the CLI waits
-      // 3s for stdin data and exits with a non-zero warning.
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    // PATH güçlendirme: MCP kullanılırken `claude`, `npx @playwright/mcp`'yi
+    // spawn eder; npx'in `node`'u bulması gerekir. Paketlenmiş .app'te PATH
+    // minimal olduğundan node/npx dizinini + yaygın bin dizinlerini ekliyoruz.
+    // Ek dizinler (extraPathDirs, örn. nvm npx dizini) ve claude bin dizini
+    // PREPEND edilir; yaygın dizinler mevcut PATH'in SONUNA (fallback) eklenir
+    // → mevcut çözüm önceliği bozulmaz, yalnız eksik olan bulunur.
+    const home = os.homedir();
+    const prepend = [...(opts.extraPathDirs ?? []), path.dirname(claudeBin)];
+    const appendFallback = [
+      path.join(home, ".local", "bin"),
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+    ];
+    const seen = new Set<string>();
+    const pathParts = [...prepend, ...(cliEnv.PATH ?? "").split(":"), ...appendFallback]
+      .filter((p) => p && !seen.has(p) && seen.add(p));
+    cliEnv.PATH = pathParts.join(":");
+
+    // useStdin: prompt stdin'e yazılır (aşağıda). Aksi halde stdin kapalı —
+    // CLI 3sn stdin bekleyip uyarı vermesin diye "ignore". Tuple tipi açık
+    // yazılır ki stdout/stderr'in "pipe" (non-null) olduğu korunsun.
+    const stdio: ["pipe" | "ignore", "pipe", "pipe"] = [useStdin ? "pipe" : "ignore", "pipe", "pipe"];
+    const proc = spawn(claudeBin, args, { env: cliEnv, stdio });
+    if (useStdin) {
+      proc.stdin?.on("error", () => { /* EPIPE — süreç erken kapandıysa yut */ });
+      proc.stdin?.write(prompt);
+      proc.stdin?.end();
+    }
 
     let out = "";
     let err = "";
@@ -386,8 +422,9 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
       ));
     }, timeoutMs);
 
-    proc.stdout.on("data", (d: Buffer) => { out += d.toString(); });
-    proc.stderr.on("data", (d: Buffer) => { err += d.toString(); });
+    // stdio[1]/[2] daima "pipe" — stdout/stderr non-null (TS union'dan dolayı assert).
+    proc.stdout!.on("data", (d: Buffer) => { out += d.toString(); });
+    proc.stderr!.on("data", (d: Buffer) => { err += d.toString(); });
 
     proc.on("error", (e) => {
       if (settled) return;
