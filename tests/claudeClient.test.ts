@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "events";
 
 // child_process.spawn'ı mock'la — gerçek `claude` süreci başlatmadan CLI
@@ -32,7 +32,29 @@ vi.mock("child_process", () => ({
   }),
 }));
 
-import { isPromptTooLong, isTransientError, friendlyCliError, isUsageLimitError, MODEL_QUALITY, MODEL_FAST, callClaude } from "../src/llm/claudeClient";
+import { isPromptTooLong, isTransientError, friendlyCliError, isUsageLimitError, MODEL_QUALITY, MODEL_FAST, callClaude, redactSecrets } from "../src/llm/claudeClient";
+
+describe("redactSecrets — debug prompt dökümünde şifre sızmaz", () => {
+  const prev = process.env.APP_PASSWORD;
+  afterEach(() => {
+    if (prev === undefined) delete process.env.APP_PASSWORD;
+    else process.env.APP_PASSWORD = prev;
+  });
+
+  it("APP_PASSWORD tanımlıysa metinden maskelenir", () => {
+    process.env.APP_PASSWORD = "S3cret-Passw0rd";
+    const out = redactSecrets('kullanıcı adı "admin", şifre "S3cret-Passw0rd".');
+    expect(out).not.toContain("S3cret-Passw0rd");
+    expect(out).toContain("***REDACTED***");
+  });
+
+  it("şifre yoksa/çok kısaysa metni bozmaz", () => {
+    delete process.env.APP_PASSWORD;
+    expect(redactSecrets("hiç şifre yok")).toBe("hiç şifre yok");
+    process.env.APP_PASSWORD = "ab"; // <4 karakter → maskeleme yok (yanlış-pozitif önleme)
+    expect(redactSecrets("ab cd ab")).toBe("ab cd ab");
+  });
+});
 
 describe("model sabitleri", () => {
   // Regresyon: bu değerler yanlışlıkla değişirse tüm üretim görevleri

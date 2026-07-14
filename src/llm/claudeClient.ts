@@ -156,6 +156,16 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** Bilinen sırları (APP_PASSWORD) metinden maskeler — yalnız debug prompt
+ *  dökümü içindir. Şifre canlı uygulama (MCP) prompt'una gömülür; düz metin
+ *  log dosyasına yazılmasın. Boş/kısa değerler maskelenmez (yanlış-pozitif
+ *  metin bozulmasını önlemek için ≥4 karakter şartı). */
+export function redactSecrets(text: string): string {
+  const pw = env.appPassword;
+  if (!pw || pw.length < 4) return text;
+  return text.split(pw).join("***REDACTED***");
+}
+
 /** CLI çıktısından (stdout JSON / stderr / exit code) kullanıcı için
  *  anlamlı bir hata mesajı türetir. Auth (401) durumunda eyleme dönük
  *  ipucu ekler. */
@@ -195,7 +205,9 @@ export async function callClaude(opts: ClaudeCallOptions): Promise<ClaudeResult>
     const dir = path.join(process.cwd(), "data", "logs");
     fs.mkdirSync(dir, { recursive: true });
     const f = path.join(dir, `prompt_${Date.now()}.txt`);
-    fs.writeFileSync(f, opts.prompt, "utf-8");
+    // GÜVENLİK: canlı uygulama (MCP) prompt'u APP_PASSWORD içerir — debug
+    // dökümüne düz metin şifre yazma. Bilinen sırları maskele.
+    fs.writeFileSync(f, redactSecrets(opts.prompt), "utf-8");
     console.log(`[claude] prompt dumped → ${f}`);
   }
 
