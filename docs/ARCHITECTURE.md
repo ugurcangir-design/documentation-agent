@@ -112,6 +112,7 @@ src/
       maintenanceRoutes.ts       cleanup-screenshots (screenshotRefs ile
                                  kullanılmayan tespiti), disk-usage
       updateRoutes.ts            git pull + log
+      liveAppRoutes.ts           GET /api/live-app/status (MCP önkontrol)
     store/
       atomicJson.ts              writeJsonAtomic + readJsonSafe
       jobStore.ts                data/db/jobs.json
@@ -392,9 +393,19 @@ Playwright-heuristic keşfin (`screenDiscovery.ts`/`interactiveExplorer.ts`)
   (navigate/snapshot/network/console/click/type/…) — `browser_evaluate`
   (keyfi JS) ve dosya yükleme YOK. `--allowedTools` verilmezse headless
   modda araçlar SESSİZCE reddedilir (kritik — verilmeden asla çağırma).
-- **Otomatik giriş:** login duvarına düşerse mevcut
+- **PATH güçlendirme (kritik):** `claude`, config'teki mutlak npx yoluyla
+  `@playwright/mcp`'yi spawn eder; npx'in de `node`'u bulması gerekir.
+  Paketlenmiş .app'te PATH minimal olduğundan `callCli` spawn env'inin
+  PATH'ine `ClaudeCallOptions.extraPathDirs` (npx dizini) + claude bin dizini
+  PREPEND, yaygın bin dizinleri (`~/.local/bin`, `/opt/homebrew/bin`,
+  `/usr/local/bin`) fallback olarak APPEND edilir. Bu olmadan MCP sessizce
+  çalışmaz.
+- **Otomatik giriş + şifre gizliliği:** login duvarına düşerse mevcut
   `APP_USERNAME`/`APP_PASSWORD` prompt'a talimat olarak verilir — manuel
-  adım yok.
+  adım yok. Prompt şifre içerdiğinden `ClaudeCallOptions.promptViaStdin=true`
+  ile argv (`--print <prompt>`) yerine STDIN üzerinden geçilir → `ps -ef`
+  çıktısında görünmez. (Normal üretim çağrıları argv'de kalır; hot-path
+  değişmez.)
 - **Profil kilidi:** `data/.live-app-profile` (kalıcı Chrome profili,
   gitignored) aynı anda yalnız BİR Playwright sürecinde açılabilir.
   `cleanupProfileLock()` her çağrıdan önce yetim `SingletonLock`'u temizler
@@ -410,9 +421,15 @@ Playwright-heuristic keşfin (`screenDiscovery.ts`/`interactiveExplorer.ts`)
   değil) `# CANLI UYGULAMA GÖZLEMİ` context bloğu olarak eklenir
   (`userManualGenerator.ts` `buildPrompt`). `userManual.rules`'da: canlı
   gözlem CRUD/network/mesaj davranışı için BRD'den ÖNCELİKLİDİR.
+- **Önkontrol/durum:** `GET /api/live-app/status` (`liveAppRoutes.ts` →
+  `liveAppStatus()`) → `{enabled, backend, npx, appUrlSet, autoLogin,
+  profileExists, ready, reason}`. Özellik çalışmazsa `reason` eyleme dönük
+  Türkçe neden verir (npx yok / backend api / URL yok…) — sessiz `null`
+  yerine görünür teşhis.
 
 Test: `tests/liveAppMcp.test.ts` (opt-in/backend kısıtı, hata-toleransı,
-cache), `tests/claudeClient.test.ts` "MCP spawn argümanları".
+cache, güvenlik seçenekleri), `tests/claudeClient.test.ts` "MCP spawn
+argümanları" (mcp argv + promptViaStdin/stdin + extraPathDirs/PATH).
 
 ### Bağlam yükleme adımları
 1. **Yerel swagger** dosyaları → `extractEndpoints`
