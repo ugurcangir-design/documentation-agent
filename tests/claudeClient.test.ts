@@ -2,14 +2,26 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EventEmitter } from "events";
 
 // child_process.spawn'ı mock'la — gerçek `claude` süreci başlatmadan CLI
-// çağrı argümanlarını (özellikle --mcp-config/--allowedTools) doğrula.
-const spawnCalls: Array<{ cmd: string; args: string[] }> = [];
+// çağrı argümanlarını (--mcp-config/--allowedTools), env.PATH ve stdin
+// transportunu doğrula.
+interface SpawnCall {
+  cmd: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+  stdio: unknown;
+  stdinWrites: string[];
+}
+const spawnCalls: SpawnCall[] = [];
 vi.mock("child_process", () => ({
-  spawn: vi.fn((cmd: string, args: string[]) => {
-    spawnCalls.push({ cmd, args });
-    const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; kill: () => void };
+  spawn: vi.fn((cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv; stdio: unknown }) => {
+    const stdinWrites: string[] = [];
+    spawnCalls.push({ cmd, args, env: opts.env, stdio: opts.stdio, stdinWrites });
+    const proc = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter; stderr: EventEmitter; stdin: { write: (s: string) => void; end: () => void; on: () => void }; kill: () => void;
+    };
     proc.stdout = new EventEmitter();
     proc.stderr = new EventEmitter();
+    proc.stdin = { write: (s: string) => { stdinWrites.push(s); }, end: () => {}, on: () => {} };
     proc.kill = () => {};
     // Bir sonraki tick'te başarılı JSON yanıtla çık — gerçek CLI I/O'sunu simüle eder.
     setImmediate(() => {
@@ -153,5 +165,27 @@ describe("callClaude (CLI backend) — MCP spawn argümanları", () => {
     const args = spawnCalls[0]!.args;
     expect(args).not.toContain("--mcp-config");
     expect(args).not.toContain("--allowedTools");
+  });
+
+  it("promptViaStdin=true iken prompt argv'de DEĞİL, stdin'e yazılır (şifre ps'te görünmez)", async () => {
+    await callClaude({ prompt: "GIZLI-SIFRE-123", promptViaStdin: true });
+    const call = spawnCalls[0]!;
+    expect(call.args).not.toContain("GIZLI-SIFRE-123"); // argv'de yok → ps'te görünmez
+    expect(call.args).toContain("--print");
+    expect(call.stdinWrites.join("")).toContain("GIZLI-SIFRE-123"); // stdin'e yazıldı
+  });
+
+  it("varsayılan (promptViaStdin yok) prompt argv'de kalır — mevcut davranış korunur", async () => {
+    await callClaude({ prompt: "normal-prompt" });
+    expect(spawnCalls[0]!.args).toContain("normal-prompt");
+    expect(spawnCalls[0]!.stdinWrites).toHaveLength(0);
+  });
+
+  it("extraPathDirs spawn env.PATH'ine PREPEND edilir (npx→node çözümü)", async () => {
+    await callClaude({ prompt: "test", extraPathDirs: ["/custom/nvm/bin"] });
+    const pathVal = spawnCalls[0]!.env.PATH ?? "";
+    expect(pathVal.split(":")[0]).toBe("/custom/nvm/bin"); // en başta
+    // Yaygın fallback dizinleri PATH'in sonunda bulunur.
+    expect(pathVal).toContain("/opt/homebrew/bin");
   });
 });

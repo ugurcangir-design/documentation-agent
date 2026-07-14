@@ -5,12 +5,13 @@ import path from "path";
 // callClaude'u mock'la — gerçek `claude`/npx/Chrome hiç tetiklenmeden
 // fetchLiveAppEvidence'ın karar mantığını (opt-in kapalı, backend kısıtı,
 // hata → non-fatal null, cache) doğrula.
-const callClaudeCalls: Array<{ prompt: string }> = [];
-let callClaudeImpl: (opts: { prompt: string }) => Promise<{ text: string; inputTokens: number; outputTokens: number }> =
+interface CallOpts { prompt: string; promptViaStdin?: boolean; extraPathDirs?: string[]; mcpConfigPath?: string; allowedTools?: string[] }
+const callClaudeCalls: CallOpts[] = [];
+let callClaudeImpl: (opts: CallOpts) => Promise<{ text: string; inputTokens: number; outputTokens: number }> =
   async (opts) => { callClaudeCalls.push(opts); return { text: "## Kanıt\n\nGözlem", inputTokens: 1, outputTokens: 1 }; };
 
 vi.mock("../src/llm/claudeClient", () => ({
-  callClaude: vi.fn((opts: { prompt: string }) => callClaudeImpl(opts)),
+  callClaude: vi.fn((opts: CallOpts) => callClaudeImpl(opts)),
   MODEL_QUALITY: "claude-sonnet-4-6",
   MODEL_FAST: "claude-haiku-4-5",
 }));
@@ -101,5 +102,15 @@ describe("fetchLiveAppEvidence — hata toleransı ve cache", () => {
     const second = await fetchLiveAppEvidence(makeScreen(testPath));
     expect(second).toBe(first);
     expect(callClaudeCalls).toHaveLength(1); // ikinci çağrı cache'ten okundu
+  });
+
+  it("güvenlik: çağrı promptViaStdin=true (şifre ps'te görünmez) + extraPathDirs (npx→node) ile yapılır", async () => {
+    await fetchLiveAppEvidence(makeScreen(testPath));
+    const call = callClaudeCalls[0]!;
+    expect(call.promptViaStdin).toBe(true);
+    expect(Array.isArray(call.extraPathDirs)).toBe(true);
+    expect(call.extraPathDirs!.length).toBeGreaterThan(0);
+    expect(call.allowedTools && call.allowedTools.length).toBeGreaterThan(0);
+    expect(call.mcpConfigPath).toBeTruthy();
   });
 });
