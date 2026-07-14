@@ -116,6 +116,7 @@ const ALLOWED_SETTINGS_KEYS = new Set<string>([
   "FIX_UP_THRESHOLD", "FIX_UP_MAX_PASSES", "COVERAGE_LLM_JUDGE",
   "FILL_TEST_DATA", "ALLOW_FORM_SUBMIT", "DEEP_EXPLORE",
   "TAB_GEN_CONCURRENCY", "CLAUDE_CLI_TIMEOUT_MS",
+  "LIVE_APP_MCP_ENABLED", "LIVE_APP_MCP_TIMEOUT_MS",
 ]);
 
 /** Newline injection guard — env value içinde \n veya \r olamaz; aksi

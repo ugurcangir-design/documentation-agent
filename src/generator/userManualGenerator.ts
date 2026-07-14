@@ -109,7 +109,8 @@ function buildPrompt(
   ctx: ScreenContext,
   templates: string[],
   tabFocus?: { label: string },
-  overviewTabs?: string[]
+  overviewTabs?: string[],
+  liveAppEvidence?: string
 ): { cachedPrefix: string; prompt: string } {
   const cfg = loadPromptConfig("userManual");
 
@@ -221,11 +222,18 @@ function buildPrompt(
 - Sayfalama ve 'sayfa başına kayıt sayısı' seçimi (ekran geneli sabit bir kontrol — yalnız burada anlat)
 - Tüm sekmelerde aynı çalışan filtre davranışı ve satır işlemleri (önizleme/düzenle/sil)` : ""}`;
 
+  // Canlı uygulama kanıtı (opsiyonel, LIVE_APP_MCP_ENABLED) — Claude'un gerçek
+  // ekranı MCP ile gezip gözlemlediği network/CRUD/mesaj kanıtı. Yalnız genel
+  // bakışa girer (ağır bağlamla aynı ilke — sekmeler yalın kalır).
+  const liveAppBlock = !lean && liveAppEvidence
+    ? `\n\n# CANLI UYGULAMA GÖZLEMİ (MCP — gerçek ekran/network, EN GÜVENİLİR KAYNAK)\n\n${liveAppEvidence}`
+    : "";
+
   // Sekme bölümlerinde ağır iş-bağlamı yok; yalnız hedefli paragraf
   // eşleşmeleri (küçük, doğruluğu artıran) korunur.
   const contextBlock = lean
     ? (paragraphContext ? `\n\n# İLGİLİ NOTLAR\n${paragraphContext}` : "")
-    : `\n\n# BRD / CONFLUENCE BAĞLAMI\n\n${brdContext || "_(yok)_"}${paragraphContext}\n\n# API ENDPOINT'LERİ\n\n${apiContext || "_(yok)_"}`;
+    : `\n\n# BRD / CONFLUENCE BAĞLAMI\n\n${brdContext || "_(yok)_"}${paragraphContext}\n\n# API ENDPOINT'LERİ\n\n${apiContext || "_(yok)_"}${liveAppBlock}`;
 
   const prompt = `**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}${tabFocus ? `\n**Aktif Sekme:** ${tabFocus.label}` : ""}
 **Amaç:** ${ctx.analysis.purpose}
@@ -266,6 +274,9 @@ export interface ManualFocus {
    *  burada BİR KEZ anlat" talimatı ekler; sekme bölümleri bunları
    *  tekrarlamak yerine buraya referans verir. */
   overviewTabs?: string[];
+  /** Canlı uygulama kanıtı (MCP) — yalnız genel bakış çağrısında kullanılır,
+   *  sekme çağrıları yalın kalır (bkz. liveAppMcp.ts). */
+  liveAppEvidence?: string;
 }
 
 export async function generateUserManualSection(
@@ -291,7 +302,7 @@ export async function generateUserManualSection(
       path: s.screenshotPath,
       label: s.label,
     }));
-    const { cachedPrefix, prompt } = buildPrompt(trimmedCtx, useTemplates, tabFocus, focus?.overviewTabs);
+    const { cachedPrefix, prompt } = buildPrompt(trimmedCtx, useTemplates, tabFocus, focus?.overviewTabs, focus?.liveAppEvidence);
     const result = await callClaude({
       prompt,
       cachedPrefix,
@@ -354,13 +365,14 @@ function mergeResults(a: GenerationResult, b: GenerationResult, joiner = "\n\n")
 export async function generateUserManualComplete(
   ctx: ScreenContext,
   templates: string[] = [],
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string) => void,
+  liveAppEvidence?: string
 ): Promise<GenerationResult> {
   const { baseStates, tabs } = groupStatesByTab(ctx.screen.states ?? []);
 
   // Tek sekme ya da hiç sekme yok → mevcut tek-çağrı akışı (tüm state'ler).
   if (tabs.length < 2) {
-    return generateUserManualSection(ctx, templates);
+    return generateUserManualSection(ctx, templates, { ...(liveAppEvidence ? { liveAppEvidence } : {}) });
   }
 
   // Eşzamanlılık: bölümler PARALEL üretilir (süre kısalır). Token/kalite
@@ -378,7 +390,7 @@ export async function generateUserManualComplete(
   // overviewTabs: genel bakış "ortak mekanikleri bir kez anlat" görevini alır
   // (sekme bölümleri sayfalama/tablo mekaniği yazmak yerine buraya referans verir).
   const overviewCtx: ScreenContext = { ...ctx, screen: { ...ctx.screen, states: baseStates } };
-  const overviewP = generateUserManualSection(overviewCtx, templates, { overviewTabs: tabs.map((t) => t.label) })
+  const overviewP = generateUserManualSection(overviewCtx, templates, { overviewTabs: tabs.map((t) => t.label), ...(liveAppEvidence ? { liveAppEvidence } : {}) })
     .then((r) => { tick("genel bakış"); return { ok: true as const, r }; })
     .catch((e: Error) => ({ ok: false as const, e }));
 

@@ -24,6 +24,7 @@ import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
 import { buildTrace } from "./traceBuilder";
 import { env } from "../../config/env";
+import { fetchLiveAppEvidence } from "../../browser/liveAppMcp";
 
 import type { Endpoint } from "../../types/endpoint";
 import type { DocumentSection } from "../../types/documentSource";
@@ -84,12 +85,24 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     const analysis = await analyzeScreen(screen);
     const context = buildScreenContext(screen, analysis, allSections, allEndpoints);
 
+    // Canlı uygulama kanıtı (opsiyonel, LIVE_APP_MCP_ENABLED) — Claude'un
+    // gerçek ekranı MCP ile gezip topladığı network/CRUD/mesaj gözlemi.
+    // Kapalıyken/hatada null döner, pipeline etkilenmez (bkz. liveAppMcp.ts).
+    if (env.liveAppMcpEnabled) setProgress(`${screenTitle} — canlı uygulama gözlemi (MCP) çalışıyor…`);
+    const liveAppEvidence = env.liveAppMcpEnabled
+      ? await fetchLiveAppEvidence(screen).catch((e) => {
+          console.warn(`[docjob ${jobId}] live-app-mcp beklenmeyen hata (${screenTitle}): ${(e as Error).message}`);
+          return null;
+        })
+      : null;
+    if (liveAppEvidence) setProgress(`${screenTitle} — canlı uygulama kanıtı toplandı`);
+
     setProgress(`Kullanıcı kılavuzu yazılıyor: ${screenTitle}`);
 
     // Yalnız KULLANICI KILAVUZU üretilir — teknik doküman özelliği kaldırıldı.
     // Çok sekmeli ekranlarda sekme-başına ilerleme mesajı yayınla (UI donmasın).
     const userManual = await generateUserManualComplete(context, templateContents,
-      (msg) => setProgress(`${screenTitle} — ${msg}`));
+      (msg) => setProgress(`${screenTitle} — ${msg}`), liveAppEvidence ?? undefined);
 
     // Coverage scope = analyzer'ın çıkardığı UI öğeleri, sidebar nav hariç.
     const inScopeForCoverage = analysis.uiElements.filter((el) => !isSidebarNav(el));

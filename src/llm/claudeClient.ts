@@ -72,6 +72,17 @@ export interface ClaudeCallOptions {
    *  `claude-sonnet-4-6` (üretim). Ucuz yargı çağrıları için
    *  `claude-haiku-4-5` kullanın. */
   model?: string;
+  /** MCP config dosya yolu — CLI'a `--mcp-config <path> --strict-mcp-config`
+   *  geçilir. Yalnız CLI backend'de desteklenir (bkz. liveAppMcp.ts);
+   *  `callApi` bu alanı yok sayar (SDK tool-use agent döngüsü kapsam dışı). */
+  mcpConfigPath?: string;
+  /** MCP ile birlikte verilmesi ZORUNLU — yoksa headless CLI modda araçlar
+   *  sessizce reddedilir. `--allowedTools <virgüllü liste>` olarak geçilir. */
+  allowedTools?: string[];
+  /** Bu çağrı için CLI zaman aşımını override eder (ms). Verilmezse
+   *  `CLAUDE_CLI_TIMEOUT_MS` (varsayılan 360s) kullanılır — MCP tarayıcı
+   *  gezintisi daha uzun sürebileceği için liveAppMcp.ts bunu geçer. */
+  timeoutMs?: number;
 }
 
 export interface ClaudeResult {
@@ -330,6 +341,13 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     const args = ["--print", prompt, "--output-format", "json"];
     if (imagePaths.length > 0) args.push("--allowed-tools", "Read");
     if (opts.model) args.push("--model", opts.model);
+    // MCP (örn. canlı uygulama tarayıcı gözlemi) — --allowedTools verilmezse
+    // headless modda araçlar SESSİZCE reddedilir (izin sorulamaz). Tool adları
+    // AYRI argümanlar olarak geçilir (virgüllü liste DEĞİL) — kanıtlanmış format.
+    if (opts.mcpConfigPath && opts.allowedTools && opts.allowedTools.length > 0) {
+      args.push("--mcp-config", opts.mcpConfigPath, "--strict-mcp-config");
+      args.push("--allowedTools", ...opts.allowedTools);
+    }
 
     const claudeBin = resolveClaudeBin(env.claudeCliBin);
     if (claudeBin !== env.claudeCliBin) {
@@ -355,7 +373,7 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     // ZAMAN AŞIMI: CLI çağrısı (özellikle büyük prompt + çok görsel) takılırsa
     // exit olayı hiç gelmez → promise sonsuza dek askıda kalır, job %0'da donar.
     // Süre dolunca süreci öldür ve reject et. CLAUDE_CLI_TIMEOUT_MS ile ayar.
-    const timeoutMs = Number(process.env.CLAUDE_CLI_TIMEOUT_MS) || 360_000; // 6 dk
+    const timeoutMs = opts.timeoutMs || Number(process.env.CLAUDE_CLI_TIMEOUT_MS) || 360_000; // 6 dk
     let settled = false;
     const timer = setTimeout(() => {
       if (settled) return;

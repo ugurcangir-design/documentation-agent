@@ -36,6 +36,7 @@ for (const dir of [
   "data/references/confluence",
   "data/references/documents",
   "data/references/templates",
+  "data/references/live-app",
   "data/db",
   "data/logs",
   "data/screenshots",

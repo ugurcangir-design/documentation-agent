@@ -82,4 +82,19 @@ export const env = {
   get deepExplore(): boolean {
     return (process.env.DEEP_EXPLORE || "true").toLowerCase() !== "false";
   },
+
+  // Canlı uygulama kanıtı: ekran başına Claude'a gerçek tarayıcıyı MCP
+  // (@playwright/mcp) üzerinden sürdürüp DOM + network (CRUD) gözlemi
+  // topluyor, userManual üretimine ek kanıt olarak besliyor. Yalnız CLI
+  // backend'de çalışır (bkz. claudeClient.ts). Claude'un kendisinin
+  // tıklaması gerektiğinden ekran başına onlarca ek tool-call turu —
+  // varsayılan KAPALI, isteyen LIVE_APP_MCP_ENABLED=true ile açar.
+  get liveAppMcpEnabled(): boolean {
+    return (process.env.LIVE_APP_MCP_ENABLED || "false").toLowerCase() === "true";
+  },
+  // Gezinme sabit analiz çağrısından (360s) daha uzun sürebilir — varsayılan 8dk.
+  get liveAppMcpTimeoutMs(): number {
+    const n = parseInt(process.env.LIVE_APP_MCP_TIMEOUT_MS || "480000", 10);
+    return Number.isFinite(n) && n > 0 ? n : 480000;
+  },
 };
