@@ -154,6 +154,7 @@
       <a href="#i-derin" class="h2">6.3 Derin Analiz</a>
       <a href="#i-gecmis" class="h2">6.4 Geçmiş</a>
       <a href="#i-update" class="h2">6.5 Güncelleme</a>
+      <a href="#i-liveapp" class="h2">6.6 Canlı Uygulama Kanıtı (MCP)</a>
       <a href="#yasam" class="h1">7. Yaşam döngüsü</a>
       <a href="#sorun" class="h1">8. Sorun Giderme</a>
       <a href="#sss" class="h1">9. SSS</a>
@@ -306,6 +307,10 @@ COVERAGE_LLM_JUDGE=true     # 'false' → saf substring match
 # APP_BASE_URL=https://...
 # APP_USERNAME=...
 # APP_PASSWORD=...
+
+# Canlı Uygulama Kanıtı (MCP) — opt-in; bkz. Bölüm 6.6
+# LIVE_APP_MCP_ENABLED=false      # 'true' → gerçek ekran/network gözlemi
+# LIVE_APP_MCP_TIMEOUT_MS=480000  # tarayıcı gezinme zaman aşımı (8 dk)
 
 # API modu kullanılacaksa:
 # ANTHROPIC_API_KEY=sk-ant-api03-...
@@ -989,7 +994,7 @@ screenshots/*.png</pre>
 git pull
 npm install                  # gerekirse
 (cd client &amp;&amp; npm install)
-npm test                     # 32/32 yeşil olmalı</code></pre>
+npm test                     # tüm testler yeşil olmalı</code></pre>
       </li>
     </ul>
     <div class="box warn">
@@ -1007,6 +1012,68 @@ npm test                     # 32/32 yeşil olmalı</code></pre>
       Sunucu kodu değişimi için uygulamayı tamamen kapatıp yeniden açın
       (sekmeyi yenilemek yetmez — sunucu süreci hâlâ eski kodla çalışır).
       <code>scripts/update.sh</code> bunu zaten otomatik yapar.
+    </div>
+
+    <h3 id="i-liveapp">6.6 Canlı Uygulama Kanıtı (MCP)</h3>
+    <p>Normalde DocAgent ekranları Playwright ile gezip <strong>ekran
+      görüntüsü</strong> yakalar ve kılavuzu bu görsellerden + referanslardan
+      üretir. <strong>Canlı Uygulama Kanıtı</strong> özelliği bunu değiştirmez;
+      üstüne <em>ek</em> bir katman ekler: her ekran için Claude, bir Playwright
+      MCP sunucusu üzerinden <strong>gerçek bir tarayıcıyı kendisi sürer</strong>,
+      sekmeleri ve CRUD akışlarını (ekle/düzenle/sil/görüntüle) gerçekten dener,
+      tetiklenen <strong>ağ (network) isteklerini</strong> ve doğrulama/hata
+      mesajlarını gözlemler. Bu gözlem, kılavuz üretimine <strong>en güvenilir
+      kaynak</strong> olarak beslenir (statik BRD ile çelişirse gerçek gözlem
+      tercih edilir).</p>
+
+    <div class="box warn">
+      <strong>Varsayılan KAPALI (opt-in)</strong>
+      Bu özellik Claude'un ekranı tek tek gezmesini gerektirdiğinden belirgin
+      biçimde <strong>daha yavaş ve daha pahalıdır</strong> (ekran başına çok
+      sayıda ek adım). Yalnızca en yüksek doğruluğun gerektiği durumlarda açın.
+      Açmak için <code>.env</code>: <code>LIVE_APP_MCP_ENABLED=true</code>.
+    </div>
+
+    <p><strong>Gereksinimler:</strong></p>
+    <ul>
+      <li><code>CLAUDE_BACKEND=cli</code> (özellik yalnız CLI backend'de çalışır).</li>
+      <li><strong>Node.js/npm</strong> kurulu ve PATH'te — MCP sunucusu
+        <code>npx @playwright/mcp</code> ile başlatılır.</li>
+      <li><code>APP_BASE_URL</code> tanımlı (gezilecek hedef). Giriş gerekiyorsa
+        <code>APP_USERNAME</code>/<code>APP_PASSWORD</code> ile <strong>otomatik
+        giriş</strong> yapılır — ek manuel adım yok.</li>
+    </ul>
+
+    <div class="box info">
+      <strong>Hazır mı? — önkontrol</strong>
+      Özelliğin çalışmaya hazır olup olmadığını
+      <code>GET /api/live-app/status</code> söyler:
+      <code>{ ready, npx, backend, appUrlSet, autoLogin, reason }</code>.
+      <code>ready:false</code> ise <code>reason</code> alanı eksik olanı
+      Türkçe ve eyleme dönük anlatır (ör. "npx bulunamadı…",
+      "CLAUDE_BACKEND=cli yapın…").
+    </div>
+
+    <div class="box info">
+      <strong>Güvenlik</strong>
+      Tarayıcı araçları <strong>dar bir allowlist</strong> ile sınırlıdır
+      (gezinme, tıklama, form doldurma, ağ/DOM gözlemi) — keyfi JavaScript
+      çalıştırma (<code>browser_evaluate</code>) ve dosya yükleme
+      <strong>kapsam dışıdır</strong>. Giriş şifresi Claude'a
+      <strong>komut satırı argümanı değil, stdin üzerinden</strong> verilir
+      (<code>ps</code> çıktısında görünmez) ve hata-ayıklama prompt
+      dökümünde maskelenir. Oturum çerezleri
+      <code>data/.live-app-profile/</code> (gitignore'da) kalıcı profilinde
+      tutulur.
+    </div>
+
+    <div class="box info">
+      <strong>Güvenli varsayılan (fail-safe)</strong>
+      npx yoksa, zaman aşımı olursa veya MCP hata verirse özellik
+      <strong>sessizce atlanır</strong> — kılavuz üretimi kanıtsız, normal
+      şekilde devam eder. Toplanan kanıt ekran başına
+      <code>data/references/live-app/</code> altında önbelleğe alınır;
+      "Eksikleri Üret" veya yeniden üretim aynı ekran için tekrar ödeme yapmaz.
     </div>
 
     <!-- ============== 7 ============== -->
