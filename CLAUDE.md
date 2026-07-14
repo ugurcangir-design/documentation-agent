@@ -38,7 +38,9 @@ Node + TS. API **:3000**, Vite client **:5173**.
 ## Env bayrakları (varsayılan)
 `CLAUDE_BACKEND=cli` · `MAX_DISCOVERY_DEPTH=0` (0=tek ekran+interactive) ·
 `FILL_TEST_DATA=true` · `DEEP_EXPLORE=true` (sekme-içi derin keşif) ·
-`ALLOW_FORM_SUBMIT=false` (⚠ açıkken gerçek kayıt) · `PORT=3000`
+`ALLOW_FORM_SUBMIT=false` (⚠ açıkken gerçek kayıt) · `PORT=3000` ·
+`LIVE_APP_MCP_ENABLED=false` (opt-in: Claude + Playwright MCP canlı kanıt —
+bkz. docs/ARCHITECTURE.md "Canlı Uygulama Kanıtı — MCP")
 
 ## Belge bakımı
 Bir commit dosya yapısı/sabit/route/persistence/çekirdek davranışı değiştirdiyse,
