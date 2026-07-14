@@ -38,6 +38,8 @@ src/
     formFiller.ts                Güvenli otomatik test-verisi doldurma
                                   (sampleValueForField + fillTestData; ASLA submit)
     screenshotCapture.ts         PNG ekran görüntüsü (opts: fullPage | clip<modal>)
+    liveAppMcp.ts                Opt-in: Claude + Playwright MCP canlı kanıt
+                                  (bkz. "Canlı Uygulama Kanıtı — MCP" bölümü)
   analysis/
     screenAnalyzer.ts            Claude → screen analysis (UI öğeleri, akışlar)
     screenContextBuilder.ts      RAG → preparedChunks + paragraphMatches
@@ -90,7 +92,7 @@ src/
     jobs/
       documentationJob.ts        Orchestrator (slim ~100 satır)
       contextLoader.ts           Job-stable bağlam (BRD/Confluence/Jira/Swagger/şablon)
-      screenProcessor.ts         Ekran başına analyze+generate+fixup+persist
+      screenProcessor.ts         Ekran başına analyze+(live-app-mcp)+generate+fixup+persist
       traceBuilder.ts            Doküman footer "Üretim Bilgisi"
       discoveryJob.ts            Ekran keşfi job'ı (189 satır)
     middleware/
@@ -372,6 +374,45 @@ Ekranlar **3'lü paralel** işlenir:
 ```ts
 CONCURRENCY = 3   // documentationJob.ts
 ```
+
+### Canlı Uygulama Kanıtı — MCP (opt-in, hibrit)
+`buildScreenContext`'ten sonra, üretimden önce: `env.liveAppMcpEnabled`
+(`LIVE_APP_MCP_ENABLED`, varsayılan **false**) açıksa `fetchLiveAppEvidence`
+(`src/browser/liveAppMcp.ts`) çağrılır. Bu, ekran görüntüsü yakalayan
+Playwright-heuristic keşfin (`screenDiscovery.ts`/`interactiveExplorer.ts`)
+**yerine geçmez** — ona EK, opsiyonel bir "canlı kanıt" turudur:
+
+- `claude` CLI'a (yalnız `CLAUDE_BACKEND=cli`) `--mcp-config
+  data/.mcp.live-app.json --strict-mcp-config --allowedTools <15 araç>`
+  argümanlarıyla bir **Playwright MCP sunucusu** (`@playwright/mcp`, `npx -y`
+  ile spawn edilir) bağlanır — Claude gerçek bir tarayıcıyı KENDİSİ sürer:
+  ekranı ziyaret eder, sekmeleri/CRUD akışlarını dener, network isteklerini
+  (`browser_network_requests`/`browser_network_request`) ve doğrulama/hata
+  mesajlarını gözlemler. `LIVE_APP_ALLOWED_TOOLS` bilinçli dar tutulmuş
+  (navigate/snapshot/network/console/click/type/…) — `browser_evaluate`
+  (keyfi JS) ve dosya yükleme YOK. `--allowedTools` verilmezse headless
+  modda araçlar SESSİZCE reddedilir (kritik — verilmeden asla çağırma).
+- **Otomatik giriş:** login duvarına düşerse mevcut
+  `APP_USERNAME`/`APP_PASSWORD` prompt'a talimat olarak verilir — manuel
+  adım yok.
+- **Profil kilidi:** `data/.live-app-profile` (kalıcı Chrome profili,
+  gitignored) aynı anda yalnız BİR Playwright sürecinde açılabilir.
+  `cleanupProfileLock()` her çağrıdan önce yetim `SingletonLock`'u temizler
+  (PID'e SIGTERM + kısa poll + SIGKILL). `CONCURRENCY=3` ekranları paralel
+  işlediği için TÜM live-app çağrıları `withLiveAppLock` promise-chain
+  kuyruğuyla SERİLEŞTİRİLİR (ekran üretiminin geri kalanı paralel kalır).
+- **Cache:** `data/references/live-app/<hash>.md` (`EVIDENCE_VERSION`
+  değişince geçersiz) — "Eksikleri Üret" veya yeniden üretim aynı ekran için
+  tekrar ödeme yapmaz.
+- **Hata toleransı:** npx yok / timeout / MCP hata → `console.warn` + `null`,
+  üretim NORMAL (kanıtsız) devam eder — fatal değil.
+- **Enjeksiyon:** yalnız çok-sekmeli ekranın GENEL BAKIŞ çağrısına (sekmelere
+  değil) `# CANLI UYGULAMA GÖZLEMİ` context bloğu olarak eklenir
+  (`userManualGenerator.ts` `buildPrompt`). `userManual.rules`'da: canlı
+  gözlem CRUD/network/mesaj davranışı için BRD'den ÖNCELİKLİDİR.
+
+Test: `tests/liveAppMcp.test.ts` (opt-in/backend kısıtı, hata-toleransı,
+cache), `tests/claudeClient.test.ts` "MCP spawn argümanları".
 
 ### Bağlam yükleme adımları
 1. **Yerel swagger** dosyaları → `extractEndpoints`
