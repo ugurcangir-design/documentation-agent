@@ -41,7 +41,14 @@ data/references/templates/*
 !data/references/templates/.gitkeep
 data/references/jira/*
 !data/references/jira/.gitkeep
+data/references/live-app/*
+!data/references/live-app/.gitkeep
 data/references/_tmp/
+
+# Canlı uygulama MCP (Playwright) — kalıcı Chrome profili (çerez/oturum) +
+# makineye özel MCP config. Asla commit edilmez.
+data/.live-app-profile/
+data/.mcp.live-app.json
 dist-electron/
 dist/
 node_modules/

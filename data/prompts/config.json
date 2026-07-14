@@ -19,7 +19,8 @@
       "Başlık yapısını tam olarak yukarıdaki gibi koru — ekstra teknik bölüm ekleme",
       "UYDURMA YASAK: Görsellerde veya verilen bağlamda (BRD/notlar) kanıtı olmayan davranışı, alanı, mesajı, değeri YAZMA. Emin olmadığın davranışı tahmin etme — yalnız görünen kadarını anlat",
       "Ekrandaki metinleri (buton adları, kolon başlıkları, mesajlar) görseldeki yazımla BİREBİR kullan — çevirme, yeniden adlandırma",
-      "Aynı kavram için dokümanın tamamında TEK terim kullan (hep 'sekme', hep 'kayıt', hep 'sayfa başına kayıt sayısı')"
+      "Aynı kavram için dokümanın tamamında TEK terim kullan (hep 'sekme', hep 'kayıt', hep 'sayfa başına kayıt sayısı')",
+      "CANLI UYGULAMA GÖZLEMİ verilmişse (gerçek ekranda MCP ile gözlemlenmiş network/CRUD/mesaj davranışı): bu, statik BRD/şablon bağlamından DAHA ÖNCELİKLİDİR — CRUD davranışı, network isteği, doğrulama/hata mesajı için gerçek gözlemi esas al, BRD'yle çelişirse gerçek gözlemi yaz"
     ],
     "language": "tr",
     "maxTokens": 6000

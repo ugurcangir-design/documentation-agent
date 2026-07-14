@@ -1,5 +1,26 @@
-import { describe, it, expect } from "vitest";
-import { isPromptTooLong, isTransientError, friendlyCliError, isUsageLimitError, MODEL_QUALITY, MODEL_FAST } from "../src/llm/claudeClient";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { EventEmitter } from "events";
+
+// child_process.spawn'ı mock'la — gerçek `claude` süreci başlatmadan CLI
+// çağrı argümanlarını (özellikle --mcp-config/--allowedTools) doğrula.
+const spawnCalls: Array<{ cmd: string; args: string[] }> = [];
+vi.mock("child_process", () => ({
+  spawn: vi.fn((cmd: string, args: string[]) => {
+    spawnCalls.push({ cmd, args });
+    const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; kill: () => void };
+    proc.stdout = new EventEmitter();
+    proc.stderr = new EventEmitter();
+    proc.kill = () => {};
+    // Bir sonraki tick'te başarılı JSON yanıtla çık — gerçek CLI I/O'sunu simüle eder.
+    setImmediate(() => {
+      proc.stdout.emit("data", Buffer.from(JSON.stringify({ result: "ok", usage: { input_tokens: 1, output_tokens: 1 } })));
+      proc.emit("exit", 0);
+    });
+    return proc;
+  }),
+}));
+
+import { isPromptTooLong, isTransientError, friendlyCliError, isUsageLimitError, MODEL_QUALITY, MODEL_FAST, callClaude } from "../src/llm/claudeClient";
 
 describe("model sabitleri", () => {
   // Regresyon: bu değerler yanlışlıkla değişirse tüm üretim görevleri
@@ -103,5 +124,34 @@ describe("friendlyCliError", () => {
 
   it("'authenticate' metnini api_error_status olmadan da yakalar", () => {
     expect(friendlyCliError(JSON.stringify({ result: "Unauthorized request" }), "", 1)).toMatch(/kimlik doğrulama/i);
+  });
+});
+
+describe("callClaude (CLI backend) — MCP spawn argümanları", () => {
+  beforeEach(() => { spawnCalls.length = 0; });
+
+  it("mcpConfigPath + allowedTools verilirse --mcp-config/--strict-mcp-config/--allowedTools eklenir", async () => {
+    await callClaude({
+      prompt: "test",
+      mcpConfigPath: "/tmp/.mcp.live-app.json",
+      allowedTools: ["mcp__playwright__browser_navigate", "mcp__playwright__browser_click"],
+    });
+    expect(spawnCalls).toHaveLength(1);
+    const args = spawnCalls[0]!.args;
+    expect(args).toContain("--mcp-config");
+    expect(args[args.indexOf("--mcp-config") + 1]).toBe("/tmp/.mcp.live-app.json");
+    expect(args).toContain("--strict-mcp-config");
+    expect(args).toContain("--allowedTools");
+    // Tool adları AYRI argümanlar olmalı (virgüllü tek string DEĞİL) — kanıtlanmış format.
+    const toolsIdx = args.indexOf("--allowedTools");
+    expect(args[toolsIdx + 1]).toBe("mcp__playwright__browser_navigate");
+    expect(args[toolsIdx + 2]).toBe("mcp__playwright__browser_click");
+  });
+
+  it("mcpConfigPath/allowedTools verilmezse hiçbir MCP argümanı eklenmez", async () => {
+    await callClaude({ prompt: "test" });
+    const args = spawnCalls[0]!.args;
+    expect(args).not.toContain("--mcp-config");
+    expect(args).not.toContain("--allowedTools");
   });
 });

@@ -47,6 +47,12 @@ describe("prompt config — kullanıcı kılavuzu içerik standardı", () => {
     expect(rules).toContain("TEK terim");
   });
 
+  it("canlı uygulama gözlemi (MCP) BRD'den öncelikli sayılır kuralı var", () => {
+    const rules = (um.rules ?? []).join("\n");
+    expect(rules).toContain("CANLI UYGULAMA GÖZLEMİ");
+    expect(rules).toContain("DAHA ÖNCELİKLİDİR");
+  });
+
   it("technicalDoc kaydı kaldırıldı (özellik tamamen çıkarıldı)", () => {
     expect(cfg["technicalDoc"]).toBeUndefined();
   });
