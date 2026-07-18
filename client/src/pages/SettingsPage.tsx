@@ -16,6 +16,9 @@ interface SettingsValues {
   CONFLUENCE_PARENT_PAGE_ID: string;
   MAX_DISCOVERY_DEPTH: string;
   LIVE_APP_MCP_ENABLED: string;
+  ANNOTATE_STEPS: string;
+  REDACT_SENSITIVE: string;
+  STYLE_LINT: string;
 }
 
 const DEFAULTS: SettingsValues = {
@@ -34,6 +37,9 @@ const DEFAULTS: SettingsValues = {
   CONFLUENCE_PARENT_PAGE_ID: "",
   MAX_DISCOVERY_DEPTH: "0",
   LIVE_APP_MCP_ENABLED: "false",
+  ANNOTATE_STEPS: "true",
+  REDACT_SENSITIVE: "false",
+  STYLE_LINT: "true",
 };
 
 interface LiveAppStatus {
@@ -292,6 +298,28 @@ export default function SettingsPage() {
             <p className="text-[11px] text-gray-400 mt-1">
               "Tek ekran" modunda agent sadece girilen URL'i ziyaret eder, içindeki tüm buton/alan/metin Claude Vision ile analiz edilir.
             </p>
+          </div>
+
+          <div className="pt-2 border-t border-gray-100 space-y-2">
+            <p className="text-xs font-medium text-gray-500">Keşif ve görsel seçenekleri</p>
+            <Toggle
+              checked={values.ANNOTATE_STEPS !== "false"}
+              onChange={(v) => set("ANNOTATE_STEPS", v ? "true" : "false")}
+              label="Adım vurgusu (tıklanan öğeyi görselde işaretle)"
+              hint="Her buton/satır işlemi tıklamasından önce öğenin yeri kırmızı çerçeveyle işaretlenip görüntüsü alınır — kılavuz 'X'e tıklayın' derken yerini de gösterir."
+            />
+            <Toggle
+              checked={values.REDACT_SENSITIVE === "true"}
+              onChange={(v) => set("REDACT_SENSITIVE", v ? "true" : "false")}
+              label="Hassas verileri bulanıklaştır (e-posta, telefon, TCKN, IBAN)"
+              hint="Görüntü alınmadan önce olası kişisel veriler CSS ile bulanıklaştırılır. En-iyi-çaba (regex tabanlı) — paylaşım öncesi görselleri yine gözden geçirin."
+            />
+            <Toggle
+              checked={values.STYLE_LINT !== "false"}
+              onChange={(v) => set("STYLE_LINT", v ? "true" : "false")}
+              label="Stil denetimi (yazım tutarlılığı düzeltmesi)"
+              hint="Üretim sonrası ucuz bir denetimle UI adları kalınlaştırılır, adım numaraları düzeltilir, İngilizce jargon Türkçeleştirilir. İçerik değişmez; şüpheli düzeltme otomatik reddedilir."
+            />
           </div>
         </Section>
 
@@ -588,6 +616,33 @@ function Section({
       </h2>
       <div className="space-y-3">{children}</div>
     </div>
+  );
+}
+
+function Toggle({
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  hint: string;
+}) {
+  return (
+    <label className="flex items-start gap-2.5 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5"
+      />
+      <div>
+        <p className="text-sm text-gray-800">{label}</p>
+        <p className="text-[11px] text-gray-500 mt-0.5">{hint}</p>
+      </div>
+    </label>
   );
 }
 

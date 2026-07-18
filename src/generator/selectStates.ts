@@ -11,6 +11,9 @@
 import type { ScreenState } from "../types/screen";
 
 const MAX_PER_CATEGORY: Record<string, number> = {
+  // Adım vurgusu (Scribe tarzı "tıklanacak öğe işaretli" görüntüler) —
+  // kılavuzun "X'e tıklayın" adımlarına konum gösteren görsel sağlar.
+  adim: 6,
   kayit: 4, // kayıt-sonrası ekranlar (başarı/post-save) — yüksek değer
   uyari: 3, // doğrulama/validation uyarıları
   sonuc: 3, // filtre/arama sonuç ekranları
@@ -41,6 +44,7 @@ function categorize(state: ScreenState): string {
   const lbl = state.label.toLowerCase();
   // Submit-sonrası ekranlar — en yüksek değer (kılavuzda "kaydettikten
   // sonra ne olur" anlatımı). triggeredBy/label ile önce sınıflandırılır.
+  if (t.includes("adım vurgusu") || lbl.startsWith("adım:")) return "adim";
   if (t.includes("gerçek submit") || lbl.includes("kayıt sonrası")) return "kayit";
   if (t.includes("doğrulama") || lbl.includes("doğrulama uyarısı")) return "uyari";
   if (lbl.includes("sonuç") || lbl.includes("sonuc") || t.includes("sonuç listesi") || t.includes("okuma submit")) return "sonuc";

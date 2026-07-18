@@ -40,7 +40,10 @@ Node + TS. API **:3000**, Vite client **:5173**.
 `FILL_TEST_DATA=true` · `DEEP_EXPLORE=true` (sekme-içi derin keşif) ·
 `ALLOW_FORM_SUBMIT=false` (⚠ açıkken gerçek kayıt) · `PORT=3000` ·
 `LIVE_APP_MCP_ENABLED=false` (opt-in: Claude + Playwright MCP canlı kanıt —
-bkz. docs/ARCHITECTURE.md "Canlı Uygulama Kanıtı — MCP")
+bkz. docs/ARCHITECTURE.md "Canlı Uygulama Kanıtı — MCP") ·
+`ANNOTATE_STEPS=true` (tıklanacak öğeyi görselde işaretle) ·
+`REDACT_SENSITIVE=false` (görselde PII blur) · `STYLE_LINT=true` (Haiku
+biçimsel yazım denetimi, guardrail'li)
 
 ## Belge bakımı
 Bir commit dosya yapısı/sabit/route/persistence/çekirdek davranışı değiştirdiyse,

@@ -155,6 +155,7 @@
       <a href="#i-gecmis" class="h2">6.4 Geçmiş</a>
       <a href="#i-update" class="h2">6.5 Güncelleme</a>
       <a href="#i-liveapp" class="h2">6.6 Canlı Uygulama Kanıtı (MCP)</a>
+      <a href="#i-gorsel" class="h2">6.7 Adım Vurgusu, Bulanıklaştırma, Stil Denetimi</a>
       <a href="#yasam" class="h1">7. Yaşam döngüsü</a>
       <a href="#sorun" class="h1">8. Sorun Giderme</a>
       <a href="#sss" class="h1">9. SSS</a>
@@ -1079,6 +1080,28 @@ npm test                     # tüm testler yeşil olmalı</code></pre>
       <code>data/references/live-app/</code> altında önbelleğe alınır;
       "Eksikleri Üret" veya yeniden üretim aynı ekran için tekrar ödeme yapmaz.
     </div>
+
+    <h3 id="i-gorsel">6.7 Adım Vurgusu, Bulanıklaştırma, Stil Denetimi</h3>
+    <p>Üç görsel/kalite seçeneği <strong>Ayarlar → Hedef Uygulama → Keşif ve
+      görsel seçenekleri</strong> altından açılıp kapatılır:</p>
+    <ul>
+      <li><strong>Adım vurgusu</strong> (varsayılan AÇIK): Keşif sırasında bir
+        buton/satır işlemi tıklanmadan hemen önce öğenin etrafına kırmızı
+        çerçeve + rozet çizilir ve o anın görüntüsü <em>"Adım: … (konumu
+        işaretli)"</em> olarak yakalanır. Kılavuz "X'e tıklayın" derken butonun
+        ekranda <em>nerede</em> olduğunu gösteren görseli de sunar (Scribe/Tango
+        tarzı). Kapatmak: <code>ANNOTATE_STEPS=false</code>.</li>
+      <li><strong>Hassas veri bulanıklaştırma</strong> (varsayılan KAPALI):
+        Görüntü alınmadan önce olası kişisel veriler (e-posta, telefon, TCKN,
+        IBAN içeren öğeler) CSS ile bulanıklaştırılır. Regex tabanlı
+        <em>en-iyi-çaba</em> — kurumsal paylaşım öncesi görselleri yine gözden
+        geçirin. Açmak: <code>REDACT_SENSITIVE=true</code>.</li>
+      <li><strong>Stil denetimi</strong> (varsayılan AÇIK): Üretim sonrası ucuz
+        bir modelle yalnız <em>biçimsel</em> düzeltme yapılır: UI adları
+        kalınlaştırılır, adım numaraları sıralanır, İngilizce jargon
+        Türkçeleştirilir. İçerik değişmez — uzunluk/görsel sayısı sapan çıktı
+        otomatik reddedilir. Kapatmak: <code>STYLE_LINT=false</code>.</li>
+    </ul>
 
     <!-- ============== 7 ============== -->
     <h2 id="yasam">7. Yaşam Döngüsü / Kapatma</h2>
