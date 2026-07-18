@@ -1031,7 +1031,9 @@ npm test                     # tüm testler yeşil olmalı</code></pre>
       Bu özellik Claude'un ekranı tek tek gezmesini gerektirdiğinden belirgin
       biçimde <strong>daha yavaş ve daha pahalıdır</strong> (ekran başına çok
       sayıda ek adım). Yalnızca en yüksek doğruluğun gerektiği durumlarda açın.
-      Açmak için <code>.env</code>: <code>LIVE_APP_MCP_ENABLED=true</code>.
+      Açmak için: <strong>Ayarlar → Canlı Uygulama Kanıtı (MCP)</strong>
+      bölümündeki kutuyu işaretleyip <strong>Kaydet</strong>'e basın
+      (eşdeğeri <code>.env</code>: <code>LIVE_APP_MCP_ENABLED=true</code>).
     </div>
 
     <p><strong>Gereksinimler:</strong></p>
@@ -1046,8 +1048,10 @@ npm test                     # tüm testler yeşil olmalı</code></pre>
 
     <div class="box info">
       <strong>Hazır mı? — önkontrol</strong>
-      Özelliğin çalışmaya hazır olup olmadığını
-      <code>GET /api/live-app/status</code> söyler:
+      <strong>Ayarlar</strong> sayfasındaki bölüm, hazır-olma durumunu
+      (CLI backend / npx / Uygulama URL / Otomatik giriş) otomatik gösterir;
+      hazır değilse eksik olanı Türkçe açıklar. Aynı bilgiyi API'den
+      <code>GET /api/live-app/status</code> da verir:
       <code>{ ready, npx, backend, appUrlSet, autoLogin, reason }</code>.
       <code>ready:false</code> ise <code>reason</code> alanı eksik olanı
       Türkçe ve eyleme dönük anlatır (ör. "npx bulunamadı…",

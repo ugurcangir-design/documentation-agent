@@ -15,6 +15,7 @@ interface SettingsValues {
   CONFLUENCE_SPACE_KEY: string;
   CONFLUENCE_PARENT_PAGE_ID: string;
   MAX_DISCOVERY_DEPTH: string;
+  LIVE_APP_MCP_ENABLED: string;
 }
 
 const DEFAULTS: SettingsValues = {
@@ -32,7 +33,18 @@ const DEFAULTS: SettingsValues = {
   CONFLUENCE_SPACE_KEY: "DOCS",
   CONFLUENCE_PARENT_PAGE_ID: "",
   MAX_DISCOVERY_DEPTH: "0",
+  LIVE_APP_MCP_ENABLED: "false",
 };
+
+interface LiveAppStatus {
+  enabled: boolean;
+  backendOk: boolean;
+  npx: boolean;
+  appUrlSet: boolean;
+  autoLogin: boolean;
+  ready: boolean;
+  reason: string;
+}
 
 interface OAuthStatus {
   clientConfigured: boolean;
@@ -51,11 +63,19 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oauth, setOauth] = useState<OAuthStatus | null>(null);
+  const [liveApp, setLiveApp] = useState<LiveAppStatus | null>(null);
 
   const refreshOauth = () => {
     fetch("/api/auth/atlassian/status")
       .then((r) => r.json())
       .then((d: OAuthStatus) => setOauth(d))
+      .catch(() => {});
+  };
+
+  const refreshLiveApp = () => {
+    fetch("/api/live-app/status")
+      .then((r) => r.json())
+      .then((d: LiveAppStatus) => setLiveApp(d))
       .catch(() => {});
   };
 
@@ -68,6 +88,7 @@ export default function SettingsPage() {
       })
       .catch(() => {});
     refreshOauth();
+    refreshLiveApp();
     const i = setInterval(refreshOauth, 5000);
     return () => clearInterval(i);
   }, []);
@@ -123,6 +144,7 @@ export default function SettingsPage() {
           .filter(([, v]) => !!v && !v.includes("••"))
           .map(([k]) => k)
       );
+      refreshLiveApp(); // kaydettikten sonra hazır-olma durumunu tazele
     } catch (e) {
       // "Failed to fetch" = sunucuya ulaşılamıyor (uygulama arka planda/
       // uykuda kapanmış olabilir). Ham mesaj yerine eyleme dönük açıklama.
@@ -271,6 +293,64 @@ export default function SettingsPage() {
               "Tek ekran" modunda agent sadece girilen URL'i ziyaret eder, içindeki tüm buton/alan/metin Claude Vision ile analiz edilir.
             </p>
           </div>
+        </Section>
+
+        {/* Canlı Uygulama Kanıtı (MCP) */}
+        <Section title="Canlı Uygulama Kanıtı (MCP)" icon="🔎">
+          <p className="text-xs text-gray-400 mb-3">
+            Açıkken agent, her ekran için gerçek bir tarayıcıyı Claude ile gezip
+            CRUD akışlarını ve ağ (network) isteklerini gözlemler; bu kanıtı
+            kılavuza en güvenilir kaynak olarak ekler. İsteğe bağlıdır — açıkken
+            üretim <strong>belirgin biçimde daha yavaş ve daha pahalıdır</strong>.
+          </p>
+
+          <label
+            className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
+              values.LIVE_APP_MCP_ENABLED === "true"
+                ? "border-blue-500 bg-blue-50"
+                : "border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={values.LIVE_APP_MCP_ENABLED === "true"}
+              onChange={(e) => set("LIVE_APP_MCP_ENABLED", e.target.checked ? "true" : "false")}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm font-medium text-gray-800">Canlı uygulama gözlemini etkinleştir</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                Yalnızca Claude CLI backend'inde çalışır. Node.js/npx kurulu olmalı.
+                Değişikliği <strong>Kaydet</strong>'e bastıktan sonra aşağıdaki durum güncellenir.
+              </p>
+            </div>
+          </label>
+
+          {/* Hazır-olma durumu (GET /api/live-app/status) */}
+          {liveApp && (
+            <div className={`rounded-lg border p-3 text-xs ${
+              !values.LIVE_APP_MCP_ENABLED || values.LIVE_APP_MCP_ENABLED !== "true"
+                ? "bg-gray-50 border-gray-200 text-gray-500"
+                : liveApp.ready
+                ? "bg-green-50 border-green-200 text-green-800"
+                : "bg-amber-50 border-amber-200 text-amber-800"
+            }`}>
+              <p className="font-medium">
+                {values.LIVE_APP_MCP_ENABLED !== "true"
+                  ? "Kapalı"
+                  : liveApp.ready ? "✓ Hazır — canlı gözlem çalışacak" : "⚠ Hazır değil"}
+              </p>
+              {values.LIVE_APP_MCP_ENABLED === "true" && !liveApp.ready && (
+                <p className="mt-1">{liveApp.reason}</p>
+              )}
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px]">
+                <span>{liveApp.backendOk ? "✓" : "✕"} CLI backend</span>
+                <span>{liveApp.npx ? "✓" : "✕"} npx/Node</span>
+                <span>{liveApp.appUrlSet ? "✓" : "✕"} Uygulama URL</span>
+                <span>{liveApp.autoLogin ? "✓" : "○"} Otomatik giriş</span>
+              </div>
+            </div>
+          )}
         </Section>
 
         {/* Atlassian OAuth */}
