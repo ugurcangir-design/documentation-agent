@@ -38,6 +38,12 @@ src/
     formFiller.ts                Güvenli otomatik test-verisi doldurma
                                   (sampleValueForField + fillTestData; ASLA submit)
     screenshotCapture.ts         PNG ekran görüntüsü (opts: fullPage | clip<modal>)
+                                  + REDACT_SENSITIVE=true iken yakalama öncesi
+                                  PII blur (e-posta/telefon/TCKN/IBAN, best-effort)
+    stepHighlight.ts             Adım vurgusu (ANNOTATE_STEPS, vars. açık):
+                                  tıklamadan önce hedefe kırmızı çerçeve+rozet
+                                  çizip 'Adım: …' state'i yakalar, overlay'i
+                                  kaldırır (Scribe deseni; en-iyi-çaba)
     liveAppMcp.ts                Opt-in: Claude + Playwright MCP canlı kanıt
                                   (bkz. "Canlı Uygulama Kanıtı — MCP" bölümü)
   analysis/
@@ -70,6 +76,14 @@ src/
     screenshotRefs.ts            Kullanılan görüntü kümesi (saf) — bakım
                                  temizliği için; gömülü+küçük-resim+
                                  dokümante-edilmemiş-state mantığı
+    styleLint.ts                 Stil denetimi (STYLE_LINT, vars. açık):
+                                 Haiku ile YALNIZ biçimsel düzeltme (UI adı
+                                 kalın, adım no sıralı, jargon Türkçe).
+                                 Guardrail: uzunluk ±%15 dışı veya görsel
+                                 embed sayısı değişimi → OTOMATİK RED,
+                                 orijinal korunur (içerik kaybolamaz).
+                                 screenProcessor genel bakış + her sekmeyi
+                                 ayrı denetler; token'lar maliyete eklenir.
   generator/
     userManualGenerator.ts       Kullanıcı kılavuzu prompt + üretim
                                   (generateUserManualComplete: sekme başına
@@ -333,6 +347,14 @@ ALLOW_FORM_SUBMIT = false          // ⚠️ açıkken Kaydet/Gönder GERÇEKTEN
 DEEP_EXPLORE = true                // her sekmenin İÇİNİ ayrı derinlemesine
                                    //   gez (sekme-içi buton/modal/form). Çok
                                    //   sekmeli ekranda süre/maliyet artar.
+ANNOTATE_STEPS = true              // tıklamadan önce hedef öğeyi kırmızı
+                                   //   çerçeveyle işaretleyen 'Adım:' görüntüsü
+                                   //   yakala (stepHighlight.ts, Scribe deseni)
+REDACT_SENSITIVE = false           // yakalama öncesi PII blur (e-posta/telefon/
+                                   //   TCKN/IBAN; regex best-effort)
+STYLE_LINT = true                  // üretim sonrası Haiku biçimsel yazım
+                                   //   denetimi (quality/styleLint.ts,
+                                   //   guardrail'li — içerik kaybolamaz)
 ```
 Lazy getter — Ayarlar'dan değiştirilince sunucu restart gerekmez.
 
