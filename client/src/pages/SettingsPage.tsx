@@ -354,31 +354,47 @@ export default function SettingsPage() {
             </div>
           </label>
 
-          {/* Hazır-olma durumu (GET /api/live-app/status) */}
-          {liveApp && (
-            <div className={`rounded-lg border p-3 text-xs ${
-              !values.LIVE_APP_MCP_ENABLED || values.LIVE_APP_MCP_ENABLED !== "true"
-                ? "bg-gray-50 border-gray-200 text-gray-500"
-                : liveApp.ready
-                ? "bg-green-50 border-green-200 text-green-800"
-                : "bg-amber-50 border-amber-200 text-amber-800"
-            }`}>
-              <p className="font-medium">
-                {values.LIVE_APP_MCP_ENABLED !== "true"
-                  ? "Kapalı"
-                  : liveApp.ready ? "✓ Hazır — canlı gözlem çalışacak" : "⚠ Hazır değil"}
-              </p>
-              {values.LIVE_APP_MCP_ENABLED === "true" && !liveApp.ready && (
-                <p className="mt-1">{liveApp.reason}</p>
-              )}
-              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px]">
-                <span>{liveApp.backendOk ? "✓" : "✕"} CLI backend</span>
-                <span>{liveApp.npx ? "✓" : "✕"} npx/Node</span>
-                <span>{liveApp.appUrlSet ? "✓" : "✕"} Uygulama URL</span>
-                <span>{liveApp.autoLogin ? "✓" : "○"} Otomatik giriş</span>
+          {/* Hazır-olma durumu (GET /api/live-app/status).
+              DİKKAT: kutunun başlığı/rengi ekrandaki checkbox'a, gerekçe metni ise
+              SUNUCUNUN son kaydedilmiş durumuna dayanır. İkisi ayrıştığında
+              (checkbox işaretli ama henüz Kaydet'e basılmadı) eski sürüm sarı
+              "Hazır değil" + bayat "Kapalı — LIVE_APP_MCP_ENABLED=true" gerekçesi
+              gösteriyordu — hata algısı yaratıyordu. Kaydedilmemiş değişiklik artık
+              ayrı (mavi, bilgilendirici) bir durumdur. */}
+          {liveApp && (() => {
+            const istenen = values.LIVE_APP_MCP_ENABLED === "true";
+            const kaydedilmemis = istenen !== liveApp.enabled;
+            const stil = kaydedilmemis
+              ? "bg-blue-50 border-blue-200 text-blue-800"
+              : !istenen
+              ? "bg-gray-50 border-gray-200 text-gray-500"
+              : liveApp.ready
+              ? "bg-green-50 border-green-200 text-green-800"
+              : "bg-amber-50 border-amber-200 text-amber-800";
+            const baslik = kaydedilmemis
+              ? (istenen
+                  ? "ℹ Kaydedilmedi — Kaydet'e bastığınızda canlı gözlem etkinleşecek"
+                  : "ℹ Kaydedilmedi — Kaydet'e bastığınızda canlı gözlem kapanacak")
+              : !istenen
+              ? "Kapalı"
+              : liveApp.ready
+              ? "✓ Hazır — canlı gözlem çalışacak"
+              : "⚠ Hazır değil";
+            return (
+              <div className={`rounded-lg border p-3 text-xs ${stil}`}>
+                <p className="font-medium">{baslik}</p>
+                {!kaydedilmemis && istenen && !liveApp.ready && (
+                  <p className="mt-1">{liveApp.reason}</p>
+                )}
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px]">
+                  <span>{liveApp.backendOk ? "✓" : "✕"} CLI backend</span>
+                  <span>{liveApp.npx ? "✓" : "✕"} npx/Node</span>
+                  <span>{liveApp.appUrlSet ? "✓" : "✕"} Uygulama URL</span>
+                  <span>{liveApp.autoLogin ? "✓" : "○"} Otomatik giriş</span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </Section>
 
         {/* Atlassian OAuth */}
