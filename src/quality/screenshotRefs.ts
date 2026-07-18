@@ -4,7 +4,7 @@
  *
  * Bir görüntü KULLANILIYOR sayılır eğer:
  *   1. Bir dokümanın markdown gövdesine gömülüyse (`/screenshots/<ad>.png`)
- *      — üretilmiş kılavuzu/teknik dokümanı render etmek için gerekir.
+ *      — üretilmiş kullanıcı kılavuzunu render etmek için gerekir.
  *   2. Bir ekranın veya dokümanın birincil küçük-resmi (`screenshotPath`) ise
  *      — keşif listesi / doküman başlığı için gerekir.
  *   3. Henüz DOKÜMANTE EDİLMEMİŞ bir ekrana aitse (o screenPath için hiç
