@@ -8,8 +8,6 @@ import VersionHistoryPanel from "../components/VersionHistoryPanel";
 import SectionRegenerateModal from "../components/SectionRegenerateModal";
 import { useToast } from "../components/Toast";
 
-type DocTab = "userManual" | "technicalDoc";
-
 interface DocumentsPageProps {
   /** If set, after loading docs auto-select the document that came
    *  from this job (e.g. the one just completed). */
@@ -25,10 +23,8 @@ export default function DocumentsPage({
     Record<string, StoredDocument[]>
   >({});
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<DocTab>("userManual");
   const [editContent, setEditContent] = useState<{
     userManualContent: string;
-    technicalDocContent: string;
   } | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -38,7 +34,7 @@ export default function DocumentsPage({
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [versionPanelDocId, setVersionPanelDocId] = useState<string | null>(null);
-  const [regenModal, setRegenModal] = useState<{ docId: string; target: DocTab } | null>(null);
+  const [regenModal, setRegenModal] = useState<{ docId: string } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const toast = useToast();
 
@@ -95,13 +91,11 @@ export default function DocumentsPage({
     setActiveDocId(doc.id);
     setEditContent({
       userManualContent: doc.userManualContent,
-      technicalDocContent: doc.technicalDocContent,
     });
     setDirty(false);
-    setActiveTab("userManual");
   }
 
-  type EditContentKey = "userManualContent" | "technicalDocContent";
+  type EditContentKey = "userManualContent";
 
   function handleContentChange(
     field: EditContentKey,
@@ -405,7 +399,7 @@ export default function DocumentsPage({
                 )}
 
                 <button
-                  onClick={() => setRegenModal({ docId: activeDoc.id, target: activeTab })}
+                  onClick={() => setRegenModal({ docId: activeDoc.id })}
                   className="px-3 py-1.5 bg-violet-100 text-violet-700 text-xs rounded-lg hover:bg-violet-200"
                   title="Bir bölümü yeniden üret"
                 >
@@ -488,7 +482,6 @@ export default function DocumentsPage({
       {regenModal && (
         <SectionRegenerateModal
           documentId={regenModal.docId}
-          target={regenModal.target}
           onClose={() => setRegenModal(null)}
           onDone={() => {
             setRegenModal(null);

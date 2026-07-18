@@ -27,14 +27,10 @@ router.get("/:id", (req: Request, res: Response) => {
 
 // PUT /api/documents/:id — update content
 router.put("/:id", (req: Request, res: Response) => {
-  const { userManualContent, technicalDocContent } = req.body as {
-    userManualContent?: string;
-    technicalDocContent?: string;
-  };
+  const { userManualContent } = req.body as { userManualContent?: string };
 
   const updated = documentStore.update(req.params.id as string, {
     ...(userManualContent !== undefined ? { userManualContent } : {}),
-    ...(technicalDocContent !== undefined ? { technicalDocContent } : {}),
   });
 
   if (!updated) {
@@ -83,30 +79,27 @@ router.patch("/:id/status", (req: Request, res: Response) => {
   res.json(updated);
 });
 
-// GET /api/documents/:id/sections?target=userManual|technicalDoc
+// GET /api/documents/:id/sections
 router.get("/:id/sections", (req: Request, res: Response) => {
   const doc = documentStore.getById(req.params["id"] as string);
   if (!doc) {
     res.status(404).json({ error: "Document not found" });
     return;
   }
-  const target = (req.query["target"] as string) ?? "userManual";
-  const content = target === "technicalDoc" ? doc.technicalDocContent : doc.userManualContent;
-  const sections = parseSections(content).map((s) => ({ heading: s.heading, level: s.level }));
+  const sections = parseSections(doc.userManualContent).map((s) => ({ heading: s.heading, level: s.level }));
   res.json(sections);
 });
 
 // POST /api/documents/:id/regenerate-section
 router.post("/:id/regenerate-section", async (req: Request, res: Response) => {
   const id = req.params["id"] as string;
-  const { sectionHeading, instruction, target } = req.body as {
+  const { sectionHeading, instruction } = req.body as {
     sectionHeading: string;
     instruction: string;
-    target: "userManual" | "technicalDoc";
   };
 
-  if (!sectionHeading || !instruction || !target) {
-    res.status(400).json({ error: "sectionHeading, instruction, target required" });
+  if (!sectionHeading || !instruction) {
+    res.status(400).json({ error: "sectionHeading, instruction required" });
     return;
   }
 
@@ -116,24 +109,17 @@ router.post("/:id/regenerate-section", async (req: Request, res: Response) => {
     return;
   }
 
-  const fullDocument = target === "technicalDoc" ? doc.technicalDocContent : doc.userManualContent;
-
   try {
     const result = await regenerateSection({
-      fullDocument,
+      fullDocument: doc.userManualContent,
       sectionHeading,
       instruction,
-      docType: target,
     });
-
-    const patch = target === "technicalDoc"
-      ? { technicalDocContent: result.newContent }
-      : { userManualContent: result.newContent };
 
     const updated = documentStore.update(
       id,
       {
-        ...patch,
+        userManualContent: result.newContent,
         inputTokens: (doc.inputTokens ?? 0) + result.inputTokens,
         outputTokens: (doc.outputTokens ?? 0) + result.outputTokens,
       },

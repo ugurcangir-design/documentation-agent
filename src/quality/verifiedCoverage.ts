@@ -29,17 +29,16 @@ interface JudgeVerdict {
 }
 
 function buildJudgePrompt(
-  docKind: "userManual" | "technicalDoc",
   body: string,
   candidates: UIElement[]
 ): string {
   const list = candidates
     .map((el, i) => `${i + 1}. "${el.label}" (${el.type}) — beklenen: ${el.description}${el.action ? ` → ${el.action}` : ""}`)
     .join("\n");
-  return `Aşağıda ${docKind === "userManual" ? "kullanıcı kılavuzu" : "teknik döküman"} taslağı ve bir UI öğeleri listesi var.
+  return `Aşağıda kullanıcı kılavuzu taslağı ve bir UI öğeleri listesi var.
 
 Her UI öğesi için sor: "Bu öğe dökümanda **anlamlı şekilde** anlatılmış mı?"
-- Anlamlı = ne işe yaradığı + nasıl kullanılacağı (kılavuz) veya spec'i (teknik) yazılı
+- Anlamlı = ne işe yaradığı + nasıl kullanılacağı yazılı
 - Anlamsız = sadece etiket geçiyor ama açıklanmıyor (örn. "X butonu görünür" yetmez)
 
 UI ÖĞELERİ:
@@ -58,13 +57,12 @@ ama etiketler (label) yukarıdakiyle bire bir aynı olmalı.`;
 }
 
 async function judgeCovered(
-  docKind: "userManual" | "technicalDoc",
   body: string,
   covered: UIElement[]
 ): Promise<Map<string, boolean>> {
   if (covered.length === 0) return new Map();
   const result = await callClaude({
-    prompt: buildJudgePrompt(docKind, body, covered),
+    prompt: buildJudgePrompt(body, covered),
     model: JUDGE_MODEL,
     maxTokens: Math.min(8000, 200 + covered.length * 40),
   });
@@ -91,8 +89,7 @@ async function judgeCovered(
  */
 export async function computeVerifiedCoverage(
   elements: UIElement[],
-  body: string,
-  docKind: "userManual" | "technicalDoc"
+  body: string
 ): Promise<CoverageReport> {
   const raw = computeCoverage(elements, body);
   const coveredEls = elements.filter((el) => {
@@ -103,7 +100,7 @@ export async function computeVerifiedCoverage(
 
   let verdicts: Map<string, boolean>;
   try {
-    verdicts = await judgeCovered(docKind, body, coveredEls);
+    verdicts = await judgeCovered(body, coveredEls);
   } catch (e) {
     console.warn(`[coverage-judge] başarısız, raw coverage'a fallback:`, (e as Error).message);
     return raw;

@@ -1,6 +1,6 @@
 /**
  * Tek bir ekran için uçtan uca doküman üretim adımı:
- *   analyzeScreen → buildScreenContext → paralel (userManual + technicalDoc)
+ *   analyzeScreen → buildScreenContext → generateUserManualComplete
  *   → coverage + fix-up döngüsü → trace footer + documentStore.create
  *
  * documentationJob bunu CONCURRENCY=3 ile paralel çalıştırır.
@@ -117,7 +117,7 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     let coverageTarget = isMultiTab ? (userManual.overviewContent as string) : userManual.content;
 
     const initialUmCoverage = env.coverageLlmJudge
-      ? await computeVerifiedCoverage(inScopeForCoverage, coverageTarget, "userManual")
+      ? await computeVerifiedCoverage(inScopeForCoverage, coverageTarget)
       : computeCoverage(inScopeForCoverage, coverageTarget);
     let umCoverage = initialUmCoverage;
     let umExtraTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
@@ -138,7 +138,6 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
         .filter((el): el is NonNullable<typeof el> => Boolean(el));
 
     async function fixUpLoop(
-      docKind: "userManual" | "technicalDoc",
       content: string,
       coverage: CoverageReport
     ): Promise<{ content: string; coverage: CoverageReport; addedTotal: number; tokensIn: number; tokensOut: number; cacheRead: number; cacheCreate: number }> {
@@ -156,13 +155,12 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
         if (curCov.coveragePct >= threshold || curCov.missing.length === 0) break;
         emitJobEvent(jobId, {
           type: "progress",
-          message: `${docKind === "userManual" ? "Kullanıcı kılavuzu" : "Teknik döküman"} kapsamı %${curCov.coveragePct} — eksik ${curCov.missing.length} öğe için fix-up (tur ${pass})`,
+          message: `Kullanıcı kılavuzu kapsamı %${curCov.coveragePct} — eksik ${curCov.missing.length} öğe için fix-up (tur ${pass})`,
           current: getCompleted(),
           total,
         });
         try {
           const fix = await runCoverageFixUp({
-            docKind,
             currentContent: curContent,
             missing: curCov.missing,
             uiElementsMissing: missingAsElements(curCov.missing),
@@ -189,14 +187,14 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
             curContent = fix.content;
             addedTotal += fix.addedCount;
             curCov = newCov;
-            console.log(`[docjob ${jobId}] ${docKind} fix-up tur ${pass}: %${prev} → %${curCov.coveragePct}${missingUnchanged ? " (eksik set sabit)" : ""}`);
+            console.log(`[docjob ${jobId}] fix-up tur ${pass}: %${prev} → %${curCov.coveragePct}${missingUnchanged ? " (eksik set sabit)" : ""}`);
             if (missingUnchanged) break;
           } else {
-            console.log(`[docjob ${jobId}] ${docKind} fix-up tur ${pass} regresyon (%${newCov.coveragePct}) — atlandı`);
+            console.log(`[docjob ${jobId}] fix-up tur ${pass} regresyon (%${newCov.coveragePct}) — atlandı`);
             break;
           }
         } catch (e) {
-          console.warn(`[docjob ${jobId}] ${docKind} fix-up başarısız:`, (e as Error).message);
+          console.warn(`[docjob ${jobId}] fix-up başarısız:`, (e as Error).message);
           break;
         }
       }
@@ -204,7 +202,7 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     }
 
     {
-      const r = await fixUpLoop("userManual", coverageTarget, umCoverage);
+      const r = await fixUpLoop(coverageTarget, umCoverage);
       coverageTarget = r.content; // düzeltilmiş genel bakış (çok-sekmede)
       umCoverage = r.coverage;
       umFixUpAdded = r.addedTotal;
@@ -268,7 +266,6 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       userManualContent: missingTabsWarning + umContent + buildTrace({
         ...traceArgs, coverage: umCoverage, fixUpAdded: umFixUpAdded, truncated: !!userManual.truncated,
       }),
-      technicalDocContent: "", // teknik doküman özelliği kaldırıldı
       status: "draft",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

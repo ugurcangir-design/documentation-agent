@@ -22,7 +22,6 @@ export interface DocumentVersion {
   savedAt: string;
   reason: "edit" | "regenerate" | "publish";
   userManualContent: string;
-  technicalDocContent: string;
 }
 
 export interface StoredDocument {
@@ -32,7 +31,6 @@ export interface StoredDocument {
   screenTitle: string;
   screenshotPath: string;
   userManualContent: string;
-  technicalDocContent: string;
   status: DocumentStatus;
   createdAt: string;
   updatedAt: string;

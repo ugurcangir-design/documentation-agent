@@ -25,7 +25,6 @@ export interface DocumentLike {
   screenPath: string;
   screenshotPath?: string;
   userManualContent?: string;
-  technicalDocContent?: string;
 }
 
 /** Markdown gövdesinden `/screenshots/<ad>.png` referanslarını çıkarır. */
@@ -59,7 +58,7 @@ export function computeReferencedScreenshots(
   for (const d of documents) {
     documentedScreenPaths.add(d.screenPath);
     if (d.screenshotPath) referenced.add(baseName(d.screenshotPath));
-    for (const md of [d.userManualContent, d.technicalDocContent]) {
+    for (const md of [d.userManualContent]) {
       if (!md) continue;
       for (const name of extractEmbeddedScreenshots(md)) referenced.add(name);
     }

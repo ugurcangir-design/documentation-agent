@@ -8,7 +8,6 @@ export interface DocumentVersion {
   savedAt: string;
   reason: "edit" | "regenerate" | "publish";
   userManualContent: string;
-  technicalDocContent: string;
 }
 
 export interface StoredDocument {
@@ -18,7 +17,6 @@ export interface StoredDocument {
   screenTitle: string;
   screenshotPath: string;
   userManualContent: string;
-  technicalDocContent: string;
   status: DocumentStatus;
   createdAt: string;
   updatedAt: string;
@@ -89,10 +87,8 @@ export const documentStore = {
 
     // Snapshot current state before mutating, if content actually changes
     const contentChanged =
-      (patch.userManualContent !== undefined &&
-        patch.userManualContent !== current.userManualContent) ||
-      (patch.technicalDocContent !== undefined &&
-        patch.technicalDocContent !== current.technicalDocContent);
+      patch.userManualContent !== undefined &&
+      patch.userManualContent !== current.userManualContent;
 
     const versions = current.versions ?? [];
     if (contentChanged) {
@@ -101,7 +97,6 @@ export const documentStore = {
         savedAt: new Date().toISOString(),
         reason: versionReason,
         userManualContent: current.userManualContent,
-        technicalDocContent: current.technicalDocContent,
       });
     }
 
@@ -132,14 +127,12 @@ export const documentStore = {
         savedAt: new Date().toISOString(),
         reason: "edit" as const,
         userManualContent: doc.userManualContent,
-        technicalDocContent: doc.technicalDocContent,
       },
     ];
 
     const restored = {
       ...doc,
       userManualContent: version.userManualContent,
-      technicalDocContent: version.technicalDocContent,
       versions: versions.slice(-20),
       updatedAt: new Date().toISOString(),
     };

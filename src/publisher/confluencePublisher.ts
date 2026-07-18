@@ -240,7 +240,7 @@ async function uploadScreenshot(
 export async function publishToConfluence(
   output: DocumentationOutput,
   mode: PublishMode = "new"
-): Promise<{ userManualUrl: string; technicalDocUrl: string }> {
+): Promise<{ userManualUrl: string }> {
   if (!env.confluenceSpaceKey) {
     throw new Error("Confluence Space Key ayarlanmamış (Ayarlar sayfası).");
   }
@@ -250,30 +250,21 @@ export async function publishToConfluence(
   const parentId = env.confluenceParentPageId || undefined;
 
   const userManualTitle = `${output.appTitle} — Kullanıcı Kılavuzu`;
-  const technicalDocTitle = `${output.appTitle} — Teknik Döküman`;
   const userManualStorage = markdownToStorage(output.userManual);
-  const technicalDocStorage = markdownToStorage(output.technicalDoc);
 
   let umPage: V2Page;
-  let tdPage: V2Page;
 
   if (mode === "child") {
-    // Always create new child pages under parentId
+    // Always create a new child page under parentId
     umPage = await createPage(ctx, spaceId, userManualTitle, userManualStorage, parentId);
-    tdPage = await createPage(ctx, spaceId, technicalDocTitle, technicalDocStorage, parentId);
   } else {
-    // 'new' (create or replace) and 'append' both look up existing pages
+    // 'new' (create or replace) and 'append' both look up the existing page
     const existingUm = await findPage(ctx, spaceId, userManualTitle);
-    const existingTd = await findPage(ctx, spaceId, technicalDocTitle);
     const append = mode === "append";
 
     umPage = existingUm
       ? await updatePage(ctx, existingUm, userManualStorage, append)
       : await createPage(ctx, spaceId, userManualTitle, userManualStorage, parentId);
-
-    tdPage = existingTd
-      ? await updatePage(ctx, existingTd, technicalDocStorage, append)
-      : await createPage(ctx, spaceId, technicalDocTitle, technicalDocStorage, parentId);
   }
 
   // Upload screenshots as attachments (non-fatal on failure)
@@ -288,11 +279,9 @@ export async function publishToConfluence(
   }
 
   const umUrl = `${ctx.wikiBase}${umPage._links?.webui ?? ""}`;
-  const tdUrl = `${ctx.wikiBase}${tdPage._links?.webui ?? ""}`;
   console.log(`  User manual → ${umUrl}`);
-  console.log(`  Technical doc → ${tdUrl}`);
 
-  return { userManualUrl: umUrl, technicalDocUrl: tdUrl };
+  return { userManualUrl: umUrl };
 }
 
 /** Search pages by title fragment — used by the publish modal. */
