@@ -3,7 +3,6 @@ import { sections as sectionsApi } from "../lib/api";
 
 interface Props {
   documentId: string;
-  target: "userManual" | "technicalDoc";
   onClose: () => void;
   onDone: () => void;
 }
@@ -17,7 +16,7 @@ const SUGGESTIONS = [
   "Örneklerle zenginleştir",
 ];
 
-export default function SectionRegenerateModal({ documentId, target, onClose, onDone }: Props) {
+export default function SectionRegenerateModal({ documentId, onClose, onDone }: Props) {
   const [sections, setSections] = useState<Array<{ heading: string; level: number }>>([]);
   const [selectedHeading, setSelectedHeading] = useState<string>("");
   const [instruction, setInstruction] = useState("");
@@ -25,11 +24,11 @@ export default function SectionRegenerateModal({ documentId, target, onClose, on
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    sectionsApi.list(documentId, target).then((data) => {
+    sectionsApi.list(documentId).then((data) => {
       setSections(data);
       setSelectedHeading(data[0]?.heading ?? "");
     });
-  }, [documentId, target]);
+  }, [documentId]);
 
   async function submit() {
     if (!selectedHeading || !instruction.trim()) return;
@@ -38,7 +37,6 @@ export default function SectionRegenerateModal({ documentId, target, onClose, on
       await sectionsApi.regenerate(documentId, {
         sectionHeading: selectedHeading,
         instruction,
-        target,
       });
       onDone();
     } catch (e) {
@@ -55,7 +53,7 @@ export default function SectionRegenerateModal({ documentId, target, onClose, on
           <div>
             <h2 className="text-[15px] font-semibold text-gray-900">Bölüm Yeniden Üret</h2>
             <p className="text-[11px] text-gray-400 mt-0.5">
-              {target === "userManual" ? "Kullanıcı Kılavuzu" : "Teknik Döküman"} içinde bir bölümü Claude'a yeniden yazdır
+              Kullanıcı kılavuzunda bir bölümü Claude'a yeniden yazdır
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>

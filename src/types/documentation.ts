@@ -20,13 +20,11 @@ export interface ScreenDocumentation {
   screen: DiscoveredScreen;
   analysis: ScreenAnalysis;
   userManualSection: string;
-  technicalDocSection: string;
 }
 
 export interface DocumentationOutput {
   appTitle: string;
   userManual: string;
-  technicalDoc: string;
   screens: ScreenDocumentation[];
   generatedAt: string;
 }

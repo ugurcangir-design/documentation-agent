@@ -784,9 +784,14 @@ değişmeyen sekmeler için tıklamaya düşer. Entegrasyon testi:
 `tests/tabExploration.integration.test.ts` (Playwright + yerel fixture).
 Hover + fallback bir kez. DEEP_EXPLORE=false → sekmeler tek tek gezilmez.
 
-**Teknik doküman KALDIRILDI:** screenProcessor yalnız kullanıcı kılavuzu
-üretir (`technicalDocContent=""`); DocumentsPage'de teknik sekme yok;
-export'lar (md/pdf/zip/docx) yalnız kullanıcı kılavuzu içerir.
+**Teknik doküman TAMAMEN KALDIRILDI:** Uygulama yalnız Kullanıcı Kılavuzu
+üretir. Kod tabanında hiçbir teknik-doküman yapısı KALMADI: tip alanları
+(`technicalDocSection`/`technicalDoc`/`technicalDocContent`), store/versiyon
+alanları, route `target` parametreleri, publisher'ın teknik sayfa üretimi,
+client tip/sekme/panel kalıntıları ve kilavuz.html anlatımı da temizlendi
+(docKind/docType union'ları kaldırıldı — coverage/fix-up/regenerate artık
+tek amaçlı). Eski dokümanların JSON'unda kalan `technicalDocContent`
+alanları okuma sırasında yok sayılır (veri kaybı yok).
 
 **Anlatım düzeni:** prompt her görseli kendi açıklamasının hemen altına
 koymaya zorlar (arka arkaya görsel yığını yasak — adım→görsel→sonuç akışı).

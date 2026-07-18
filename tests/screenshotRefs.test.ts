@@ -40,19 +40,18 @@ describe("computeReferencedScreenshots", () => {
         screenPath: "/ekran",
         screenshotPath: "/abs/data/screenshots/ekran.png",
         userManualContent: "![Ana](/screenshots/ekran.png) ![M](/screenshots/ekran_btn_1.png)",
-        technicalDocContent: "Teknik: ![M2](/screenshots/ekran_btn_2.png)",
       },
     ];
     const ref = computeReferencedScreenshots([screen], docs);
-    // ekran.png + btn_1 (UM) + btn_2 (TD) korunur; btn_3 gömülü DEĞİL → silinebilir
+    // ekran.png + btn_1 (kılavuzda gömülü) korunur; btn_2/btn_3 gömülü DEĞİL → silinebilir
     expect(ref.has("ekran.png")).toBe(true);
     expect(ref.has("ekran_btn_1.png")).toBe(true);
-    expect(ref.has("ekran_btn_2.png")).toBe(true);
+    expect(ref.has("ekran_btn_2.png")).toBe(false);
     expect(ref.has("ekran_btn_3.png")).toBe(false);
   });
 
   it("ana küçük-resim dokümante edilmiş ekranda bile korunur", () => {
-    const docs = [{ screenPath: "/ekran", userManualContent: "boş", technicalDocContent: "boş" }];
+    const docs = [{ screenPath: "/ekran", userManualContent: "boş" }];
     const ref = computeReferencedScreenshots([screen], docs);
     expect(ref.has("ekran.png")).toBe(true); // keşif listesi küçük-resmi
     expect(ref.has("ekran_btn_1.png")).toBe(false); // gömülü değil → silinebilir

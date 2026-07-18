@@ -22,7 +22,6 @@ export interface FixUpResult {
 }
 
 interface FixUpInput {
-  docKind: "userManual" | "technicalDoc";
   currentContent: string;
   missing: string[];               // formatted labels e.g. "Sayfalama (other)"
   uiElementsMissing: UIElement[];  // full analyzer entries for missing items
@@ -31,9 +30,7 @@ interface FixUpInput {
 
 function buildPrompt(input: FixUpInput): string {
   const role =
-    input.docKind === "userManual"
-      ? "Sen bir kullanıcı kılavuzu yazarısın. Mevcut kılavuza eksik kalan UI öğelerini akıcı şekilde EKLEYECEKSİN."
-      : "Sen bir teknik döküman analistsin. Mevcut teknik dökümana eksik bileşenleri EKLEYECEKSİN.";
+    "Sen bir kullanıcı kılavuzu yazarısın. Mevcut kılavuza eksik kalan UI öğelerini akıcı şekilde EKLEYECEKSİN.";
 
   const missingList = input.uiElementsMissing
     .map((el, i) =>
@@ -41,15 +38,12 @@ function buildPrompt(input: FixUpInput): string {
     )
     .join("\n");
 
-  const placement =
-    input.docKind === "userManual"
-      ? `Eksik öğeleri uygun bölüm(ler)e yerleştir:
+  const placement = `Eksik öğeleri uygun bölüm(ler)e yerleştir:
 - Filtreleme/arama ile ilgili → 'Filtreler ve Arama Seçenekleri'
 - Tablo / satır işlemleri ile ilgili → 'Satır Üzerindeki İşlemler' veya 'Tablo / Liste Görünümü'
 - Modal açan butonlar → 'Modallar ve Yan Paneller' altında yeni alt başlık
 - Sayfalama, görünüm kontrolleri → mevcut tablo bölümüne sayfalama paragrafı ekle
-- Diğer → 'Ekrana İlk Bakış' veya en uygun mevcut bölüm`
-      : `Eksik öğeleri uygun spec bölümüne yerleştir: Bileşen Envanteri tablosuna satır, Form/Modal spec'ine sub-section, vb.`;
+- Diğer → 'Ekrana İlk Bakış' veya en uygun mevcut bölüm`;
 
   return `${role}
 
@@ -74,7 +68,7 @@ Yukarıdaki dökümanı **yeniden yaz**, ama:
 2. ${placement}
 3. Markdown image tag'lerini DEĞİŞTİRME — mevcut görselleri olduğu yerde bırak
 4. Mevcut 'Üretim Bilgisi' footer'ını kaldır (yenisi sonradan eklenecek)
-5. Doğal anlatım — envanter tablosu olarak değil, kullanıcı/geliştirici diliyle
+5. Doğal anlatım — envanter tablosu olarak değil, kullanıcı diliyle
 
 Yalnızca güncellenmiş dökümanı döndür (Markdown). Açıklama, önsöz, sonsöz ekleme.`;
 }

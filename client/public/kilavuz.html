@@ -178,20 +178,14 @@
       DocAgent, bir web uygulamasının ekranlarını <strong>Playwright</strong> ile
       otomatik tarayıp; BRD, Confluence space'leri, Jira projeleri, Swagger
       spec'leri ve örnek kılavuz şablonlarıyla harmanlayarak her ekran için
-      <strong>iki Türkçe doküman</strong> üreten yapay zeka destekli bir
-      masaüstü araçtır:
-    </p>
-    <ul>
-      <li>📘 <strong>Kullanıcı Kılavuzu</strong> — son kullanıcıya yönelik,
-        adım adım, ekran görüntüleri gömülü</li>
-      <li>⚙️ <strong>Teknik Döküman</strong> — geliştiriciye yönelik, API
-        endpoint'leri + iş kurallarıyla ilişkilendirilmiş</li>
-    </ul>
+      son kullanıcıya yönelik, adım adım, ekran görüntüleri gömülü bir
+      <strong>Türkçe Kullanıcı Kılavuzu</strong> üreten yapay zeka destekli
+      bir masaüstü araçtır.</p>
 
     <div class="box info">
       <strong>Akış özeti</strong>
       Hedef URL → Ekran keşfi (Playwright) → Bağlam (RAG) → Claude analiz
-      → Kullanıcı kılavuzu + Teknik doc → Kapsam doğrulama → Confluence'a
+      → Kullanıcı kılavuzu → Kapsam doğrulama → Confluence'a
       yayım veya DOCX/MD/PDF/ZIP indirme.
     </div>
 
@@ -545,7 +539,7 @@ offline_access</code></pre>
       <tr><td>2</td><td>Confluence space (varsa) <em>veya</em> tek sayfalar</td>
         <td>Süreç anlatımı, takım jargonu (öncelik 0.85)</td></tr>
       <tr><td>3</td><td>Swagger / OpenAPI</td>
-        <td>API endpoint'leri teknik dökümana eşleştirilir</td></tr>
+        <td>API endpoint'leri kılavuz üretiminde bağlam olarak kullanılır</td></tr>
       <tr><td>4</td><td>Jira projesi</td>
         <td>Tarihsel kararlar, ticket geçmişi (öncelik 0.75)</td></tr>
       <tr><td>5</td><td>Örnek kılavuz şablonu</td>
@@ -789,9 +783,9 @@ offline_access</code></pre>
           Sidebar/global nav öğeleri bu ekranın parçası sayılmaz, dışlanır.</li>
         <li><strong>RAG seçimi</strong> — ilgili bölümler skor ×kaynak önceliği ile sıralanır;
           16KB bütçeye, her kaynak tipinden en az 2 bölüm garantili</li>
-        <li><strong>İki paralel üretim:</strong> Kullanıcı Kılavuzu +
-          Teknik Döküman (her biri varsayılan 8000 token tavanı + image-dolu
-          prompt). Çıktı bu tavana takılırsa doküman footer'ında
+        <li><strong>Kılavuz üretimi:</strong> Kullanıcı Kılavuzu (varsayılan
+          8000 token tavanı + image-dolu prompt; çok sekmeli ekranda sekme
+          başına ayrı çağrı). Çıktı bu tavana takılırsa doküman footer'ında
           <em>⚠️ Çıktı kesildi</em> uyarısı görünür.</li>
         <li><strong>Prompt caching</strong> — rol + output structure + kurallar
           + şablon bloğu job içinde sabit; 2. ekrandan itibaren Anthropic
@@ -856,11 +850,9 @@ offline_access</code></pre>
     </div>
 
     <h3 id="u-inceleme">5.4 İnceleme &amp; düzenleme</h3>
-    <p>Üretim bitince <strong>Dökümanlar</strong> sayfası açılır. Her doküman için iki sekme:</p>
-    <ul>
-      <li><strong>Kullanıcı Kılavuzu</strong> — son kullanıcıya yönelik (Türkçe, ekran görselleri gömülü)</li>
-      <li><strong>Teknik Döküman</strong> — geliştiriciye yönelik (API endpoint eşleştirmeli)</li>
-    </ul>
+    <p>Üretim bitince <strong>Dökümanlar</strong> sayfası açılır — her ekran
+      için üretilen Kullanıcı Kılavuzu (Türkçe, ekran görselleri gömülü)
+      burada listelenir.</p>
 
     <h4>Sol panel: Markdown editör · Sağ panel: canlı önizleme</h4>
 
@@ -949,7 +941,6 @@ screenshots/*.png</pre>
     <ul>
       <li><code>userManual</code> — kullanıcı kılavuzu prompt'u (role,
         outputStructure, instructions, rules[], maxTokens)</li>
-      <li><code>technicalDoc</code> — teknik döküman prompt'u</li>
       <li>Fix-up, bölüm rejenerasyonu, ekran analizi promptları</li>
     </ul>
     <p>Yapılandırma <code>data/prompts/config.json</code>'da tutulur.
@@ -1329,8 +1320,7 @@ npm test                     # tüm testler yeşil olmalı</code></pre>
 
     <h4>Bir doküman ne kadar uzun olur?</h4>
     <p>Kullanıcı kılavuzu için tipik 15-25 KB markdown; 8-12 ekran görseli
-      gömülü, ekran başına 3-5 ana iş akışı + her UI öğesi anlatımı.
-      Teknik döküman benzer boyutta, daha az görsel.</p>
+      gömülü, ekran başına 3-5 ana iş akışı + her UI öğesi anlatımı.</p>
 
     <h4>Aynı ekranı tekrar tekrar üretebilir miyim?</h4>
     <p>Evet. Her üretim yeni bir doküman olarak Dökümanlar sayfasında durur;

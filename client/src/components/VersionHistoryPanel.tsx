@@ -5,7 +5,6 @@ interface Version {
   savedAt: string;
   reason: "edit" | "regenerate" | "publish";
   userManualContent: string;
-  technicalDocContent: string;
 }
 
 interface Props {
@@ -99,10 +98,6 @@ export default function VersionHistoryPanel({ documentId, onClose, onRestored }:
                   <div>
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Kullanıcı Kılavuzu</p>
                     <pre className="text-[12px] text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg border border-gray-100 font-mono">{selected.userManualContent.slice(0, 2000)}{selected.userManualContent.length > 2000 ? "..." : ""}</pre>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Teknik Döküman</p>
-                    <pre className="text-[12px] text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg border border-gray-100 font-mono">{selected.technicalDocContent.slice(0, 2000)}{selected.technicalDocContent.length > 2000 ? "..." : ""}</pre>
                   </div>
                 </div>
               </>

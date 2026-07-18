@@ -106,7 +106,7 @@ export const documents = {
 
   update: (
     id: string,
-    data: { userManualContent?: string; technicalDocContent?: string }
+    data: { userManualContent?: string }
   ) =>
     request<StoredDocument>(`/documents/${id}`, {
       method: "PUT",
@@ -184,13 +184,13 @@ export const jobControl = {
 
 // ── Section regeneration ─────────────────────────────────────────
 export const sections = {
-  list: (documentId: string, target: "userManual" | "technicalDoc") =>
+  list: (documentId: string) =>
     request<Array<{ heading: string; level: number }>>(
-      `/documents/${documentId}/sections?target=${target}`
+      `/documents/${documentId}/sections`
     ),
   regenerate: (
     documentId: string,
-    body: { sectionHeading: string; instruction: string; target: "userManual" | "technicalDoc" }
+    body: { sectionHeading: string; instruction: string }
   ) =>
     request<StoredDocument>(`/documents/${documentId}/regenerate-section`, {
       method: "POST",

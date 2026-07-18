@@ -50,19 +50,14 @@ export async function regenerateSection(params: {
   fullDocument: string;
   sectionHeading: string;
   instruction: string;
-  docType: "userManual" | "technicalDoc";
 }): Promise<SectionRegenerateResult> {
-  const { fullDocument, sectionHeading, instruction, docType } = params;
+  const { fullDocument, sectionHeading, instruction } = params;
 
   const sections = parseSections(fullDocument);
   const target = sections.find((s) => s.heading === sectionHeading);
   if (!target) throw new Error(`Bölüm bulunamadı: ${sectionHeading}`);
 
-  const roleLabel = docType === "userManual"
-    ? "deneyimli bir teknik yazar"
-    : "kıdemli bir yazılım mühendisi";
-
-  const prompt = `Sen ${roleLabel}sın. Mevcut bir dökümanın TEK bir bölümünü yeniden yazacaksın. Diğer bölümlere DOKUNMA.
+  const prompt = `Sen deneyimli bir teknik yazarsın. Mevcut bir dökümanın TEK bir bölümünü yeniden yazacaksın. Diğer bölümlere DOKUNMA.
 
 # Dökümanın Tamamı (Bağlam)
 ${fullDocument}

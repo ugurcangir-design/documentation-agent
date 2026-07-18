@@ -119,13 +119,10 @@ async function main(): Promise<void> {
 
         // generate*Section GenerationResult döndürür ({ content, tokens… });
         // ScreenDocumentation yalnız markdown metin (.content) bekler.
-        // Teknik doküman özelliği kaldırıldı — boş placeholder (web app
-        // akışıyla tutarlı, bkz. src/server/jobs/screenProcessor.ts).
         screenDocs.push({
           screen,
           analysis,
           userManualSection: userManualSection.content,
-          technicalDocSection: "",
         });
 
         console.log(`    Done.`);
@@ -140,12 +137,10 @@ async function main(): Promise<void> {
     console.log("\n========== ASSEMBLING DOCUMENTS ==========");
 
     const userManual = assembleUserManual(appTitle, screenDocs);
-    const technicalDoc = assembleTechnicalDoc(appTitle, screenDocs);
 
     const output: DocumentationOutput = {
       appTitle,
       userManual,
-      technicalDoc,
       screens: screenDocs,
       generatedAt: new Date().toISOString(),
     };
@@ -158,13 +153,7 @@ async function main(): Promise<void> {
       userManual
     );
 
-    const technicalDocPath = writeOutputFile(
-      "teknik-dokuman.md",
-      technicalDoc
-    );
-
-    console.log(`User manual  → ${userManualPath}`);
-    console.log(`Technical doc → ${technicalDocPath}`);
+    console.log(`User manual → ${userManualPath}`);
 
     // ── 7. CONFLUENCE PUBLISH ─────────────────────────────────────────
     console.log("\n========== CONFLUENCE PUBLISH ==========");
@@ -173,8 +162,7 @@ async function main(): Promise<void> {
 
     console.log("\n=== Documentation Agent Complete ===");
     console.log(`Screens processed: ${screenDocs.length}`);
-    console.log(`User manual:   ${userManualPath}`);
-    console.log(`Technical doc: ${technicalDocPath}`);
+    console.log(`User manual: ${userManualPath}`);
   } finally {
     await session.close();
   }
@@ -191,33 +179,6 @@ function assembleUserManual(
 
   return [
     `# ${appTitle} — Kullanıcı Kılavuzu`,
-    "",
-    `> Bu döküman otomatik olarak oluşturulmuştur. Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
-    "",
-    "## İçindekiler",
-    "",
-    ...screenDocs.map(
-      (d, i) =>
-        `${i + 1}. [${d.analysis.screenTitle}](#${slugify(d.analysis.screenTitle)})`
-    ),
-    "",
-    "---",
-    "",
-    sections,
-  ].join("\n");
-}
-
-function assembleTechnicalDoc(
-  appTitle: string,
-  screenDocs: ScreenDocumentation[]
-): string {
-  const sections = screenDocs
-    .map((d) => d.technicalDocSection)
-    .filter(Boolean)
-    .join("\n\n---\n\n");
-
-  return [
-    `# ${appTitle} — Teknik Döküman`,
     "",
     `> Bu döküman otomatik olarak oluşturulmuştur. Tarih: ${new Date().toLocaleDateString("tr-TR")}`,
     "",

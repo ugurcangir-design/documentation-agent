@@ -266,7 +266,7 @@ export default function ReferencesPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h3 className="text-[13px] font-semibold text-gray-700">BE Servisi Ekle / Güncelle (Swagger URL)</h3>
             <p className="text-[12px] text-gray-400 mt-0.5 mb-4">
-              Swagger / OpenAPI spec URL'si. Endpoint listesi teknik döküman yazımında referans olarak kullanılır.
+              Swagger / OpenAPI spec URL'si. Endpoint listesi kılavuz üretiminde referans bağlam olarak kullanılır.
             </p>
 
             <div className="space-y-3">

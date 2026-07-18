@@ -60,14 +60,9 @@ router.post("/publish", async (req: Request, res: Response) => {
       .map((d) => d!.userManualContent)
       .join("\n\n---\n\n");
 
-    const technicalDoc = docs
-      .map((d) => d!.technicalDocContent)
-      .join("\n\n---\n\n");
-
     const output: DocumentationOutput = {
       appTitle,
       userManual,
-      technicalDoc,
       screens: docs.map((d) => ({
         screen: {
           url: "",
@@ -86,7 +81,6 @@ router.post("/publish", async (req: Request, res: Response) => {
           navigationOptions: [],
         },
         userManualSection: d!.userManualContent,
-        technicalDocSection: d!.technicalDocContent,
       })),
       generatedAt: new Date().toISOString(),
     };
