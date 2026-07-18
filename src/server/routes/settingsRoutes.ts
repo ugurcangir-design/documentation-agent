@@ -117,6 +117,7 @@ const ALLOWED_SETTINGS_KEYS = new Set<string>([
   "FILL_TEST_DATA", "ALLOW_FORM_SUBMIT", "DEEP_EXPLORE",
   "TAB_GEN_CONCURRENCY", "CLAUDE_CLI_TIMEOUT_MS",
   "LIVE_APP_MCP_ENABLED", "LIVE_APP_MCP_TIMEOUT_MS",
+  "ANNOTATE_STEPS", "REDACT_SENSITIVE", "STYLE_LINT",
 ]);
 
 /** Newline injection guard — env value içinde \n veya \r olamaz; aksi

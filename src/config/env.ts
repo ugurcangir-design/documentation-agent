@@ -83,6 +83,30 @@ export const env = {
     return (process.env.DEEP_EXPLORE || "true").toLowerCase() !== "false";
   },
 
+  // Adım vurgusu (Scribe tarzı): keşifte bir buton/satır-işlemi TIKLANMADAN
+  // önce hedef öğenin etrafına kırmızı çerçeve + rozet çizilip o anın
+  // görüntüsü "Adım" state'i olarak yakalanır → kılavuz "X butonuna tıklayın"
+  // derken butonun YERİNİ gösteren görsel de olur. Varsayılan AÇIK.
+  get annotateSteps(): boolean {
+    return (process.env.ANNOTATE_STEPS || "true").toLowerCase() !== "false";
+  },
+
+  // Hassas veri bulanıklaştırma: ekran görüntüsü alınmadan önce sayfadaki
+  // olası kişisel veriler (e-posta, telefon, TCKN, IBAN) CSS blur ile
+  // bulanıklaştırılır. En-iyi-çaba (regex tabanlı) — kusursuz değildir.
+  // Varsayılan KAPALI (görsel netliği bozmamak için bilinçli tercih).
+  get redactSensitive(): boolean {
+    return (process.env.REDACT_SENSITIVE || "false").toLowerCase() === "true";
+  },
+
+  // Stil denetimi: üretim sonrası ucuz (Haiku) bir geçişle somut yazım
+  // kuralları düzeltilir (UI adları kalın, adım numaraları sıralı, yasak
+  // İngilizce jargon). Yalnız biçimsel düzeltme — içerik değişmez; şüpheli
+  // çıktı (uzunluk/görsel sayısı değişimi) OTOMATİK reddedilir.
+  get styleLint(): boolean {
+    return (process.env.STYLE_LINT || "true").toLowerCase() !== "false";
+  },
+
   // Canlı uygulama kanıtı: ekran başına Claude'a gerçek tarayıcıyı MCP
   // (@playwright/mcp) üzerinden sürdürüp DOM + network (CRUD) gözlemi
   // topluyor, userManual üretimine ek kanıt olarak besliyor. Yalnız CLI

@@ -1,6 +1,7 @@
 import type { Page, Locator } from "playwright";
 import path from "path";
 import fs from "fs";
+import { env } from "../config/env";
 
 export interface ScreenshotResult {
   screenshotPath: string;
@@ -37,11 +38,52 @@ async function resizePng(rawBuffer: Buffer, maxHeight: number): Promise<Buffer> 
   }
 }
 
+/**
+ * Hassas veri bulanıklaştırma (REDACT_SENSITIVE=true, varsayılan kapalı) —
+ * yakalamadan önce sayfadaki olası kişisel verileri (e-posta, telefon,
+ * TCKN, IBAN) içeren öğelere CSS blur uygular. EN-İYİ-ÇABA: regex tabanlı,
+ * kusursuz değildir; kurumsal paylaşım öncesi görselleri yine gözden
+ * geçirin. Blur DOM'da kalır (sonraki yakalamalar da tutarlı bulanık) —
+ * keşif sayfa yenilemelerinde zaten sıfırlanır. İdempotent (işaretli öğe
+ * ikinci kez işlenmez); hata durumunda sessizce geçer, yakalama durmaz.
+ */
+async function redactSensitiveData(page: Page): Promise<void> {
+  try {
+    await page.evaluate(() => {
+      const PATTERNS = [
+        /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,              // e-posta
+        /\+?\d[\d\s().-]{9,16}\d/,                                      // telefon
+        /\b\d{11}\b/,                                                    // TCKN benzeri 11 hane
+        /\bTR\d{2}[\d\s]{20,30}\b/i,                                    // IBAN (TR)
+      ];
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let visited = 0;
+      const targets: HTMLElement[] = [];
+      while (walker.nextNode() && visited < 5000) {
+        visited++;
+        const node = walker.currentNode as Text;
+        const text = node.textContent ?? "";
+        if (text.length < 7 || text.length > 400) continue;
+        if (!PATTERNS.some((p) => p.test(text))) continue;
+        const el = node.parentElement;
+        if (!el || el.dataset["docagentRedacted"]) continue;
+        targets.push(el);
+      }
+      for (const el of targets) {
+        el.dataset["docagentRedacted"] = "1";
+        el.style.filter = "blur(6px)";
+      }
+      return targets.length;
+    });
+  } catch { /* en-iyi-çaba — redaction başarısızsa normal yakala */ }
+}
+
 export async function captureScreenshot(
   page: Page,
   screenPath: string,
   opts: CaptureOptions = {}
 ): Promise<ScreenshotResult> {
+  if (env.redactSensitive) await redactSensitiveData(page);
   const outputDir = path.join(process.cwd(), "data", "screenshots");
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 

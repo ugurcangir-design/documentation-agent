@@ -25,6 +25,7 @@ import { jobCancellation } from "../store/jobCancellation";
 import { buildTrace } from "./traceBuilder";
 import { env } from "../../config/env";
 import { fetchLiveAppEvidence } from "../../browser/liveAppMcp";
+import { runStyleLint } from "../../quality/styleLint";
 
 import type { Endpoint } from "../../types/endpoint";
 import type { DocumentSection } from "../../types/documentSource";
@@ -210,11 +211,27 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       umExtraTokens = { input: r.tokensIn, output: r.tokensOut, cacheRead: r.cacheRead, cacheCreate: r.cacheCreate };
     }
 
-    // Nihai içerik: çok-sekmede düzeltilmiş genel bakış + DOKUNULMAMIŞ sekme
-    // bölümleri; tek/sıfır sekmede düzeltilmiş tek doküman.
-    const umContent = isMultiTab && tabsContent
-      ? coverageTarget + SECTION_JOINER + tabsContent
-      : coverageTarget;
+    // Stil denetimi (opsiyonel, ucuz Haiku): genel bakış + her sekme bölümü
+    // yalnız BİÇİMSEL olarak düzeltilir (UI adları kalın, adım numaraları,
+    // jargon). Guardrail'li — şüpheli çıktı reddedilir, içerik kaybolamaz.
+    let finalOverview = coverageTarget;
+    let finalTabs = tabsContent;
+    if (env.styleLint) {
+      setProgress(`Stil denetimi: ${screenTitle}`);
+      const tabSections = isMultiTab && tabsContent ? tabsContent.split(SECTION_JOINER) : [];
+      const lint = await runStyleLint([coverageTarget, ...tabSections]);
+      finalOverview = lint.sections[0] ?? coverageTarget;
+      finalTabs = tabSections.length > 0 ? lint.sections.slice(1).join(SECTION_JOINER) : tabsContent;
+      umExtraTokens.input += lint.inputTokens;
+      umExtraTokens.output += lint.outputTokens;
+      if (lint.changed > 0) console.log(`[docjob ${jobId}] styleLint: ${lint.changed} bölümde biçimsel düzeltme`);
+    }
+
+    // Nihai içerik: çok-sekmede düzeltilmiş genel bakış + sekme bölümleri;
+    // tek/sıfır sekmede düzeltilmiş tek doküman.
+    const umContent = isMultiTab && finalTabs
+      ? finalOverview + SECTION_JOINER + finalTabs
+      : finalOverview;
 
     if (umCoverage.missing.length > 0) {
       console.log(`[docjob ${jobId}] UM kalan eksikler: ${umCoverage.missing.join(", ")}`);

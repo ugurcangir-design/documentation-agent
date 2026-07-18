@@ -12,6 +12,7 @@ import fs from "fs";
 import type { Page, Locator } from "playwright";
 import { captureScreenshot, type CaptureOptions } from "./screenshotCapture";
 import { fillTestData, triggerValidation, clickSubmitButton } from "./formFiller";
+import { captureStepHighlight } from "./stepHighlight";
 import { env } from "../config/env";
 import type { ScreenState } from "../types/screen";
 
@@ -336,6 +337,12 @@ async function runActionButtonPass(
     const loc = root.nth(cand.index);
     if (!(await loc.isVisible().catch(() => false))) continue;
 
+    // Adım vurgusu (Scribe tarzı): tıklamadan ÖNCE butonun yerini kırmızı
+    // çerçeveyle işaretleyen görüntüyü yakala → kılavuz "X'e tıklayın"
+    // derken butonun ekranda nerede olduğunu gösterebilsin.
+    await captureStepHighlight(page, loc, cand.label, `${basePath}_btn_${cand.index}_step`,
+      (l, t, f) => pushState(l, t, f));
+
     const beforeUrl = page.url();
     try {
       await loc.click({ timeout: ACTION_TIMEOUT });
@@ -531,6 +538,9 @@ async function runRowEditDrilldown(
         (await icon.getAttribute("title").catch(() => null)) || "Satır işlemi";
       if (isDestructive(lbl)) continue;
       log(`Satır ikonu deneniyor: ${lbl} (${editSel})`);
+      // Adım vurgusu: satır ikonunun yerini işaretleyen görüntü (tıklamadan önce).
+      await captureStepHighlight(page, icon, `${lbl} (satır)`, `${basePath}_rowedit_${captured}_step`,
+        (l, t, f) => pushState(l, t, f));
       await icon.click({ timeout: ACTION_TIMEOUT }).catch(async () => {
         await icon.click({ timeout: ACTION_TIMEOUT, force: true });
       });
