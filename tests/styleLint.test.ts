@@ -62,3 +62,39 @@ describe("runStyleLint — guardrail'li biçimsel düzeltme", () => {
     expect(r.changed).toBe(0);
   });
 });
+
+describe("runStyleLint — semantik guardrail (Faz 3)", () => {
+  const PAD = "Bu satır yalnızca dolgu amaçlıdır ve herhangi bir sayı içermez. ".repeat(5);
+  const NUM_SECTION = "## Ad Alanı\n\nBu alana en fazla 50 karakter girilebilir.\n\n" + PAD;
+  const POL_SECTION = "## Ad Alanı\n\nAd alanı zorunludur ve boş bırakılamaz.\n\n" + PAD;
+  const IMG_SECTION = "## Ekran\n\nAşağıdaki görselde ekran görünür.\n\n![Ekran](/screenshots/market.png)\n\n" + PAD;
+
+  it("inline sayı değişirse REDDEDİLİR ('50 karakter' → '5 karakter')", async () => {
+    mockResponse = NUM_SECTION.replace("50 karakter", "5 karakter");
+    const r = await runStyleLint([NUM_SECTION]);
+    expect(r.sections[0]).toBe(NUM_SECTION);
+    expect(r.changed).toBe(0);
+  });
+
+  it("polarite kelimesi çevrilirse REDDEDİLİR ('zorunludur' → 'opsiyoneldir')", async () => {
+    mockResponse = POL_SECTION.replace("zorunludur", "opsiyoneldir");
+    const r = await runStyleLint([POL_SECTION]);
+    expect(r.sections[0]).toBe(POL_SECTION);
+    expect(r.changed).toBe(0);
+  });
+
+  it("görsel path'i değişirse (sayı aynı) REDDEDİLİR — yanlış ekran görseli", async () => {
+    mockResponse = IMG_SECTION.replace("/screenshots/market.png", "/screenshots/player.png");
+    const r = await runStyleLint([IMG_SECTION]);
+    expect(r.sections[0]).toBe(IMG_SECTION);
+    expect(r.changed).toBe(0);
+  });
+
+  it("liste numaralarını yeniden numaralandırmak MEŞRU — reddedilmez", async () => {
+    const listSection = "## Adımlar\n\n1. İlk adımı yapın\n1. İkinci adımı yapın\n1. Üçüncü adımı yapın\n\n" + PAD;
+    mockResponse = listSection.replace("1. İkinci", "2. İkinci").replace("1. Üçüncü", "3. Üçüncü");
+    const r = await runStyleLint([listSection]);
+    expect(r.sections[0]).toContain("2. İkinci");
+    expect(r.changed).toBe(1);
+  });
+});

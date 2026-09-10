@@ -15,7 +15,7 @@ import { computeCoverage, type CoverageReport } from "../../quality/coverageChec
 import { computeVerifiedCoverage } from "../../quality/verifiedCoverage";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
 import { isSidebarNav } from "../../quality/sidebarNav";
-import { isUsageLimitError } from "../../llm/claudeClient";
+import { isUsageLimitError, type ClaudeImage } from "../../llm/claudeClient";
 import { screenStore, type StoredScreen } from "../store/screenStore";
 import { documentStore } from "../store/documentStore";
 import { jobStore } from "../store/jobStore";
@@ -40,21 +40,27 @@ export interface ProcessArgs {
   /** Ortak completed sayacı — paralel worker'lar artırır. */
   getCompleted: () => number;
   incCompleted: () => number;
+  /** Job başında bir kez tespit edilen prompt yapılandırma sorunları
+   *  (checkPromptConfigHealth). Boş değilse doküman-başı uyarı basılır. */
+  promptConfigProblems?: string[];
 }
 
-export async function processScreen(args: ProcessArgs): Promise<void> {
+/** Bu ekran için üretilen "yumuşak" uyarıların kısa etiketleri (doküman yine
+ *  oluşturuldu ama eksik/şüpheli olabilir). documentationJob bunları toplayıp
+ *  job özetine yazar. Ekran hata verirse / erken çıkarsa boş dizi döner. */
+export async function processScreen(args: ProcessArgs): Promise<string[]> {
   const { jobId, screenPath, allSections, allEndpoints, templateContents, total,
-    getCompleted, incCompleted } = args;
+    getCompleted, incCompleted, promptConfigProblems } = args;
 
   console.log(`[docjob ${jobId}] worker başladı: ${screenPath}`);
 
   if (!(await jobCancellation.waitIfPaused(jobId))) {
     console.log(`[docjob ${jobId}] worker bailed (pause+cancel) for ${screenPath}`);
-    return;
+    return [];
   }
   if (jobCancellation.isCancelled(jobId)) {
     console.log(`[docjob ${jobId}] worker bailed (cancelled) for ${screenPath}`);
-    return;
+    return [];
   }
 
   const storedScreen = screenStore.getByPath(screenPath);
@@ -67,7 +73,7 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       current: incCompleted(),
       total,
     });
-    return;
+    return [];
   }
 
   const screenTitle = storedScreen.title || screenPath;
@@ -108,17 +114,32 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     // Coverage scope = analyzer'ın çıkardığı UI öğeleri, sidebar nav hariç.
     const inScopeForCoverage = analysis.uiElements.filter((el) => !isSidebarNav(el));
 
-    // Coverage + fix-up HEDEFİ: çok-sekmeli ekranda yalnız GENEL BAKIŞ bölümü
-    // (ana ekran öğeleri oraya aittir; sekme bölümleri kendi görsellerinden
-    // zaten eksiksiz üretilir). Böylece Haiku-judge + Sonnet fix-up dokümanın
-    // ~1/8'ini işler (~8× token tasarrufu) ve sekme bölümleri yeniden yazılmaz.
+    // Fix-up ve coverage-judge'a verilecek ekran görselleri (ana ekran +
+    // state'ler). Fix-up eskiden GÖRSELSİZ çalışıp eksik öğeyi uyduruyordu;
+    // artık ana üretimle aynı görsel kanıtı görür (bkz. coverageFixUp UYDURMA
+    // YASAK). State sayısı bant genişliği için sınırlı tutulur.
+    const screenImages: ClaudeImage[] = (screen.states ?? [])
+      .slice(0, 10)
+      .map((s) => ({ base64: s.screenshotBase64, path: s.screenshotPath, label: s.label }));
+
+    // Fix-up (yeniden yazma) HEDEFİ hâlâ yalnız GENEL BAKIŞ bölümüdür (token
+    // tasarrufu: sekme bölümleri kendi görsellerinden üretilir, yeniden
+    // yazılmaz). ANCAK kapsam ÖLÇÜMÜ artık TÜM dokümana (genel bakış + sekmeler)
+    // karşı yapılır: bir öğe sekme bölümünde anlatıldıysa "covered" sayılır →
+    // (1) sahte-düşük kapsam ortadan kalkar, (2) sekmede zaten anlatılan öğe
+    // genel bakışa tekrar EKLENMEZ (çift içerik önlenir), (3) footer'daki %
+    // dokümanın TAMAMINI temsil eder. Yalnız hiçbir yerde geçmeyen (ana ekran)
+    // öğe fix-up ile genel bakışa eklenir.
     const isMultiTab = userManual.overviewContent !== undefined;
     const tabsContent = userManual.tabsContent ?? "";
     let coverageTarget = isMultiTab ? (userManual.overviewContent as string) : userManual.content;
+    const tabsSuffix = isMultiTab && tabsContent ? SECTION_JOINER + tabsContent : "";
 
     const initialUmCoverage = env.coverageLlmJudge
-      ? await computeVerifiedCoverage(inScopeForCoverage, coverageTarget)
-      : computeCoverage(inScopeForCoverage, coverageTarget);
+      ? await computeVerifiedCoverage(inScopeForCoverage, coverageTarget + tabsSuffix, {
+          base64: screen.screenshotBase64, path: screen.screenshotPath,
+        })
+      : computeCoverage(inScopeForCoverage, coverageTarget + tabsSuffix);
     let umCoverage = initialUmCoverage;
     let umExtraTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
     let umFixUpAdded = 0;
@@ -165,8 +186,14 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
             missing: curCov.missing,
             uiElementsMissing: missingAsElements(curCov.missing),
             screenTitle,
+            // Görsel kanıt — eksik öğe uydurmasın, ekrandan anlatsın.
+            ...(screen.screenshotBase64 ? { mainImageBase64: screen.screenshotBase64 } : {}),
+            ...(screen.screenshotPath ? { mainImagePath: screen.screenshotPath } : {}),
+            images: screenImages,
           });
-          const newCov = computeCoverage(inScopeForCoverage, fix.content);
+          // Kapsam TÜM dokümana karşı ölçülür (düzeltilmiş genel bakış +
+          // değişmeyen sekmeler) — fix.content yalnız genel bakışı yeniden yazar.
+          const newCov = computeCoverage(inScopeForCoverage, fix.content + tabsSuffix);
           tokensIn += fix.inputTokens;
           tokensOut += fix.outputTokens;
           cacheRead += fix.cacheReadTokens ?? 0;
@@ -238,23 +265,75 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     const usedTemplates = referenceStore.getDocuments("template").map((t) => t.originalName);
     const traceArgs = { context, usedTemplates, stateCount };
 
-    // Bir veya daha fazla sekme 2 denemeden sonra da üretilemediyse doküman
-    // EKSİK — bunu sessizce geçmek yerine (eski davranış: 'tamamlandı' görünüp
-    // sekme kılavuzdan tamamen kaybolurdu) dokümanın EN BAŞINA kaçırılamaz bir
-    // uyarı basıyoruz + canlı progress akışına bildiriyoruz.
+    // Sessiz kaybı GÖRÜNÜR yap: doküman yine oluşturulur ama eksik/şüpheli
+    // olabilecek her durum için (1) dokümanın EN BAŞINA kaçırılamaz bir uyarı
+    // banner'ı, (2) canlı progress akışına bildirim, (3) job özetine kısa
+    // etiket (screenWarnings). Eski davranış: 'tamamlandı' görünüp sorun
+    // sessizce kayboluyordu.
+    const warningBanners: string[] = [];
+    const screenWarnings: string[] = [];
+    const pushWarning = (banner: string, label: string, eventMsg: string) => {
+      warningBanners.push(banner);
+      screenWarnings.push(label);
+      emitJobEvent(jobId, { type: "error", message: eventMsg, current: getCompleted(), total });
+    };
+
+    // (a) Bir/daha fazla sekme 2 denemede de üretilemedi → doküman EKSİK.
     const failedTabs = userManual.failedTabs ?? [];
     if (failedTabs.length > 0) {
       const tabList = failedTabs.join(", ");
       console.warn(`[docjob ${jobId}] ${screenTitle}: şu sekmeler üretilemedi (2 deneme sonrası): ${tabList} — doküman EKSİK`);
-      emitJobEvent(jobId, {
-        type: "error",
-        message: `Uyarı (${screenTitle}): şu sekme(ler) üretilemedi — doküman EKSİK: ${tabList}. Discovery/Kılavuz sayfasından bu ekranı yeniden üretin.`,
-        current: getCompleted(),
-        total,
-      });
+      pushWarning(
+        `> ⚠️ **EKSİK İÇERİK UYARISI:** Şu sekme(ler) teknik bir hata nedeniyle üretilemedi ve bu dokümanda YOK: **${tabList}**. Bu dokümanı kullanmadan önce Discovery/Kılavuz sayfasından bu ekranı yeniden seçip üretin.`,
+        `${screenTitle}: sekme üretilemedi (${tabList})`,
+        `Uyarı (${screenTitle}): şu sekme(ler) üretilemedi — doküman EKSİK: ${tabList}. Discovery/Kılavuz sayfasından bu ekranı yeniden üretin.`
+      );
     }
-    const missingTabsWarning = failedTabs.length > 0
-      ? `> ⚠️ **EKSİK İÇERİK UYARISI:** Şu sekme(ler) teknik bir hata nedeniyle üretilemedi ve bu dokümanda YOK: **${failedTabs.join(", ")}**. Bu dokümanı kullanmadan önce Discovery/Kılavuz sayfasından bu ekranı yeniden seçip üretin.\n\n---\n\n`
+
+    // (b) Çıktı kesilmiş olabilir (max_tokens). CLI modunda artık yapısal
+    // sezgiyle de tespit edilir (looksTruncated) — eskiden CLI'da hiç görülmezdi.
+    if (userManual.truncated) {
+      console.warn(`[docjob ${jobId}] ${screenTitle}: çıktı kesilmiş olabilir (max_tokens) — doküman yarım olabilir`);
+      pushWarning(
+        `> ⚠️ **ÇIKTI KESİLMİŞ OLABİLİR:** Kılavuz üretilirken model çıktı sınırına (\`max_tokens\`) takılmış görünüyor — doküman yarım kalmış olabilir. Ayarlar > Sistem Promptları'ndan \`maxTokens\` değerini artırıp bu ekranı yeniden üretin.`,
+        `${screenTitle}: çıktı kesilmiş olabilir`,
+        `Uyarı (${screenTitle}): çıktı kesilmiş olabilir (max_tokens) — doküman yarım olabilir. maxTokens'ı artırıp yeniden üretin.`
+      );
+    }
+
+    // (c) Doğrulanacak UI öğesi yok → kapsam ÖLÇÜLEMEDİ (boş/erişilemez ekran,
+    // auth-wall, tümü global nav olabilir). Kılavuz halüsinasyona en açık durum.
+    if (inScopeForCoverage.length === 0) {
+      console.warn(`[docjob ${jobId}] ${screenTitle}: doğrulanacak UI öğesi yok — kapsam ölçülemedi`);
+      pushWarning(
+        `> ⚠️ **KAPSAM ÖLÇÜLEMEDİ:** Bu ekranda doğrulanacak UI öğesi bulunamadı (ekran boş/erişilemez olabilir, ya da öğelerin tümü global nav sayıldı). Kılavuz içeriği otomatik doğrulanamadı — kullanmadan önce elle kontrol edin.`,
+        `${screenTitle}: UI öğesi yok, kapsam ölçülemedi`,
+        `Uyarı (${screenTitle}): doğrulanacak UI öğesi bulunamadı — kapsam ölçülemedi, içeriği elle kontrol edin.`
+      );
+    }
+
+    // (d) Prompt yapılandırması eksik/bozuk (job başında bir kez tespit edildi)
+    // → kritik kurallar ("uydurma yasak") ve çıktı yapısı devrede olmayabilir.
+    if (promptConfigProblems && promptConfigProblems.length > 0) {
+      warningBanners.push(
+        `> ⚠️ **PROMPT YAPILANDIRMASI EKSİK:** ${promptConfigProblems.join("; ")}. Kritik üretim kuralları ("uydurma yasak") ve çıktı yapısı devrede olmayabilir — çıktının doğruluğunu elle doğrulayın.`
+      );
+      screenWarnings.push(`prompt yapılandırması eksik`);
+      // Not: canlı akış bildirimi documentationJob'da bir kez basılır (job-stable).
+    }
+
+    // (e) LLM-judge çalışması gerekiyordu ama başarısız oldu → kapsam ham
+    // metin eşleşmesine göre; "her öğe anlamlı anlatıldı" DOĞRULANMADI.
+    if (env.coverageLlmJudge && umCoverage.verified === false) {
+      pushWarning(
+        `> ⚠️ **KAPSAM DOĞRULANAMADI:** Kapsam doğrulaması (LLM-judge) teknik bir hata nedeniyle çalışamadı. Kapsam yüzdesi yalnız ham metin eşleşmesine dayanıyor — kılavuzun her öğeyi **anlamlı** anlattığı doğrulanmadı. İçeriği elle gözden geçirin.`,
+        `${screenTitle}: kapsam doğrulaması yapılamadı`,
+        `Uyarı (${screenTitle}): kapsam doğrulaması (LLM-judge) çalışamadı — kapsam ham eşleşmeye göre, elle kontrol edin.`
+      );
+    }
+
+    const docHeadWarning = warningBanners.length > 0
+      ? warningBanners.join("\n\n") + "\n\n---\n\n"
       : "";
 
     documentStore.create({
@@ -263,7 +342,7 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
       screenPath,
       screenTitle: analysis.screenTitle || screenTitle,
       screenshotPath: storedScreen.screenshotPath,
-      userManualContent: missingTabsWarning + umContent + buildTrace({
+      userManualContent: docHeadWarning + umContent + buildTrace({
         ...traceArgs, coverage: umCoverage, fixUpAdded: umFixUpAdded, truncated: !!userManual.truncated,
       }),
       status: "draft",
@@ -281,11 +360,12 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
     });
     emitJobEvent(jobId, {
       type: "screen",
-      message: `✓ ${screenTitle}`,
+      message: screenWarnings.length > 0 ? `⚠ ${screenTitle} (${screenWarnings.length} uyarı)` : `✓ ${screenTitle}`,
       current: completed,
       total,
       data: { screenPath, screenTitle },
     });
+    return screenWarnings;
   } catch (err) {
     const completed = incCompleted();
     const errMsg = (err as Error).message;
@@ -310,6 +390,7 @@ export async function processScreen(args: ProcessArgs): Promise<void> {
         total,
       });
     }
+    return [];
   }
 }
 

@@ -6,10 +6,17 @@
  *   - Yasak geliştirici jargonu Türkçe karşılığıyla değiştirilir
  *     (component, state, props, endpoint, validation, submit …)
  *
- * İçerik DEĞİŞMEZ: cümle yeniden yazma, ekleme/çıkarma yok. Guardrail:
- * model çıktısı uzunlukça ±%15'ten fazla sapar veya görsel embed sayısı
- * değişirse çıktı OTOMATİK REDDEDİLİR ve orijinal korunur — stil denetimi
- * hiçbir koşulda içerik kaybettiremez.
+ * İçerik DEĞİŞMEZ: cümle yeniden yazma, ekleme/çıkarma yok. Guardrail (biçimsel
+ * geçiş anlam bozamaz):
+ *   - uzunluk ±%15 içinde olmalı,
+ *   - görsel embed URL KÜMESİ birebir korunmalı (sayı değil KÜME — yanlış
+ *     ekrana işaret eden path değişimi de yakalanır),
+ *   - gömülü (inline) SAYILAR korunmalı ("50 karakter" → "5 karakter" gibi
+ *     olgusal sapmayı yakalar; satır-başı liste numaraları hariç — onları
+ *     yeniden numaralandırmak meşru),
+ *   - POLARİTE terimlerinin sayısı korunmalı ("zorunlu"↔"opsiyonel",
+ *     "değil"/"yok" gibi anlam-çeviren kelimeler eklenip/çıkarılamaz).
+ * Herhangi biri ihlal → çıktı OTOMATİK REDDEDİLİR, orijinal korunur.
  */
 
 import { callClaude, MODEL_FAST } from "../llm/claudeClient";
@@ -37,8 +44,47 @@ Yalnız düzeltilmiş bölümü döndür (açıklama/önsöz yok):
 
 `;
 
-function imageCount(md: string): number {
-  return (md.match(/!\[/g) ?? []).length;
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Görsel embed URL kümesi (sıralı) — sayı değil KÜME korunur ki bir görselin
+ *  path'i başka bir görselinkiyle değiştirilse (yanlış ekran) yakalansın. */
+function imageUrls(md: string): string[] {
+  const urls: string[] = [];
+  const re = /!\[[^\]]*\]\(([^)]+)\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(md))) urls.push((m[1] ?? "").trim());
+  return urls.sort();
+}
+
+/** Gömülü sayılar — satır-başı liste işaretçileri (1. / 2)) HARİÇ (styleLint
+ *  bunları yeniden numaralandırabilir). "50 karakter"→"5 karakter" yakalanır. */
+function inlineNumbers(md: string): string[] {
+  const stripped = md.replace(/^\s*\d+[.)]\s+/gm, "");
+  return (stripped.match(/\d+/g) ?? []).sort();
+}
+
+/** Anlamı çeviren polarite kelimelerinin sayisal parmak izi — biçimsel
+ *  düzeltme bunları ekleyemez/çıkaramaz/çeviremez. */
+const POLARITY_TERMS = [
+  "zorunlu", "zorunludur", "opsiyonel", "opsiyoneldir", "gerekli", "gereksiz",
+  "değil", "yok", "aktif", "pasif", "evet", "hayır",
+];
+function polarityFingerprint(md: string): string {
+  const low = md.toLowerCase();
+  return POLARITY_TERMS
+    .map((t) => {
+      const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(t)}(?![\\p{L}\\p{N}])`, "giu");
+      return `${t}:${(low.match(re) ?? []).length}`;
+    })
+    .join(",");
+}
+
+function sameMultiset(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 /** Tek bölümü lint'ler; guardrail'i geçemezse orijinali döndürür. */
@@ -54,11 +100,17 @@ async function lintSection(
       maxTokens: Math.min(16000, Math.ceil(section.length / 3) + 1500),
     });
     const out = result.text.trim();
-    // Guardrail: uzunluk ±%15 içinde VE görsel sayısı birebir aynı olmalı —
-    // aksi halde model içerik kaybettirmiş/eklemiş demektir → reddet.
+    // Guardrail: biçimsel geçiş anlam bozamaz. Uzunluk + görsel-URL kümesi +
+    // inline sayılar + polarite terimleri korunmalı; ihlalde orijinali koru.
     const ratio = out.length / section.length;
-    if (ratio < 0.85 || ratio > 1.15 || imageCount(out) !== imageCount(section)) {
-      console.warn(`[styleLint] guardrail reddi (oran=${ratio.toFixed(2)}, görsel ${imageCount(section)}→${imageCount(out)}) — orijinal korundu`);
+    const imgOk = sameMultiset(imageUrls(out), imageUrls(section));
+    const numOk = sameMultiset(inlineNumbers(out), inlineNumbers(section));
+    const polOk = polarityFingerprint(out) === polarityFingerprint(section);
+    if (ratio < 0.85 || ratio > 1.15 || !imgOk || !numOk || !polOk) {
+      console.warn(
+        `[styleLint] guardrail reddi (oran=${ratio.toFixed(2)}, görselOK=${imgOk}, ` +
+        `sayıOK=${numOk}, polariteOK=${polOk}) — orijinal korundu`
+      );
       return { text: section, changed: false, inTok: result.inputTokens, outTok: result.outputTokens };
     }
     return {

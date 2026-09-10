@@ -80,3 +80,23 @@ describe("parseDocumentSections (dispatcher)", () => {
     expect(out[0]?.sourceType).toBe("process_analysis");
   });
 });
+
+describe("parseFlatTextSections — adım/yıl düzeltmesi (Faz 4)", () => {
+  it("Numaralı ADIM satırları (cümle gibi biten) başlık sayılmaz — prosedür parçalanmaz", () => {
+    const txt = [
+      "1. Ekle butonuna tıklayın.",
+      "2. Açılan formda Ad alanını doldurun.",
+      "3. Kaydet'e basın.",
+    ].join("\n");
+    const out = parseFlatTextSections(txt, "doc.txt");
+    expect(out).toHaveLength(1);
+    expect(out[0]?.title).toBe("Introduction");
+  });
+
+  it("Yıl/uzun sayıyla başlayan cümle (2024.) başlık sayılmaz", () => {
+    const txt = "2024. yılında sistem güncellendi ve yeni özellikler eklendi burada.";
+    const out = parseFlatTextSections(txt, "doc.txt");
+    expect(out).toHaveLength(1);
+    expect(out[0]?.title).toBe("Introduction");
+  });
+});

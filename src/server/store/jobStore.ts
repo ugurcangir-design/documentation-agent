@@ -17,6 +17,11 @@ export interface Job {
     message: string;
   };
   error?: string;
+  /** "Yumuşak" uyarılar — job başarıyla tamamlandı (completed) ama bir/daha
+   *  fazla doküman eksik/şüpheli olabilir (çıktı kesildi, kapsam ölçülemedi,
+   *  sekme üretilemedi, prompt yapılandırması eksik). Geriye dönük uyumlu:
+   *  eski job'larda undefined. */
+  warnings?: string[];
   /** Documentation job için kullanıcı tarafından seçilen ekran path'leri.
    *  Failed/cancelled job'larda "eksik ekranları tekrar üret" özelliği
    *  bunu kullanır: original screenPaths \ üretilmiş documents.screenPath

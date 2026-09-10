@@ -1,5 +1,5 @@
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
-import { callClaude, MODEL_QUALITY } from "../llm/claudeClient";
+import { callClaude, MODEL_QUALITY, type ClaudeImage } from "../llm/claudeClient";
 
 export interface SectionRegenerateResult {
   newContent: string;
@@ -50,12 +50,25 @@ export async function regenerateSection(params: {
   fullDocument: string;
   sectionHeading: string;
   instruction: string;
+  /** Ekran görselleri — verilirse model bölümü ekrandan (uydurmadan) yazar. */
+  mainImageBase64?: string;
+  mainImagePath?: string;
+  images?: ClaudeImage[];
 }): Promise<SectionRegenerateResult> {
   const { fullDocument, sectionHeading, instruction } = params;
 
   const sections = parseSections(fullDocument);
   const target = sections.find((s) => s.heading === sectionHeading);
   if (!target) throw new Error(`Bölüm bulunamadı: ${sectionHeading}`);
+
+  const hasImages = !!(params.mainImageBase64 || params.mainImagePath || (params.images && params.images.length > 0));
+  const antiFab = hasImages
+    ? `\n\n**UYDURMA YASAK:** Sana ekran görselleri verildi. Yalnız görselde
+gördüğünü yaz; görselde kanıtı olmayan davranış/alan/mesaj/değer EKLEME. UI
+metinlerini görseldeki yazımla BİREBİR kullan.`
+    : `\n\n**UYDURMA YASAK:** Dökümanda VEYA analistin talebinde açıkça
+bulunmayan bir davranış/alan/mesaj/değer EKLEME — mevcut içeriği koru,
+bilgi uydurma.`;
 
   const prompt = `Sen deneyimli bir teknik yazarsın. Mevcut bir dökümanın TEK bir bölümünü yeniden yazacaksın. Diğer bölümlere DOKUNMA.
 
@@ -73,13 +86,20 @@ ${target.text}
 \`\`\`
 
 # Analistin Talebi
-${instruction}
+${instruction}${antiFab}
 
 ---
 
 Sadece "${sectionHeading}" bölümünün yeni halini yaz. Başlığı da dahil et (\`${"#".repeat(target.level)} ${sectionHeading}\` ile başla). Başka bölüm yazma, açıklama ekleme — sadece bölümün yeni hali.`;
 
-  const result = await callClaude({ prompt, maxTokens: 2000, model: MODEL_QUALITY });
+  const result = await callClaude({
+    prompt,
+    maxTokens: 2000,
+    model: MODEL_QUALITY,
+    ...(params.mainImageBase64 ? { imageBase64: params.mainImageBase64 } : {}),
+    ...(params.mainImagePath ? { imagePath: params.mainImagePath } : {}),
+    ...(params.images && params.images.length > 0 ? { images: params.images } : {}),
+  });
 
   const lines = fullDocument.split("\n");
   const before = lines.slice(0, target.startLine);

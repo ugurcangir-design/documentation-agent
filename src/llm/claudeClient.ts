@@ -156,6 +156,39 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * CLI backend `--output-format json` çıktısında `stop_reason` alanını ÜRETMEZ
+ * (yalnız API verir). Bu yüzden `max_tokens` kesilmesi CLI modunda (pilot
+ * ekibin birincil modu) HİÇ algılanamıyordu → yarım doküman "tam" görünüp
+ * uyarısız teslim ediliyordu. Bu sezgisel, metnin YAPISAL bütünlüğünden
+ * kesilmeyi tahmin eder.
+ *
+ * Bilinçli KONSERVATİFtir — yanlış-pozitif kullanıcı güvenini aşındırır, o
+ * yüzden yalnız güçlü sinyallerde `true` döner:
+ *   1. Kapanmamış ``` kod bloğu (tek/tek olmayan fence sayısı).
+ *   2. Son satır cümle ortasında kesilmiş görünüyor (çok kelimeli bir satır
+ *      küçük harf veya virgülle bitiyor — tamamlanmış cümle noktalama ile biter).
+ * Tamamlanmış JSON (`}` ile biter), başlık (`#`), tablo satırı (`|`), liste
+ * maddesi (`-`/`*`/`+`) veya noktalama ile biten metin truncated SAYILMAZ.
+ */
+export function looksTruncated(text: string): boolean {
+  const t = text.trimEnd();
+  if (!t) return false; // boş metin farklı bir hata sınıfı — kesilme değil
+  // Kapanmamış kod bloğu → blok ortasında kesilmiş
+  const fences = (t.match(/```/g) ?? []).length;
+  if (fences % 2 !== 0) return true;
+  const lines = t.split("\n");
+  const last = (lines[lines.length - 1] ?? "").trim();
+  if (!last) return false;
+  // Yapısal satırlar noktalama olmadan meşru biter → kesilme sayma
+  if (/^[#>|*+\-]/.test(last)) return false; // başlık/blockquote/tablo/liste/hr
+  if (/[)}\]”"'.!?:;…]$/u.test(last)) return false; // düzgün sonlandırıcı (JSON `}` dahil)
+  // Çok kelimeli bir satır küçük harf veya virgülle bitiyorsa → cümle ortası kesme
+  const words = last.split(/\s+/).filter(Boolean);
+  if (words.length >= 6 && /[\p{Ll},]$/u.test(last)) return true;
+  return false;
+}
+
 /** Bilinen sırları (APP_PASSWORD) metinden maskeler — yalnız debug prompt
  *  dökümü içindir. Şifre canlı uygulama (MCP) prompt'una gömülür; düz metin
  *  log dosyasına yazılmasın. Boş/kısa değerler maskelenmez (yanlış-pozitif
@@ -489,14 +522,20 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
           reject(new Error(friendlyCliError(out, err, code)));
           return;
         }
-        const truncated = parsed.stop_reason === "max_tokens";
+        const rawText = parsed.result ?? out.trim();
+        // CLI `stop_reason` vermediğinden yalnız o alan yoksa yapısal sezgiye
+        // düş (varsa ona güven). Böylece API modu davranışı değişmez.
+        const stopTrunc = parsed.stop_reason === "max_tokens";
+        const heuristicTrunc = parsed.stop_reason == null && looksTruncated(rawText);
+        const truncated = stopTrunc || heuristicTrunc;
         if (truncated) {
           console.warn(
-            `[claude] ÇIKTI KESİLDİ (CLI): stop_reason=max_tokens. Üretilen doküman yarım kalmış olabilir.`
+            `[claude] ÇIKTI KESİLDİ (CLI${heuristicTrunc && !stopTrunc ? ", yapısal sezgi" : ""}): ` +
+            `Üretilen doküman yarım kalmış olabilir.`
           );
         }
         const cliResult: ClaudeResult = {
-          text: parsed.result ?? out.trim(),
+          text: rawText,
           inputTokens: parsed.usage?.input_tokens ?? 0,
           outputTokens: parsed.usage?.output_tokens ?? 0,
           cacheReadTokens: parsed.usage?.cache_read_input_tokens ?? 0,

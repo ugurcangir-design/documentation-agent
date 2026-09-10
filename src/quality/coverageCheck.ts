@@ -6,12 +6,19 @@
  */
 
 import type { UIElement } from "../types/screen";
+import { buildTokenRegex } from "./confidenceScorer";
 
 export interface CoverageReport {
   totalElements: number;
   coveredElements: number;
   coveragePct: number;
   missing: string[];
+  /** LLM-judge (verifiedCoverage) çalıştı VE başarılı oldu mu?
+   *  - undefined: judge hiç çağrılmadı (COVERAGE_LLM_JUDGE=false → beklenen)
+   *  - true: judge doğruladı
+   *  - false: judge çağrılması gerekiyordu ama BAŞARISIZ oldu (ham coverage'a
+   *    düşüldü) → kapsam güvenilir değil, kullanıcıya bildirilmeli. */
+  verified?: boolean;
 }
 
 /**
@@ -28,28 +35,60 @@ function normalize(s: string): string {
     .trim();
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
- * Is the element's label "covered" anywhere in the body? We accept:
- *  - exact normalized label match
- *  - any 2+ consecutive significant tokens from the label (length≥3)
+ * Bir kelime dizisinin (phrase) gövdede KELİME SINIRLARIYLA, ardışık ve
+ * Türkçe ek-toleransıyla geçip geçmediğini denetler. Örn. ["yeni","kayıt"]
+ * → "yeni kayıt formu" ✓, "yenileme kaydı" ✗ (sınır), "karakter" içindeki
+ * "ara" ✗ (lookbehind). Substring `includes`'in yanlış-pozitiflerini
+ * (ör. "Ara" → "kArAkter", "Ekle" → "bEKLEnen") eler.
+ */
+function phraseMatches(bodyN: string, tokens: string[]): boolean {
+  if (tokens.length === 0) return false;
+  // Her token'a suffix toleransı (Türkçe çekim), aralarında whitespace,
+  // baş/son kelime sınırı. buildTokenRegex ile aynı Unicode-aware kalıp.
+  const inner = tokens
+    .map((t) => `${escapeRegExp(t)}[\\p{L}\\p{N}]{0,8}`)
+    .join("\\s+");
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])${inner}(?![\\p{L}\\p{N}])`, "iu");
+  return re.test(bodyN);
+}
+
+/**
+ * Is the element's label "covered" anywhere in the body? Kelime-sınırlı,
+ * Türkçe ek-toleranslı eşleşme (substring DEĞİL — substring "Ara" etiketini
+ * "karakter" içinde bulup sahte coverage üretiyordu). Kabul kriterleri:
+ *  - Etiketin tüm anlamlı token'ları ardışık, kelime-sınırlı geçiyorsa
+ *  - VEYA etiketten herhangi 2 ardışık token kelime-sınırlı geçiyorsa
+ *  - Tek kelimeli etikette o token kelime-sınırlı (ek-toleranslı) geçiyorsa
  */
 export function isCovered(label: string, body: string): boolean {
   const labelN = normalize(label);
   if (!labelN) return true; // empty label — trivially covered
   const bodyN = normalize(body);
 
-  if (bodyN.includes(labelN)) return true;
-
-  // 2-gram fallback: any pair of consecutive ≥3-char tokens from the
-  // label appearing in the body counts as coverage. Handles cases like
-  // 'Add Manual Event' → body has 'manuel event ekleme'.
   const tokens = labelN.split(" ").filter((t) => t.length >= 3);
-  for (let i = 0; i < tokens.length - 1; i++) {
-    const pair = `${tokens[i]} ${tokens[i + 1]}`;
-    if (bodyN.includes(pair)) return true;
+  if (tokens.length === 0) {
+    // Etiket yalnızca çok kısa token'lardan oluşuyor (ör. "OK", "No") —
+    // tüm etiketi kelime-sınırıyla ara (ek-tolerans yok, kısa token gürültüsü).
+    const shortToks = labelN.split(" ").filter(Boolean);
+    return shortToks.length > 0 && phraseMatches(bodyN, shortToks);
   }
-  // Single-token fallback ONLY if label is one word — avoids false positives
-  if (tokens.length === 1 && bodyN.includes(tokens[0]!)) return true;
+
+  // Tüm anlamlı token'lar ardışık (tam etiket)
+  if (phraseMatches(bodyN, tokens)) return true;
+
+  // 2-gram fallback: herhangi ardışık ikili (ör. 'Add Manual Event' →
+  // 'manuel event ekleme' içinde 'manuel event').
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (phraseMatches(bodyN, [tokens[i]!, tokens[i + 1]!])) return true;
+  }
+
+  // Tek kelimeli etiket → kelime-sınırlı (ek-toleranslı) tekli eşleşme
+  if (tokens.length === 1 && buildTokenRegex(tokens[0]!).test(bodyN)) return true;
   return false;
 }
 

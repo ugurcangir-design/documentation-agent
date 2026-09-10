@@ -32,7 +32,7 @@ vi.mock("child_process", () => ({
   }),
 }));
 
-import { isPromptTooLong, isTransientError, friendlyCliError, isUsageLimitError, MODEL_QUALITY, MODEL_FAST, callClaude, redactSecrets } from "../src/llm/claudeClient";
+import { isPromptTooLong, isTransientError, friendlyCliError, isUsageLimitError, MODEL_QUALITY, MODEL_FAST, callClaude, redactSecrets, looksTruncated } from "../src/llm/claudeClient";
 
 describe("redactSecrets — debug prompt dökümünde şifre sızmaz", () => {
   const prev = process.env.APP_PASSWORD;
@@ -209,5 +209,43 @@ describe("callClaude (CLI backend) — MCP spawn argümanları", () => {
     expect(pathVal.split(":")[0]).toBe("/custom/nvm/bin"); // en başta
     // Yaygın fallback dizinleri PATH'in sonunda bulunur.
     expect(pathVal).toContain("/opt/homebrew/bin");
+  });
+});
+
+describe("looksTruncated — CLI yapısal kesilme sezgisi (stop_reason yok)", () => {
+  it("cümle ortasında kesilmiş çok-kelimeli metni truncated sayar", () => {
+    expect(looksTruncated(
+      "## Adım Adım Kullanım\n\nBu ekranda kullanıcı yeni bir kayıt oluşturmak için önce"
+    )).toBe(true);
+  });
+
+  it("virgülle biten çok-kelimeli satırı truncated sayar", () => {
+    expect(looksTruncated(
+      "Filtre uygulamak için önce alanı seçin, ardından değeri girin ve son olarak,"
+    )).toBe(true);
+  });
+
+  it("kapanmamış kod bloğunu truncated sayar", () => {
+    expect(looksTruncated("Örnek:\n```json\n{ \"ad\": \"Örnek\"")).toBe(true);
+  });
+
+  it("noktalama ile biten tamamlanmış metni truncated SAYMAZ", () => {
+    expect(looksTruncated(
+      "Bu ekran siparişleri listeler. Filtreleri kullanarak arama yapabilirsiniz."
+    )).toBe(false);
+  });
+
+  it("tamamlanmış JSON (`}`) truncated SAYILMAZ", () => {
+    expect(looksTruncated('{\n  "screenTitle": "Siparişler",\n  "uiElements": []\n}')).toBe(false);
+  });
+
+  it("başlık / tablo satırı / liste maddesi ile biten metni truncated SAYMAZ", () => {
+    expect(looksTruncated("İçerik...\n\n### Sık Sorular ve İpuçları")).toBe(false);
+    expect(looksTruncated("| Kolon | Açıklama |\n| --- | --- |\n| Ad | Kullanıcı adı |")).toBe(false);
+    expect(looksTruncated("Filtreler:\n- Duruma göre filtrele")).toBe(false);
+  });
+
+  it("boş metni truncated SAYMAZ (farklı hata sınıfı)", () => {
+    expect(looksTruncated("   \n  ")).toBe(false);
   });
 });

@@ -18,8 +18,15 @@ import { prepareDocumentChunks } from "../retrieval/contextBudget";
  * everything past the guaranteed slots, and irrelevant sections (score
  * 0) were already dropped by `searchDocumentSections`.
  */
-function balanceBySourceType(ranked: RankedDocumentSection[]): RankedDocumentSection[] {
+export function balanceBySourceType(ranked: RankedDocumentSection[]): RankedDocumentSection[] {
   const GUARANTEED_PER_TYPE = 2;
+  // Garanti koltuğu YALNIZ anlamlı skorlu bölümlere verilir. Eski davranış:
+  // bir tipin en iyi 2'si KOŞULSUZ öne alınıyordu → tek gevşek token isabetiyle
+  // score≈1 alan, bu ekranla ALAKASIZ bir Jira/Confluence bölümü de garanti
+  // koltuğa girip yanlış bilgi besleyebiliyordu. Eşik: en yüksek skorun %20'si
+  // (adaptif) — gerçekten ilgili çok-tipli eşleşmeler bunun çok üstündedir.
+  const topScore = ranked[0]?.score ?? 0;
+  const guaranteedThreshold = topScore * 0.2;
 
   const byType = new Map<string, RankedDocumentSection[]>();
   for (const r of ranked) {
@@ -33,12 +40,11 @@ function balanceBySourceType(ranked: RankedDocumentSection[]): RankedDocumentSec
   const out: RankedDocumentSection[] = [];
   const seen = new Set<RankedDocumentSection>();
 
-  // Round 1 — top-N of each type, so each reference kind is guaranteed
-  // a seat at the table.
+  // Round 1 — her tipin en iyi N'i, ANCAK eşik üstündeyse (alakasızı zorlama).
   for (let i = 0; i < GUARANTEED_PER_TYPE; i++) {
     for (const list of byType.values()) {
       const item = list[i];
-      if (item && !seen.has(item)) {
+      if (item && !seen.has(item) && item.score >= guaranteedThreshold) {
         out.push(item);
         seen.add(item);
       }

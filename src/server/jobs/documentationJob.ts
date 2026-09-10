@@ -16,6 +16,7 @@ import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
 import { loadJobContext } from "./contextLoader";
 import { processScreen } from "./screenProcessor";
+import { checkPromptConfigHealth } from "../../config/promptConfig";
 
 const CONCURRENCY = 3;
 
@@ -64,13 +65,32 @@ export async function runDocumentationJob(
 
   console.log(`[docjob ${jobId}] starting with ${selectedScreenPaths.length} paths`);
 
+  // Prompt yapılandırması sağlığı — job-stable, bir kez denetlenir. Bozuksa
+  // kritik guardrail'ler ("uydurma yasak") ve çıktı yapısı devrede olmayabilir;
+  // canlı akışa bir kez uyarı bas, her dokümana da banner düşür (screenProcessor).
+  const cfgHealth = checkPromptConfigHealth();
+  const promptConfigProblems = cfgHealth.ok ? [] : cfgHealth.problems;
+  if (!cfgHealth.ok) {
+    console.warn(`[docjob ${jobId}] prompt yapılandırması eksik: ${cfgHealth.problems.join("; ")}`);
+    emitJobEvent(jobId, {
+      type: "error",
+      message: `⚠️ Prompt yapılandırması eksik — üretilen dokümanların kalitesi düşebilir: ${cfgHealth.problems.join("; ")}`,
+      current: 0,
+      total,
+    });
+  }
+
   // Paralel worker'lar arasında ortak completed sayacı.
   let completed = 0;
   const getCompleted = () => completed;
   const incCompleted = () => ++completed;
 
+  // Ekran-başı "yumuşak" uyarılar (doküman üretildi ama eksik/şüpheli olabilir).
+  // Worker'lar tek-thread event-loop'ta çalıştığından push yarışsızdır.
+  const allWarnings: string[] = [];
+
   await processInParallel(selectedScreenPaths, CONCURRENCY, async (screenPath) => {
-    await processScreen({
+    const w = await processScreen({
       jobId,
       screenPath,
       allSections,
@@ -79,7 +99,9 @@ export async function runDocumentationJob(
       total,
       getCompleted,
       incCompleted,
+      promptConfigProblems,
     });
+    if (w.length > 0) allWarnings.push(...w);
   });
 
   const wasCancelled = jobCancellation.isCancelled(jobId);
@@ -121,11 +143,20 @@ export async function runDocumentationJob(
     message = "Tüm dökümanlar oluşturuldu";
   }
 
+  // "Yumuşak" uyarılar: doküman üretildi ama eksik/şüpheli olabilir. Job
+  // 'completed' kalsa da terminal mesaja net bir özet ekle (sessiz başarı
+  // yerine görünür "tamamlandı ama N uyarı") ve job'a kaydet.
+  if (status === "completed" && allWarnings.length > 0) {
+    const shown = allWarnings.slice(0, 3).join(" · ");
+    message = `${message} — ⚠️ ${allWarnings.length} uyarı: ${shown}${allWarnings.length > 3 ? " …" : ""}`;
+  }
+
   jobStore.update(jobId, {
     status,
     completedAt: new Date().toISOString(),
     progress: { current: completed, total, message },
     ...(error ? { error } : {}),
+    ...(allWarnings.length > 0 ? { warnings: allWarnings } : {}),
   });
   emitJobEvent(jobId, { type: eventType, message, current: completed, total });
 }

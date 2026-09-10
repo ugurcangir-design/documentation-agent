@@ -44,10 +44,14 @@ export function buildTrace(t: TraceInputs): string {
     `- **API endpoint** (${context.relatedEndpoints.length}): ${context.relatedEndpoints.slice(0, 5).map((e) => `\`${e.endpoint.method} ${e.endpoint.path}\``).join(", ") || "(yok)"}`,
     `- **Şablon** (${usedTemplates.length}): ${usedTemplates.join(", ") || "(yok)"}`,
     `- **Ekran state** (${stateCount + 1}): 1 ana + ${stateCount} test user simülasyon görüntüsü`,
-    `- **UI öğesi kapsamı**: ${coverage.coveragePct}% (${coverage.coveredElements}/${coverage.totalElements})` +
-      (coverage.missing.length > 0
-        ? ` · _Eksik: ${coverage.missing.slice(0, 5).join(", ")}${coverage.missing.length > 5 ? "…" : ""}_`
-        : ""),
+    // total=0 → hiç doğrulanacak UI öğesi yok. "%100" YANILTICIdır (her şey
+    // kapsandı izlenimi verir); gerçek durum "ölçülemedi"dir.
+    coverage.totalElements === 0
+      ? `- **UI öğesi kapsamı**: _ölçülemedi_ (analizde doğrulanacak UI öğesi bulunamadı — içeriği elle kontrol edin)`
+      : `- **UI öğesi kapsamı**: ${coverage.coveragePct}% (${coverage.coveredElements}/${coverage.totalElements})` +
+        (coverage.missing.length > 0
+          ? ` · _Eksik: ${coverage.missing.slice(0, 5).join(", ")}${coverage.missing.length > 5 ? "…" : ""}_`
+          : ""),
   ];
 
   if (fixUpAdded > 0) {

@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 
 import { documentStore, type DocumentStatus } from "../store/documentStore";
 import { parseSections, regenerateSection } from "../../generator/sectionRegenerator";
+import { screenStore } from "../store/screenStore";
 
 const router = Router();
 
@@ -109,11 +110,21 @@ router.post("/:id/regenerate-section", async (req: Request, res: Response) => {
     return;
   }
 
+  // Bölümü ekrandan (uydurmadan) yeniden yazabilmesi için ekran görsellerini
+  // çöz: ana ekran görüntüsü + varsa state görüntüleri (callClaude path'ten okur).
+  const storedScreen = doc.screenPath ? screenStore.getByPath(doc.screenPath) : undefined;
+  const stateImages = (storedScreen?.states ?? [])
+    .slice(0, 10)
+    .map((s) => ({ path: s.screenshotPath, label: s.label }));
+  const mainImagePath = storedScreen?.screenshotPath ?? doc.screenshotPath;
+
   try {
     const result = await regenerateSection({
       fullDocument: doc.userManualContent,
       sectionHeading,
       instruction,
+      ...(mainImagePath ? { mainImagePath } : {}),
+      ...(stateImages.length > 0 ? { images: stateImages } : {}),
     });
 
     const updated = documentStore.update(

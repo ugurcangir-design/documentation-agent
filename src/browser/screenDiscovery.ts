@@ -142,6 +142,29 @@ async function discoverAtDepth(
 
     discovered.set(path, screen);
 
+    // Tek-ekran modu (maxDepth=0): nav linkleri TAKİP EDİLMEZ. 10 ekranlık bir
+    // uygulamada kullanıcı yalnız 1 ekranın belgelendiğini fark etmeyebilir.
+    // Linkleri say (takip etme) ve varsa görünür uyarı ver — sessiz eksiklik yok.
+    if (depth === 0 && depth >= maxDepth) {
+      try {
+        const navLinks = await extractNavLinks(page, baseUrl);
+        const otherPaths = new Set<string>();
+        for (const l of navLinks) {
+          try {
+            const p = new URL(l).pathname;
+            if (p !== path) otherPaths.add(p);
+          } catch { /* geçersiz URL — atla */ }
+        }
+        if (otherPaths.size > 0) {
+          options.onProgress?.(
+            `⚠️ Tek ekran modu: bu ekranda ${otherPaths.size} başka ekran linki bulundu ama TARANMADI ` +
+            `(yalnız bu ekran belgelenecek). Diğer ekranlar için tarama derinliğini artırın veya ` +
+            `URL'lerini 'Ek URL Ekle' alanından girin.`
+          );
+        }
+      } catch { /* linkler sayılamadı — sessiz geç (kritik değil) */ }
+    }
+
     if (depth < maxDepth) {
       const links = await extractNavLinks(page, baseUrl);
 

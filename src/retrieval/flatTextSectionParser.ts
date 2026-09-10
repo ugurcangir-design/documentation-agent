@@ -20,7 +20,11 @@
 import type { DocumentSection, DocumentSourceType } from "../types/documentSource";
 import { parseBrdSections } from "./brdSectionParser";
 
-const NUMBERED_HEADING = /^\s*\d+(?:\.\d+)*\.?\s+\S/;
+// Numbered outline: her segment 1-2 basamak ("1.", "1.1.", "1.2.3.").
+// KRİTİK: segment'ler `\d{1,2}` — "2024. yılında ..." gibi yıl/uzun sayıyla
+// başlayan CÜMLELER (4 basamak) yanlışlıkla başlık sayılmasın.
+const NUMBERED_HEADING = /^\s*\d{1,2}(?:\.\d{1,2})*\.?\s+\S/;
+const NUMBERED_PREFIX = /^\s*\d{1,2}(?:\.\d{1,2})*\.?\s+/;
 // Tek-satır ALL-CAPS başlık (Türkçe + İngilizce harf seti). Min 3 char,
 // max 40. Karışık küçük harf yoksa heading sayılır.
 const UPPERCASE_HEADING = /^[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ0-9\s&\-/().]{2,39}$/;
@@ -28,13 +32,19 @@ const UPPERCASE_HEADING = /^[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ0-9\s&\-/().]{2,39}
 function isHeading(line: string): boolean {
   const t = line.trim();
   if (t.length === 0 || t.length > 100) return false;
-  // Cümle ortası gibi görünüyor (noktalama) → heading değil
-  if (/[.,:;](?:\s.*)?$/.test(t)) {
-    // Numbered heading'lerde `1.1.` gibi nokta var; özel istisna:
-    // numbered pattern eşleşiyorsa noktalama testini atla.
-    if (!NUMBERED_HEADING.test(t)) return false;
+
+  if (NUMBERED_HEADING.test(t)) {
+    // Numaralı başlık MI yoksa numaralı ADIM/liste maddesi Mİ? Başlıklar kısa
+    // ad öbeğidir; adımlar cümledir → numara sonrası metin cümle noktalaması
+    // ile bitiyorsa (". ! ? : ; ,") bu bir adım/liste maddesi, başlık DEĞİL
+    // (aksi halde numaralı prosedür adımları ayrı bölümlere parçalanıyordu).
+    const rest = t.replace(NUMBERED_PREFIX, "").trim();
+    if (/[.,:;!?]$/.test(rest)) return false;
+    return true;
   }
-  if (NUMBERED_HEADING.test(t)) return true;
+
+  // Numaralı değil: cümle ortası/sonu gibi görünüyorsa (noktalama) heading değil.
+  if (/[.,:;](?:\s.*)?$/.test(t)) return false;
   if (t.length <= 40 && UPPERCASE_HEADING.test(t)) return true;
   return false;
 }

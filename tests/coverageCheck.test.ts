@@ -49,3 +49,18 @@ describe("computeCoverage", () => {
     expect(r.missing).toEqual(["Sil (button)"]);
   });
 });
+
+describe("isCovered — kelime sınırı (Faz 2 regresyon)", () => {
+  it("Etiketi başka bir kelimenin İÇİNDE bulmaz (substring yanlış-pozitif önleme)", () => {
+    expect(isCovered("Ara", "Bu alanda karakter sayısı gösterilir.")).toBe(false);
+    expect(isCovered("Ekle", "Beklenen değer alanı boş bırakılamaz.")).toBe(false);
+    expect(isCovered("Sil", "Kesinti listesi görüntülenir.")).toBe(false);
+  });
+  it("Etiketi TAM kelime olarak geçince kapsar", () => {
+    expect(isCovered("Ara", "Ara butonuna basın.")).toBe(true);
+  });
+  it("Türkçe çekim eklerini tolere eder", () => {
+    expect(isCovered("Filtre", "Filtreler panelden uygulanır.")).toBe(true);
+    expect(isCovered("Kaydet", "Kaydetme işlemi tamamlanır.")).toBe(true);
+  });
+});

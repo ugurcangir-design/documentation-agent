@@ -9,7 +9,7 @@
  */
 
 import type { UIElement } from "../types/screen";
-import { callClaude, MODEL_QUALITY } from "../llm/claudeClient";
+import { callClaude, MODEL_QUALITY, type ClaudeImage } from "../llm/claudeClient";
 import { cleanGeneratedMarkdown } from "../quality/markdownCleaner";
 
 export interface FixUpResult {
@@ -26,6 +26,13 @@ interface FixUpInput {
   missing: string[];               // formatted labels e.g. "Sayfalama (other)"
   uiElementsMissing: UIElement[];  // full analyzer entries for missing items
   screenTitle: string;
+  /** Ekran görselleri (ana ekran + state'ler). KRİTİK: fix-up eskiden
+   *  GÖRSELSİZ çalışıyordu → model eksik öğeyi ekranı hiç görmeden, kısa
+   *  metin açıklamasından UYDURUYORDU (halüsinasyonun en açık noktası).
+   *  Artık ana üretimle aynı görsel kanıt + "UYDURMA YASAK" verilir. */
+  mainImageBase64?: string;
+  mainImagePath?: string;
+  images?: ClaudeImage[];
 }
 
 function buildPrompt(input: FixUpInput): string {
@@ -70,6 +77,13 @@ Yukarıdaki dökümanı **yeniden yaz**, ama:
 4. Mevcut 'Üretim Bilgisi' footer'ını kaldır (yenisi sonradan eklenecek)
 5. Doğal anlatım — envanter tablosu olarak değil, kullanıcı diliyle
 
+**UYDURMA YASAK (EN ÖNEMLİ):** Sana ekran görselleri verildi. Eksik öğeleri
+YALNIZ görsellerde gördüğün kadarıyla anlat. Görselde kanıtı olmayan bir
+davranış/alan/mesaj/değer/kısayol YAZMA. UI metinlerini (buton/alan/mesaj
+adları) görseldeki yazımla BİREBİR kullan. Bir öğeyi görselde göremiyorsan,
+adım/sonuç uydurmak yerine nötr ve kısa geç (ör. "**<ad>** öğesi bu ekranda
+yer alır") — sahte içerik eklemektense eksik bırak.
+
 Yalnızca güncellenmiş dökümanı döndür (Markdown). Açıklama, önsöz, sonsöz ekleme.`;
 }
 
@@ -78,6 +92,9 @@ export async function runCoverageFixUp(input: FixUpInput): Promise<FixUpResult> 
     prompt: buildPrompt(input),
     maxTokens: 6000,
     model: MODEL_QUALITY,
+    ...(input.mainImageBase64 ? { imageBase64: input.mainImageBase64 } : {}),
+    ...(input.mainImagePath ? { imagePath: input.mainImagePath } : {}),
+    ...(input.images && input.images.length > 0 ? { images: input.images } : {}),
   });
 
   // Strip any 'Üretim Bilgisi' footer the model might have copied —
