@@ -104,6 +104,36 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
     });
   }
 
+  async function deleteScreen(path: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("Bu keşfedilen ekranı silmek istiyor musunuz?")) return;
+    try {
+      await discovery.deleteScreen(path);
+      setScreens((prev) => prev.filter((s) => s.path !== path));
+      setSelected((prev) => {
+        const n = new Set(prev);
+        n.delete(path);
+        return n;
+      });
+      toast.show("Ekran silindi", "success");
+    } catch (err) {
+      toast.show((err as Error).message, "error");
+    }
+  }
+
+  async function clearAllScreens() {
+    if (!confirm(`Tüm ${screens.length} keşfedilen ekran silinecek. Emin misiniz?`)) return;
+    try {
+      await discovery.clearScreens();
+      setScreens([]);
+      setSelected(new Set());
+      toast.show("Tüm ekranlar temizlendi", "success");
+    } catch (err) {
+      toast.show((err as Error).message, "error");
+    }
+  }
+
   function addExtraUrl() {
     const url = extraUrl.trim();
     if (!url || extraUrls.includes(url)) return;
@@ -384,6 +414,13 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
               >
                 {selected.size === screens.length ? "Seçimi Kaldır" : "Tümünü Seç"}
               </button>
+              <button
+                onClick={clearAllScreens}
+                className="text-[12px] text-red-500 hover:text-red-600"
+                title="Tüm keşfedilen ekranları sil"
+              >
+                Tümünü Temizle
+              </button>
               <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                 {selected.size}/{screens.length}
               </span>
@@ -394,12 +431,21 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
             {screens.map((screen) => (
               <label
                 key={screen.path}
-                className={`flex gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                className={`group relative flex gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
                   selected.has(screen.path)
                     ? "border-blue-300 bg-blue-50/50"
                     : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                 }`}
               >
+                <button
+                  onClick={(e) => deleteScreen(screen.path, e)}
+                  title="Ekranı sil"
+                  className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-md flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                    <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </button>
                 <input
                   type="checkbox"
                   checked={selected.has(screen.path)}

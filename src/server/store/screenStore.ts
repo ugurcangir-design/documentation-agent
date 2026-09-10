@@ -47,6 +47,22 @@ export const screenStore = {
     save(screens);
   },
 
+  /** Tek bir keşfedilmiş ekranı path'ine göre siler. Döndürür: silindi mi. */
+  deleteByPath(screenPath: string): boolean {
+    const screens = load();
+    const remaining = screens.filter((s) => s.path !== screenPath);
+    if (remaining.length === screens.length) return false;
+    save(remaining);
+    return true;
+  },
+
+  /** Tüm keşfedilmiş ekranları temizler. Döndürür: kaç ekran silindi. */
+  clear(): number {
+    const n = load().length;
+    save([]);
+    return n;
+  },
+
   toDiscoveredScreen(
     s: StoredScreen
   ): import("../../types/screen").DiscoveredScreen {

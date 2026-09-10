@@ -67,6 +67,19 @@ export const discovery = {
 
   getScreens: () => request<StoredScreen[]>("/discovery/screens"),
 
+  /** Tek bir keşfedilmiş ekranı sil (path body'de — "/" içerdiği için). */
+  deleteScreen: (path: string) =>
+    request<{ ok: boolean; remaining: number }>("/discovery/screens/delete", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
+
+  /** Tüm keşfedilmiş ekranları temizle. */
+  clearScreens: () =>
+    request<{ ok: boolean; removed: number }>("/discovery/screens", {
+      method: "DELETE",
+    }),
+
   stream: (jobId: string) =>
     new EventSource(`${BASE}/discovery/${jobId}/stream`),
 };

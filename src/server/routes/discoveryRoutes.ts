@@ -37,6 +37,29 @@ router.get("/screens", (_req: Request, res: Response) => {
   res.json(screens);
 });
 
+// POST /api/discovery/screens/delete — tek ekranı sil (path body'de; ekran
+// path'leri "/" içerdiği için route param yerine body kullanılır). csrfGuard
+// X-DocAgent header ister (frontend lib/api.ts otomatik gönderir).
+router.post("/screens/delete", (req: Request, res: Response) => {
+  const path = (req.body?.path ?? "") as string;
+  if (!path) {
+    res.status(400).json({ error: "path gerekli" });
+    return;
+  }
+  const deleted = screenStore.deleteByPath(path);
+  if (!deleted) {
+    res.status(404).json({ error: "Ekran bulunamadı" });
+    return;
+  }
+  res.json({ ok: true, remaining: screenStore.getAll().length });
+});
+
+// DELETE /api/discovery/screens — tüm keşfedilmiş ekranları temizle.
+router.delete("/screens", (_req: Request, res: Response) => {
+  const removed = screenStore.clear();
+  res.json({ ok: true, removed });
+});
+
 // GET /api/discovery/:jobId/stream — SSE
 router.get("/:jobId/stream", (req: Request, res: Response) => {
   const jobId = req.params["jobId"] as string;

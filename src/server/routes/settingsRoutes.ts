@@ -55,6 +55,10 @@ function buildEnv(values: Record<string, string>): string {
       comment: "# Agent ayarları",
       keys: ["MAX_DISCOVERY_DEPTH", "PORT", "FIX_UP_THRESHOLD", "FIX_UP_MAX_PASSES", "DOC_LANGUAGE"],
     },
+    {
+      comment: "# Analist",
+      keys: ["ANALYST_NAME"],
+    },
   ];
 
   const lines: string[] = [];
@@ -118,6 +122,8 @@ const ALLOWED_SETTINGS_KEYS = new Set<string>([
   "TAB_GEN_CONCURRENCY", "CLAUDE_CLI_TIMEOUT_MS",
   "LIVE_APP_MCP_ENABLED", "LIVE_APP_MCP_TIMEOUT_MS",
   "ANNOTATE_STEPS", "REDACT_SENSITIVE", "STYLE_LINT",
+  // Analist kimliği (gizli değil — kılavuz/kayıtlarda görünen ad)
+  "ANALYST_NAME",
 ]);
 
 /** Newline injection guard — env value içinde \n veya \r olamaz; aksi

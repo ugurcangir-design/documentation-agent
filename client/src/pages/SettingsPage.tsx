@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 
 interface SettingsValues {
+  ANALYST_NAME: string;
   CLAUDE_BACKEND: string;
   CLAUDE_CLI_BIN: string;
   ANTHROPIC_API_KEY: string;
@@ -22,6 +23,7 @@ interface SettingsValues {
 }
 
 const DEFAULTS: SettingsValues = {
+  ANALYST_NAME: "",
   CLAUDE_BACKEND: "cli",
   CLAUDE_CLI_BIN: "claude",
   ANTHROPIC_API_KEY: "",
@@ -145,6 +147,9 @@ export default function SettingsPage() {
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+      // Analist adını anında sidebar'a yansıt (localStorage + event).
+      localStorage.setItem("docagent_analyst", values.ANALYST_NAME.trim());
+      window.dispatchEvent(new CustomEvent("docagent:analyst"));
       setConfigured(
         Object.entries(values)
           .filter(([, v]) => !!v && !v.includes("••"))
@@ -183,6 +188,21 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-6">
+        {/* Analist */}
+        <Section title="Analist" icon="👤">
+          <p className="text-xs text-gray-400 mb-3">
+            Adınız sol menüde ve üretim kayıtlarında görünür. Yalnız bu makinede
+            saklanır.
+          </p>
+          <Field
+            label="Analist Adı Soyadı"
+            value={values.ANALYST_NAME}
+            onChange={(v) => set("ANALYST_NAME", v)}
+            placeholder="Örn. Uğur Cangir"
+            configured={isConfigured("ANALYST_NAME")}
+          />
+        </Section>
+
         {/* Claude */}
         <Section title="Claude Backend" icon="🤖">
           <div>

@@ -320,6 +320,142 @@
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   JARVIS katmanı — fütüristik AI estetiği (koyu zemin + teal glow,
+   hareketli grid, camsı kartlar, neon vurgular). Semantic token'ların
+   ÜSTÜNE kurulur; ana işlevi/rengi bozmaz, yalnız görsel derinlik katar.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Uygulama arka planı: sabit, hareketli ince grid + yavaş nefes alan
+   radyal teal glow'lar. Tüm içeriğin arkasında (pointer-events:none). */
+.jarvis-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(60rem 60rem at 15% -10%, color-mix(in srgb, var(--c-accent) 10%, transparent), transparent 60%),
+    radial-gradient(50rem 50rem at 100% 110%, color-mix(in srgb, var(--c-blue) 8%, transparent), transparent 55%);
+}
+.jarvis-bg::before {
+  /* hareketli teknik grid */
+  content: "";
+  position: absolute;
+  inset: -2px;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--c-text) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--c-text) 4%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(120% 120% at 50% 0%, #000 30%, transparent 78%);
+  animation: jarvisGridPan 32s linear infinite;
+}
+.jarvis-bg::after {
+  /* yavaş dönen tek büyük glow orb */
+  content: "";
+  position: absolute;
+  width: 44rem;
+  height: 44rem;
+  top: -14rem;
+  right: -10rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--c-accent) 12%, transparent), transparent 62%);
+  filter: blur(30px);
+  animation: jarvisFloat 26s ease-in-out infinite;
+}
+@keyframes jarvisGridPan { to { background-position: 44px 44px; } }
+@keyframes jarvisFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: .9; }
+  50%      { transform: translate(-3rem, 3rem) scale(1.08); opacity: 1; }
+}
+
+/* Camsı (glass) yüzey — panel'in fütüristik varyantı. */
+.glass {
+  position: relative;
+  background: color-mix(in srgb, var(--c-surface) 78%, transparent);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--c-text) 4%, transparent) inset, var(--shadow-md);
+}
+/* üst kenarda ince aydınlık çizgi (holografik hat) */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c-accent) 55%, transparent), transparent);
+  opacity: .5;
+  border-radius: 10px 10px 0 0;
+}
+.glass-hover { transition: border-color .15s, transform .15s, box-shadow .15s; }
+.glass-hover:hover {
+  border-color: color-mix(in srgb, var(--c-accent) 45%, var(--c-border));
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-accent) 18%, transparent), 0 10px 30px rgba(0,0,0,.35);
+}
+
+/* Neon vurgu metni + glow */
+.neon { color: var(--c-accent); text-shadow: 0 0 14px color-mix(in srgb, var(--c-accent) 45%, transparent); }
+.glow-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent), 0 0 10px currentColor;
+}
+
+/* Uppercase bölüm etiketi (v2 deseni) */
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--c-text3);
+}
+
+/* İkon kutusu (stat/aksiyon kartları) */
+.icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--c-accent) 14%, transparent);
+  color: var(--c-accent);
+  border: 1px solid color-mix(in srgb, var(--c-accent) 25%, transparent);
+}
+
+/* JARVIS orb — küçük "sistem canlı" animasyonlu göstergesi (sidebar/dashboard) */
+.orb {
+  position: relative;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--c-accent) 90%, #fff), var(--c-accent2) 70%);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-accent) 12%, transparent), 0 0 18px color-mix(in srgb, var(--c-accent) 55%, transparent);
+}
+.orb::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--c-accent) 40%, transparent);
+  animation: orbPulse 2.4s ease-out infinite;
+}
+@keyframes orbPulse {
+  0%   { transform: scale(.8); opacity: .7; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* Nav grup collapse chevron */
+.chevron { transition: transform .18s ease; }
+.chevron.open { transform: rotate(90deg); }
+
+/* Yumuşak giriş animasyonu (sayfa/kart) */
+.fade-in { animation: fadeInUp .35s ease both; }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .jarvis-bg::before, .jarvis-bg::after, .orb::after, .fade-in { animation: none; }
+}
+
 /* ── Markdown preview ───────────────────────────────────────────────── */
 .markdown-preview h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 0.75rem; color: var(--c-text); }
 .markdown-preview h2 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: var(--c-text); }
