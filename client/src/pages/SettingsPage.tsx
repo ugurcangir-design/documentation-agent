@@ -177,17 +177,18 @@ export default function SettingsPage() {
   const isConfigured = (key: string) => configured.includes(key);
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Ayarlar</h1>
-        <p className="text-gray-500 mt-1">
+    <div className="p-7 max-w-6xl mx-auto fade-in">
+      <div className="mb-6">
+        <h1 className="text-[23px] font-semibold text-fg tracking-tight">Ayarlar</h1>
+        <p className="text-fg3 text-[13px] mt-0.5">
           API anahtarlarını ve bağlantı bilgilerini girin. Değerler{" "}
-          <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">.env</code>{" "}
+          <code className="text-[11px] bg-surface2 border border-line px-1.5 py-0.5 rounded font-mono">.env</code>{" "}
           dosyasına kaydedilir.
         </p>
       </div>
 
-      <div className="space-y-6">
+      {/* Masonry: geniş ekranda kartlar iki sütuna akar, boşluk bırakmaz. */}
+      <div className="columns-1 lg:columns-2 gap-5">
         {/* Analist */}
         <Section title="Analist" icon="👤">
           <p className="text-xs text-gray-400 mb-3">
@@ -320,8 +321,11 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <div className="pt-2 border-t border-gray-100 space-y-2">
-            <p className="text-xs font-medium text-gray-500">Keşif ve görsel seçenekleri</p>
+          <details className="pt-2 border-t border-line/60">
+            <summary className="text-[12px] font-medium text-fg2 cursor-pointer hover:text-fg select-none py-1">
+              Gelişmiş keşif ve görsel seçenekleri
+            </summary>
+            <div className="space-y-2 pt-2">
             <Toggle
               checked={values.ANNOTATE_STEPS !== "false"}
               onChange={(v) => set("ANNOTATE_STEPS", v ? "true" : "false")}
@@ -340,7 +344,8 @@ export default function SettingsPage() {
               label="Stil denetimi (yazım tutarlılığı düzeltmesi)"
               hint="Üretim sonrası ucuz bir denetimle UI adları kalınlaştırılır, adım numaraları düzeltilir, İngilizce jargon Türkçeleştirilir. İçerik değişmez; şüpheli düzeltme otomatik reddedilir."
             />
-          </div>
+            </div>
+          </details>
         </Section>
 
         {/* Canlı Uygulama Kanıtı (MCP) */}
@@ -596,8 +601,8 @@ function MaintenanceSection() {
   }
 
   return (
-    <div className="mt-8 bg-white rounded-xl border border-gray-200 p-6">
-      <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+    <div className="mt-6 glass rounded-xl p-5">
+      <h2 className="text-[13px] font-semibold text-fg mb-4 flex items-center gap-2">
         <span>🧹</span> Bakım
       </h2>
 
@@ -645,8 +650,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+    <div className="glass rounded-xl p-5 mb-5 break-inside-avoid">
+      <h2 className="text-[13px] font-semibold text-fg mb-4 flex items-center gap-2">
         <span>{icon}</span>
         {title}
       </h2>
