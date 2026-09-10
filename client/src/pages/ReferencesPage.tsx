@@ -197,7 +197,7 @@ export default function ReferencesPage() {
       {/* Confluence Tab */}
       {tab === "confluence" && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="glass rounded-xl p-5">
             <h3 className="text-[13px] font-semibold text-gray-700 mb-3">Confluence Sayfası Ekle</h3>
             <p className="text-[12px] text-gray-400 mb-3">
               Sayfa URL'sini girin. Agent döküman yazarken bu sayfanın içeriğini bağlam olarak kullanır.
@@ -221,7 +221,7 @@ export default function ReferencesPage() {
           </div>
 
           {refs.confluence.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="glass rounded-xl overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
@@ -263,7 +263,7 @@ export default function ReferencesPage() {
       {/* Swagger Tab */}
       {tab === "swagger" && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="glass rounded-xl p-5">
             <h3 className="text-[13px] font-semibold text-gray-700">BE Servisi Ekle / Güncelle (Swagger URL)</h3>
             <p className="text-[12px] text-gray-400 mt-0.5 mb-4">
               Swagger / OpenAPI spec URL'si. Endpoint listesi kılavuz üretiminde referans bağlam olarak kullanılır.
@@ -331,7 +331,7 @@ export default function ReferencesPage() {
           </div>
 
           {refs.swagger.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="glass rounded-xl overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
@@ -426,7 +426,7 @@ function DocUploadTab({
 }) {
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="glass rounded-xl p-5">
         <h3 className="text-[13px] font-semibold text-gray-700 mb-1">
           {isTemplate ? "Şablon Yükle" : "Referans Döküman Yükle"}
         </h3>
@@ -494,7 +494,7 @@ function DocUploadTab({
       </div>
 
       {refs.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="glass rounded-xl overflow-hidden">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
@@ -652,7 +652,7 @@ function SourceSection({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="glass rounded-xl p-5">
       <h3 className="text-[13px] font-semibold text-gray-700 mb-3">{title}</h3>
 
       {sources.length > 0 && (

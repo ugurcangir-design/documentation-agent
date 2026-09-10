@@ -279,7 +279,7 @@ export default function PromptsPage() {
 
 function Field({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="glass rounded-xl p-5">
       <div className="mb-3">
         <p className="text-[13px] font-semibold text-gray-800">{label}</p>
         {description && <p className="text-[12px] text-gray-400 mt-0.5">{description}</p>}

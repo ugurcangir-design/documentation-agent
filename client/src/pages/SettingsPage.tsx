@@ -504,36 +504,6 @@ export default function SettingsPage() {
               configured={isConfigured("CONFLUENCE_PARENT_PAGE_ID")}
             />
           </div>
-
-          <details className="mt-2">
-            <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
-              Eski API token yöntemi (OAuth yoksa fallback)
-            </summary>
-            <div className="mt-3 space-y-3 pl-3 border-l-2 border-gray-100">
-              <Field
-                label="Confluence URL"
-                value={values.CONFLUENCE_BASE_URL}
-                onChange={(v) => set("CONFLUENCE_BASE_URL", v)}
-                placeholder="https://sirket.atlassian.net"
-                configured={isConfigured("CONFLUENCE_BASE_URL")}
-              />
-              <Field
-                label="E-posta"
-                value={values.CONFLUENCE_EMAIL}
-                onChange={(v) => set("CONFLUENCE_EMAIL", v)}
-                placeholder="kullanici@sirket.com"
-                configured={isConfigured("CONFLUENCE_EMAIL")}
-              />
-              <Field
-                label="API Token"
-                value={values.CONFLUENCE_API_TOKEN}
-                onChange={(v) => set("CONFLUENCE_API_TOKEN", v)}
-                type="password"
-                placeholder="ATATT3x..."
-                configured={isConfigured("CONFLUENCE_API_TOKEN")}
-              />
-            </div>
-          </details>
         </Section>
       </div>
 

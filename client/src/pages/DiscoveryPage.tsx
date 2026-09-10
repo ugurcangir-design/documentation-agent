@@ -165,7 +165,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
       </div>
 
       {/* Pipeline steps */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="glass rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-[13px] font-semibold text-gray-700">İş Akışı</h2>
           <span className="text-[11px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-medium">
@@ -202,7 +202,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
       </div>
 
       {/* URL Config / Start card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="glass rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-[11px] font-semibold text-gray-400 tracking-wider uppercase">
@@ -290,7 +290,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
 
       {/* Discovery progress */}
       {discovering && discoveryJobId && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="glass rounded-xl p-5">
           <p className="text-[11px] font-semibold text-gray-400 tracking-wider uppercase mb-1">
             İlerleme — STEP 2/{STEPS.length}
           </p>
@@ -311,7 +311,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
       )}
 
       {/* Context filter */}
-      <div className="bg-white rounded-xl border border-gray-200">
+      <div className="glass rounded-xl">
         <button
           onClick={() => setContextOpen((v) => !v)}
           className="w-full flex items-center justify-between px-5 py-4"
@@ -394,7 +394,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
 
       {/* Screen grid */}
       {screens.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="glass rounded-xl p-5">
           <div className="flex items-start justify-between mb-4">
             <div>
               <p className="text-[11px] font-semibold text-gray-400 tracking-wider uppercase mb-0.5">

@@ -167,7 +167,7 @@ export default function HistoryPage() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="glass rounded-xl overflow-hidden">
         {filtered.length === 0 ? (
           <p className="px-4 py-10 text-center text-[13px] text-gray-400">Bu kategoride job yok.</p>
         ) : (

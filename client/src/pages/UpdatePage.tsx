@@ -117,7 +117,7 @@ export default function UpdatePage() {
       )}
 
       {/* Current version */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="glass rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-[14px] font-semibold text-gray-800">Mevcut Sürüm</h2>
           {info && (
@@ -168,7 +168,7 @@ export default function UpdatePage() {
 
       {/* Live log during update */}
       {updating && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="glass rounded-xl p-5">
           <h2 className="text-[13px] font-semibold text-gray-700 mb-3">İşlem Kaydı</h2>
           <div className="bg-gray-900 rounded-lg p-4 max-h-72 overflow-y-auto font-mono text-[11px] text-green-300 whitespace-pre-wrap">
             {log.length === 0 ? (
