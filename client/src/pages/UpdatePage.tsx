@@ -102,10 +102,10 @@ export default function UpdatePage() {
   }
 
   return (
-    <div className="p-7 space-y-5">
+    <div className="p-7 space-y-5 fade-in">
       <div>
-        <h1 className="text-[22px] font-semibold text-gray-900">Güncelleme</h1>
-        <p className="text-[13px] text-gray-400 mt-0.5">
+        <h1 className="text-[23px] font-semibold text-fg tracking-tight">Güncelleme</h1>
+        <p className="text-[13px] text-fg3 mt-0.5">
           GitHub'daki son değişiklikleri çekin. Güncelleme sonrası uygulama otomatik yeniden başlar.
         </p>
       </div>

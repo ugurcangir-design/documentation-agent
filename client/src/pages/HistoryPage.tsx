@@ -119,11 +119,11 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="p-7 space-y-5">
+    <div className="p-7 space-y-5 fade-in">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-[22px] font-semibold text-gray-900">Geçmiş</h1>
-          <p className="text-[13px] text-gray-400 mt-0.5">
+          <h1 className="text-[23px] font-semibold text-fg tracking-tight">Geçmiş</h1>
+          <p className="text-[13px] text-fg3 mt-0.5">
             Tüm keşif ve döküman üretimi job'larının kaydı.
           </p>
         </div>
