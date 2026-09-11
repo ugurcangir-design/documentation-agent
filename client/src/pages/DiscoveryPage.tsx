@@ -28,7 +28,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
   const [docJobLoading, setDocJobLoading] = useState(false);
   const [forceRegen, setForceRegen] = useState(false);
   const [appUrl, setAppUrl] = useState("");
-  const [contextOpen, setContextOpen] = useState(true);
+  const [contextOpen, setContextOpen] = useState(false);
   const [keywords, setKeywords] = useState(() => localStorage.getItem("ctx_keywords") ?? "");
   const [confluencePages, setConfluencePages] = useState(() => localStorage.getItem("ctx_confluence_pages") ?? "");
   const [contextSaved, setContextSaved] = useState(false);
@@ -56,7 +56,6 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
         .then((d: { values: { APP_BASE_URL?: string } }) => setAppUrl(d.values?.APP_BASE_URL ?? ""))
         .catch(() => {});
     loadConfig();
-    // Refresh when window regains focus (after user updates Settings in another tab)
     const onFocus = () => loadConfig();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -75,8 +74,6 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
     }
   }
 
-  // Keşif HATA ile bitti (sayfa yüklenemedi, bağlantı koptu, vb.) → durumu
-  // sıfırla ki ekran takılmasın ve kullanıcı yeniden başlatabilsin.
   function handleDiscoveryError(message: string) {
     setDiscovering(false);
     setDiscoveryJobId(null);
@@ -90,10 +87,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
       setScreens(s);
       setSelected(new Set(s.map((sc) => sc.path)));
       const totalStates = s.reduce((sum, sc) => sum + ((sc as { states?: unknown[] }).states?.length ?? 0), 0);
-      toast.show(
-        `✓ Keşif tamamlandı — ${s.length} ekran, ${totalStates} etkileşim state'i yakalandı`,
-        "success"
-      );
+      toast.show(`✓ Keşif tamamlandı — ${s.length} ekran, ${totalStates} etkileşim state'i yakalandı`, "success");
     });
   }
 
@@ -112,11 +106,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
     try {
       await discovery.deleteScreen(path);
       setScreens((prev) => prev.filter((s) => s.path !== path));
-      setSelected((prev) => {
-        const n = new Set(prev);
-        n.delete(path);
-        return n;
-      });
+      setSelected((prev) => { const n = new Set(prev); n.delete(path); return n; });
       toast.show("Ekran silindi", "success");
     } catch (err) {
       toast.show((err as Error).message, "error");
@@ -156,359 +146,219 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
   }
 
   return (
-    <div className="p-7 space-y-5">
-      {/* Page title */}
-      <div>
-        <h1 className="text-[22px] font-semibold text-gray-900">Ekran Keşfi</h1>
-        <p className="text-[13px] text-gray-400 mt-0.5">
-          Uygulamayı otomatik tara, ekranları seç ve Claude ile döküman oluştur.
+    <div className="p-7 fade-in">
+      <div className="mb-5">
+        <h1 className="text-[23px] font-semibold text-fg tracking-tight">Ekran Keşfi</h1>
+        <p className="text-[13px] text-fg3 mt-0.5">
+          Uygulamayı otomatik tara, ekranları seç ve Claude ile Türkçe kullanıcı kılavuzu üret.
         </p>
       </div>
 
-      {/* Pipeline steps */}
-      <div className="glass rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[13px] font-semibold text-gray-700">İş Akışı</h2>
-          <span className="text-[11px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-medium">
-            {STEPS.length} ADIM
-          </span>
-        </div>
-        <div className="flex items-center">
-          {STEPS.map((step, i) => {
-            const isActive = activeStep === step.n;
-            const isDone = activeStep > step.n;
-            return (
-              <div key={step.n} className="flex items-center flex-1 min-w-0">
-                <div className={`flex items-center gap-2 flex-1 min-w-0 ${isActive ? "opacity-100" : isDone ? "opacity-70" : "opacity-35"}`}>
-                  <div className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${
-                    isActive ? "bg-blue-600 text-white" :
-                    isDone ? "bg-green-500 text-white" :
-                    "bg-gray-100 text-gray-400"
-                  }`}>
-                    {isDone ? "✓" : step.n}
+      {/* İş akışı ekranı: SOLDA kurulum (dar/okunur), SAĞDA sonuç (galeri) */}
+      <div className="grid xl:grid-cols-[minmax(340px,380px)_minmax(0,1fr)] gap-5 items-start">
+
+        {/* ── SOL: Kurulum ─────────────────────────────────────── */}
+        <div className="space-y-5">
+          {/* Dikey adım göstergesi */}
+          <div className="glass rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-[12px] font-semibold text-fg2 uppercase tracking-wide">İş Akışı</h2>
+              <span className="text-[10px] font-mono text-fg3 bg-surface2 border border-line px-2 py-0.5 rounded-full">{STEPS.length} ADIM</span>
+            </div>
+            <div>
+              {STEPS.map((step, i) => {
+                const isActive = activeStep === step.n;
+                const isDone = activeStep > step.n;
+                const last = i === STEPS.length - 1;
+                return (
+                  <div key={step.n} className="flex gap-3 relative">
+                    {!last && <span className={`absolute left-[11px] top-6 -bottom-0 w-px ${isDone ? "bg-accent/50" : "bg-line"}`} />}
+                    <div className={`w-[23px] h-[23px] rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 z-10 ${
+                      isActive ? "bg-accent text-on-accent shadow-[0_0_10px_rgba(45,212,191,.55)]"
+                      : isDone ? "bg-green-500 text-white"
+                      : "bg-surface2 text-fg3 border border-line"
+                    }`}>{isDone ? "✓" : step.n}</div>
+                    <div className={last ? "" : "pb-5"}>
+                      <p className={`text-[13px] leading-[23px] ${isActive ? "text-fg font-semibold" : isDone ? "text-fg2" : "text-fg3"}`}>{step.label}</p>
+                    </div>
                   </div>
-                  <span className={`text-[13px] truncate ${isActive ? "text-gray-900 font-medium" : "text-gray-500"}`}>
-                    {step.label}
-                  </span>
-                </div>
-                {i < STEPS.length - 1 && (
-                  <svg className="mx-3 text-gray-200 flex-shrink-0" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M4 8h8M9 5l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Hedef uygulama + başlat */}
+          <div className="glass rounded-xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[13px] font-semibold text-fg">Hedef Uygulama</h3>
+              {appUrl ? (
+                <span className="text-[10px] text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">✓ hazır</span>
+              ) : (
+                <button onClick={() => window.dispatchEvent(new CustomEvent("navigate", { detail: "settings" }))} className="text-[12px] text-accent hover:underline">Ayarları aç →</button>
+              )}
+            </div>
+
+            {appUrl ? (
+              <div className="mb-4 flex items-center gap-2 bg-surface2 border border-line rounded-lg px-3 py-2">
+                <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+                <span className="text-[12px] text-fg2 truncate font-mono">{appUrl}</span>
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* URL Config / Start card */}
-      <div className="glass rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="text-[11px] font-semibold text-gray-400 tracking-wider uppercase">
-              Girdi — STEP 1/{STEPS.length}
-            </p>
-            <h3 className="text-[14px] font-semibold text-gray-800 mt-0.5">Hedef Uygulama</h3>
-          </div>
-          {appUrl ? (
-            <span className="text-[11px] text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
-              ✓ yapılandırıldı
-            </span>
-          ) : (
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent("navigate", { detail: "settings" }))}
-              className="text-[12px] text-blue-600 hover:text-blue-800 underline"
-            >
-              Ayarları aç →
-            </button>
-          )}
-        </div>
-
-        {appUrl && (
-          <div className="mb-4 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-            <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
-            <span className="text-[13px] text-gray-600 truncate">{appUrl}</span>
-          </div>
-        )}
-
-        {/* Extra URLs */}
-        <div className="mb-4">
-          <label className="block text-[12px] font-medium text-gray-600 mb-1.5">
-            Ek URL{" "}
-            <span className="text-gray-400 font-normal">(opsiyonel)</span>
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={extraUrl}
-              onChange={(e) => setExtraUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addExtraUrl()}
-              placeholder="https://uygulama.com/ekran-path"
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-            />
-            <button
-              onClick={addExtraUrl}
-              className="px-3 py-2 border border-gray-200 text-gray-600 text-[13px] rounded-lg hover:bg-gray-50"
-            >
-              Ekle
-            </button>
-          </div>
-          {extraUrls.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {extraUrls.map((u) => (
-                <span key={u} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[11px] px-2 py-0.5 rounded-full border border-blue-200">
-                  {u}
-                  <button onClick={() => setExtraUrls((p) => p.filter((x) => x !== u))} className="ml-0.5 hover:text-blue-900">×</button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={startDiscovery}
-            disabled={discovering || !appUrl}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-[13px] font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {discovering && (
-              <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <p className="mb-4 text-[12px] text-fg3">Önce Ayarlar'dan hedef uygulama URL'sini ve giriş bilgilerini girin.</p>
             )}
-            {discovering ? "Keşfediliyor..." : "Başlat"}
-          </button>
-          {deepAnalysis && (
-            <button
-              onClick={startDiscovery}
-              disabled={discovering || !appUrl}
-              className="flex items-center gap-2 px-4 py-2 border border-violet-300 text-violet-700 text-[13px] font-medium rounded-lg hover:bg-violet-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Derin Analizle Başlat
-            </button>
-          )}
-        </div>
-      </div>
 
-      {/* Discovery progress */}
-      {discovering && discoveryJobId && (
-        <div className="glass rounded-xl p-5">
-          <p className="text-[11px] font-semibold text-gray-400 tracking-wider uppercase mb-1">
-            İlerleme — STEP 2/{STEPS.length}
-          </p>
-          <h3 className="text-[14px] font-semibold text-gray-800 mb-4">Ekranlar Keşfediliyor</h3>
-          <ProgressView
-            streamUrl={`/api/discovery/${discoveryJobId}/stream`}
-            onComplete={handleDiscoveryComplete}
-            onError={handleDiscoveryError}
-            onPause={async () => { await jobControl.pause(discoveryJobId); }}
-            onResume={async () => { await jobControl.resume(discoveryJobId); }}
-            onCancel={async () => {
-              if (!confirm("Keşfi tamamen iptal etmek istiyor musun?")) return;
-              await jobControl.cancel(discoveryJobId);
-              setDiscovering(false);
-            }}
-          />
-        </div>
-      )}
-
-      {/* Context filter */}
-      <div className="glass rounded-xl">
-        <button
-          onClick={() => setContextOpen((v) => !v)}
-          className="w-full flex items-center justify-between px-5 py-4"
-        >
-          <div className="flex items-center gap-2.5">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-              <path d="M2 4h12M4 8h8M6 12h4" />
-            </svg>
-            <span className="text-[14px] font-semibold text-gray-800">Bağlam Filtresi</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {(keywords || confluencePages) && (
-              <span className="text-[11px] text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
-                aktif
-              </span>
+            <label className="block text-[12px] font-medium text-fg2 mb-1.5">Ek URL <span className="text-fg3 font-normal">(opsiyonel)</span></label>
+            <div className="flex gap-2">
+              <input type="url" value={extraUrl} onChange={(e) => setExtraUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addExtraUrl()}
+                placeholder="https://uygulama.com/ekran-path"
+                className="flex-1 min-w-0 border border-line rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-accent bg-surface2" />
+              <button onClick={addExtraUrl} className="px-3 py-2 border border-line text-fg2 text-[13px] rounded-lg hover:bg-surface2">Ekle</button>
+            </div>
+            {extraUrls.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {extraUrls.map((u) => (
+                  <span key={u} className="inline-flex items-center gap-1 bg-accent-soft text-accent text-[11px] px-2 py-0.5 rounded-full border border-accent/30">
+                    <span className="truncate max-w-[180px]">{u}</span>
+                    <button onClick={() => setExtraUrls((p) => p.filter((x) => x !== u))} className="hover:opacity-70">×</button>
+                  </span>
+                ))}
+              </div>
             )}
-            <svg className={`text-gray-400 transition-transform ${contextOpen ? "rotate-180" : ""}`} width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M4 6l4 4 4-4" />
-            </svg>
-          </div>
-        </button>
 
-        {contextOpen && (
-          <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-4">
-            <div>
-              <p className="text-[11px] font-semibold text-gray-500 tracking-widest uppercase mb-1">
-                Anahtar Kelimeler
-              </p>
-              <p className="text-[12px] text-gray-400 mb-2">
-                Confluence sayfalarında ve Jira task'larında bu kelimeleri ara
-              </p>
-              <input
-                type="text"
-                value={keywords}
-                onChange={(e) => setKeywords(e.target.value)}
-                placeholder="ör: ticket management, kullanıcı yönetimi"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-              />
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold text-gray-500 tracking-widest uppercase mb-1">
-                Confluence Sayfa Adları
-              </p>
-              <p className="text-[12px] text-gray-400 mb-2">
-                Boş bırakılırsa içerik bazlı aranır
-              </p>
-              <input
-                type="text"
-                value={confluencePages}
-                onChange={(e) => setConfluencePages(e.target.value)}
-                placeholder="ticket management"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-              />
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={saveContext}
-                className="px-4 py-1.5 bg-gray-900 text-white text-[13px] font-medium rounded-lg hover:bg-gray-800"
-              >
-                Kaydet
+            <div className="flex flex-wrap gap-2 mt-4">
+              <button onClick={startDiscovery} disabled={discovering || !appUrl}
+                className="flex items-center gap-2 btn btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+                {discovering && <span className="w-3.5 h-3.5 border-2 border-current/30 border-t-current rounded-full animate-spin" />}
+                {discovering ? "Keşfediliyor…" : "Başlat"}
               </button>
-              <button
-                onClick={() => {
-                  setKeywords("");
-                  setConfluencePages("");
-                  localStorage.removeItem("ctx_keywords");
-                  localStorage.removeItem("ctx_confluence_pages");
-                }}
-                className="px-4 py-1.5 border border-gray-200 text-gray-600 text-[13px] rounded-lg hover:bg-gray-50"
-              >
-                Temizle
-              </button>
-              {contextSaved && (
-                <span className="text-[12px] text-green-600 ml-2">✓ Kaydedildi</span>
+              {deepAnalysis && (
+                <button onClick={startDiscovery} disabled={discovering || !appUrl}
+                  className="btn btn-outline !border-violet-400 !text-violet-500 disabled:opacity-40">Derin Analizle Başlat</button>
               )}
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Screen grid */}
-      {screens.length > 0 && (
-        <div className="glass rounded-xl p-5">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-[11px] font-semibold text-gray-400 tracking-wider uppercase mb-0.5">
-                Seçim — STEP 3/{STEPS.length}
-              </p>
-              <h3 className="text-[14px] font-semibold text-gray-800">
-                Keşfedilen Ekranlar
-              </h3>
-              <p className="text-[12px] text-gray-400 mt-0.5">{screens.length} ekran bulundu</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => selected.size === screens.length
-                  ? setSelected(new Set())
-                  : setSelected(new Set(screens.map((s) => s.path)))}
-                className="text-[12px] text-blue-600 hover:text-blue-800"
-              >
-                {selected.size === screens.length ? "Seçimi Kaldır" : "Tümünü Seç"}
-              </button>
-              <button
-                onClick={clearAllScreens}
-                className="text-[12px] text-red-500 hover:text-red-600"
-                title="Tüm keşfedilen ekranları sil"
-              >
-                Tümünü Temizle
-              </button>
-              <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                {selected.size}/{screens.length}
-              </span>
-            </div>
+          {/* Bağlam filtresi (katlanır) */}
+          <div className="glass rounded-xl">
+            <button onClick={() => setContextOpen((v) => !v)} className="w-full flex items-center justify-between px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-fg3"><path d="M2 4h12M4 8h8M6 12h4" /></svg>
+                <span className="text-[13px] font-semibold text-fg">Bağlam Filtresi</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {(keywords || confluencePages) && <span className="text-[10px] text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">aktif</span>}
+                <svg className={`text-fg3 transition-transform ${contextOpen ? "rotate-180" : ""}`} width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6l4 4 4-4" /></svg>
+              </div>
+            </button>
+            {contextOpen && (
+              <div className="px-5 pb-5 border-t border-line pt-4 space-y-4">
+                <div>
+                  <p className="text-[10px] font-semibold text-fg3 tracking-wider uppercase mb-1">Anahtar Kelimeler</p>
+                  <p className="text-[11px] text-fg3 mb-2">Confluence sayfalarında ve Jira task'larında bu kelimeleri ara</p>
+                  <input type="text" value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="ör: ticket management, kullanıcı yönetimi"
+                    className="w-full border border-line rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-accent bg-surface2" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold text-fg3 tracking-wider uppercase mb-1">Confluence Sayfa Adları</p>
+                  <p className="text-[11px] text-fg3 mb-2">Boş bırakılırsa içerik bazlı aranır</p>
+                  <input type="text" value={confluencePages} onChange={(e) => setConfluencePages(e.target.value)} placeholder="ticket management"
+                    className="w-full border border-line rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-accent bg-surface2" />
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <button onClick={saveContext} className="btn btn-primary btn-sm">Kaydet</button>
+                  <button onClick={() => { setKeywords(""); setConfluencePages(""); localStorage.removeItem("ctx_keywords"); localStorage.removeItem("ctx_confluence_pages"); }} className="btn btn-outline btn-sm">Temizle</button>
+                  {contextSaved && <span className="text-[12px] text-green-600 ml-1">✓ Kaydedildi</span>}
+                </div>
+              </div>
+            )}
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 mb-5">
-            {screens.map((screen) => (
-              <label
-                key={screen.path}
-                className={`group relative flex gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                  selected.has(screen.path)
-                    ? "border-blue-300 bg-blue-50/50"
-                    : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                <button
-                  onClick={(e) => deleteScreen(screen.path, e)}
-                  title="Ekranı sil"
-                  className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-md flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                  </svg>
-                </button>
-                <input
-                  type="checkbox"
-                  checked={selected.has(screen.path)}
-                  onChange={() => toggleScreen(screen.path)}
-                  className="mt-1 flex-shrink-0 accent-blue-600"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start gap-2">
-                    <img
-                      src={`/screenshots/${screen.screenshotPath.split("/").pop()}`}
-                      alt={screen.title}
-                      className="w-20 h-12 object-cover rounded border border-gray-200 flex-shrink-0"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium text-gray-800 truncate">
-                        {screen.title || screen.path}
-                      </p>
-                      <p className="text-[11px] text-gray-400 truncate mt-0.5">{screen.path}</p>
+        {/* ── SAĞ: Sonuç (galeri / ilerleme / boş durum) ───────── */}
+        <div className="min-w-0 space-y-5">
+          {discovering && discoveryJobId ? (
+            <div className="glass rounded-xl p-5">
+              <p className="text-[10px] font-semibold text-fg3 tracking-wider uppercase mb-1">İlerleme</p>
+              <h3 className="text-[14px] font-semibold text-fg mb-4">Ekranlar Keşfediliyor</h3>
+              <ProgressView
+                streamUrl={`/api/discovery/${discoveryJobId}/stream`}
+                onComplete={handleDiscoveryComplete}
+                onError={handleDiscoveryError}
+                onPause={async () => { await jobControl.pause(discoveryJobId); }}
+                onResume={async () => { await jobControl.resume(discoveryJobId); }}
+                onCancel={async () => { if (!confirm("Keşfi tamamen iptal etmek istiyor musun?")) return; await jobControl.cancel(discoveryJobId); setDiscovering(false); }}
+              />
+            </div>
+          ) : screens.length > 0 ? (
+            <div className="glass rounded-xl p-5">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-fg">Keşfedilen Ekranlar</h3>
+                  <p className="text-[12px] text-fg3 mt-0.5">{screens.length} ekran · {selected.size} seçili</p>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <button onClick={() => selected.size === screens.length ? setSelected(new Set()) : setSelected(new Set(screens.map((s) => s.path)))} className="text-[12px] text-accent hover:underline">
+                    {selected.size === screens.length ? "Seçimi Kaldır" : "Tümünü Seç"}
+                  </button>
+                  <button onClick={clearAllScreens} className="text-[12px] text-red-500 hover:text-red-600" title="Tüm keşfedilen ekranları sil">Tümünü Temizle</button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
+                {screens.map((screen) => (
+                  <label key={screen.path}
+                    className={`group relative flex gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selected.has(screen.path) ? "border-accent bg-accent-soft/40" : "border-line hover:border-line-strong hover:bg-surface2/60"}`}>
+                    <button onClick={(e) => deleteScreen(screen.path, e)} title="Ekranı sil"
+                      className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-md flex items-center justify-center text-fg3 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+                    </button>
+                    <input type="checkbox" checked={selected.has(screen.path)} onChange={() => toggleScreen(screen.path)} className="mt-1 flex-shrink-0 accent-blue-600" />
+                    <img src={`/screenshots/${screen.screenshotPath.split("/").pop()}`} alt=""
+                      className="w-20 h-12 object-cover rounded border border-line flex-shrink-0"
+                      onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden"; }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-medium text-fg truncate">{screen.title || screen.path}</p>
+                      <p className="text-[11px] text-fg3 truncate mt-0.5 font-mono">{screen.path}</p>
                       <div className="flex gap-1.5 mt-1">
-                        <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded inline-block">
-                          depth {screen.depth}
-                        </span>
+                        <span className="text-[10px] text-fg3 bg-surface2 px-1.5 py-0.5 rounded">depth {screen.depth}</span>
                         {(screen.states?.length ?? 0) > 0 && (
-                          <span className="text-[10px] text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded inline-block">
-                            +{screen.states?.length} state
-                          </span>
+                          <span className="text-[10px] text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded">+{screen.states?.length} state</span>
                         )}
                       </div>
                     </div>
-                  </div>
-                </div>
-              </label>
-            ))}
-          </div>
+                  </label>
+                ))}
+              </div>
 
-          <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-            <div className="min-w-0">
-              <p className="text-[13px] text-gray-500">
-                {selected.size === 0
-                  ? "Döküman oluşturmak için en az bir ekran seçin"
-                  : `${selected.size} ekran için Claude${deepAnalysis ? " (Derin Analiz)" : ""} ile döküman oluşturulacak`}
-              </p>
-              <label className="mt-1.5 flex items-center gap-2 text-[12px] text-gray-500 cursor-pointer select-none">
-                <input type="checkbox" checked={forceRegen} onChange={(e) => setForceRegen(e.target.checked)} className="accent-blue-600" />
-                Değişmeyenleri de yeniden üret
-                <span className="text-gray-400">— kapalıyken değişmemiş ekranlar atlanır (0 token)</span>
-              </label>
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-4 mt-4 border-t border-line">
+                <div className="min-w-0">
+                  <p className="text-[13px] text-fg2">
+                    {selected.size === 0 ? "Döküman oluşturmak için en az bir ekran seçin"
+                      : `${selected.size} ekran için Claude${deepAnalysis ? " (Derin Analiz)" : ""} ile döküman oluşturulacak`}
+                  </p>
+                  <label className="mt-1.5 flex items-center gap-2 text-[12px] text-fg3 cursor-pointer select-none">
+                    <input type="checkbox" checked={forceRegen} onChange={(e) => setForceRegen(e.target.checked)} className="accent-blue-600" />
+                    Değişmeyenleri de yeniden üret <span className="text-fg3">— kapalıyken atlanır (0 token)</span>
+                  </label>
+                </div>
+                <button onClick={startDocumentation} disabled={selected.size === 0 || docJobLoading}
+                  className="flex items-center gap-2 px-5 py-2 bg-violet-600 text-white text-[13px] font-medium rounded-lg hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  {docJobLoading && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                  {docJobLoading ? "Başlatılıyor…" : "Döküman Oluştur →"}
+                </button>
+              </div>
             </div>
-            <button
-              onClick={startDocumentation}
-              disabled={selected.size === 0 || docJobLoading}
-              className="flex items-center gap-2 px-5 py-2 bg-violet-600 text-white text-[13px] font-medium rounded-lg hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {docJobLoading && (
-                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              )}
-              {docJobLoading ? "Başlatılıyor..." : "Döküman Oluştur →"}
-            </button>
-          </div>
+          ) : (
+            <div className="glass rounded-xl p-8 flex flex-col items-center justify-center text-center min-h-[320px]">
+              <div className="orb w-10 h-10 mb-4 opacity-70" />
+              <p className="text-[14px] font-semibold text-fg">Keşfedilen ekranlar burada listelenecek</p>
+              <p className="text-[12px] text-fg3 mt-1.5 max-w-[360px]">
+                Soldaki <b className="text-fg2">Başlat</b> ile hedef uygulamayı tara; bulunan ekranları seçip Claude ile Türkçe kılavuz üret.
+              </p>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
