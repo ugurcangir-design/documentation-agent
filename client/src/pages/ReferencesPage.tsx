@@ -146,7 +146,7 @@ export default function ReferencesPage() {
   ];
 
   return (
-    <div className="p-7 max-w-6xl mx-auto space-y-5">
+    <div className="p-7 space-y-5">
       <div>
         <h1 className="text-[22px] font-semibold text-gray-900">Referanslar</h1>
         <p className="text-[13px] text-gray-400 mt-0.5">

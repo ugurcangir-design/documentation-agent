@@ -181,7 +181,7 @@ export default function SettingsPage() {
   const isConfigured = (key: string) => configured.includes(key);
 
   return (
-    <div className="p-7 max-w-6xl mx-auto fade-in">
+    <div className="p-7 fade-in">
       <div className="mb-6">
         <h1 className="text-[23px] font-semibold text-fg tracking-tight">Ayarlar</h1>
         <p className="text-fg3 text-[13px] mt-0.5">
@@ -191,8 +191,9 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* Masonry: geniş ekranda kartlar iki sütuna akar, boşluk bırakmaz. */}
-      <div className="columns-1 lg:columns-2 gap-5">
+      {/* Masonry: geniş ekranda 2, çok geniş ekranda 3 sütun — tüm genişliği
+          boşluk bırakmadan doldurur, kart oranları dengeli kalır. */}
+      <div className="columns-1 lg:columns-2 xl:columns-3 gap-5">
         {/* Analist */}
         <Section title="Analist" icon="👤">
           <p className="text-xs text-gray-400 mb-3">

@@ -156,7 +156,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
   }
 
   return (
-    <div className="p-7 max-w-6xl mx-auto space-y-5">
+    <div className="p-7 space-y-5">
       {/* Page title */}
       <div>
         <h1 className="text-[22px] font-semibold text-gray-900">Ekran Keşfi</h1>

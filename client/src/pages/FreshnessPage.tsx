@@ -85,7 +85,7 @@ export default function FreshnessPage({ onJobStarted }: FreshnessPageProps) {
   const staleCount = data.rows.filter((r) => isStale(r.status)).length;
 
   return (
-    <div className="p-7 max-w-6xl mx-auto space-y-5 fade-in">
+    <div className="p-7 space-y-5 fade-in">
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-[23px] font-semibold text-fg tracking-tight">Tazelik</h1>

@@ -119,7 +119,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="p-7 max-w-5xl mx-auto space-y-5">
+    <div className="p-7 space-y-5">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-[22px] font-semibold text-gray-900">Geçmiş</h1>

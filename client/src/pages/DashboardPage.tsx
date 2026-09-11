@@ -47,7 +47,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-7 max-w-6xl mx-auto space-y-5 fade-in">
+    <div className="p-7 space-y-5 fade-in">
       {/* Header */}
       <div className="flex items-end justify-between">
         <div>
