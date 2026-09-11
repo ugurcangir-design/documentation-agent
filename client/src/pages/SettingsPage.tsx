@@ -465,6 +465,9 @@ export default function SettingsPage() {
         <SettingsGroup label="Entegrasyon" cols={1}>
         {/* Atlassian OAuth */}
         <Section title="Atlassian (Confluence + Jira)" icon="📘">
+          <div className="grid md:grid-cols-2 gap-5 items-start">
+          {/* Sol: bağlantı */}
+          <div>
           <p className="text-xs text-gray-400 mb-3">
             OAuth 2.0 ile bağlanın. Developer Console'da OAuth uygulaması oluşturun,
             redirect URI olarak <code className="bg-gray-100 px-1 rounded text-[11px]">{oauth?.redirectUri ?? "http://localhost:3000/api/auth/atlassian/callback"}</code> ekleyin.
@@ -513,7 +516,10 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          </div>{/* /sol */}
 
+          {/* Sağ: kimlik bilgileri */}
+          <div className="space-y-3">
           <Field
             label="OAuth Client ID"
             value={values.ATLASSIAN_OAUTH_CLIENT_ID}
@@ -545,6 +551,8 @@ export default function SettingsPage() {
               configured={isConfigured("CONFLUENCE_PARENT_PAGE_ID")}
             />
           </div>
+          </div>{/* /sağ */}
+          </div>{/* /grid */}
         </Section>
         </SettingsGroup>
       </div>
