@@ -97,18 +97,18 @@ export default function PromptsPage() {
   return (
     <div className="flex h-[calc(100vh-2.75rem)] overflow-hidden">
       {/* Left: prompt selector */}
-      <div className="w-64 border-r border-gray-200 bg-white flex-shrink-0 p-4 space-y-1 overflow-y-auto">
-        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-3">
+      <div className="w-64 border-r border-line bg-surface2/40 flex-shrink-0 p-4 space-y-1 overflow-y-auto">
+        <p className="text-[11px] font-semibold text-fg3 uppercase tracking-wider px-2 mb-3">
           Agent Promptları
         </p>
         {PROMPT_KEYS.map((key) => (
           <button
             key={key}
             onClick={() => selectPrompt(key)}
-            className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors ${
+            className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors border ${
               activeKey === key
-                ? "bg-blue-50 text-blue-700 border border-blue-200"
-                : "text-gray-600 hover:bg-gray-50"
+                ? "bg-accent-soft text-accent border-accent/30"
+                : "text-fg2 border-transparent hover:bg-surface2/60"
             }`}
           >
             <p className="text-[13px] font-medium">{prompts[key]?.name ?? key}</p>
@@ -128,18 +128,18 @@ export default function PromptsPage() {
       {/* Right: editor */}
       <div className="flex-1 overflow-auto p-7">
         {editing ? (
-          <div className="max-w-2xl mx-auto space-y-5">
-            <div className="flex items-start justify-between">
+          <div className="max-w-4xl mx-auto space-y-5">
+            <div className="sticky top-0 z-10 -mx-7 px-7 py-3 bg-bg/85 backdrop-blur border-b border-line/60 flex items-start justify-between">
               <div>
-                <h1 className="text-[20px] font-semibold text-gray-900">{editing.name}</h1>
-                <p className="text-[13px] text-gray-400 mt-0.5">{editing.description}</p>
+                <h1 className="text-[20px] font-semibold text-fg tracking-tight">{editing.name}</h1>
+                <p className="text-[13px] text-fg3 mt-0.5">{editing.description}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 {saved && <span className="text-[12px] text-green-600">✓ Kaydedildi</span>}
                 <button
                   onClick={save}
                   disabled={saving}
-                  className="px-4 py-1.5 bg-gray-900 text-white text-[13px] font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                  className="btn btn-primary disabled:opacity-50"
                 >
                   {saving ? "Kaydediliyor..." : "Kaydet"}
                 </button>

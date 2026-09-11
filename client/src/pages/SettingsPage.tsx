@@ -191,9 +191,10 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* Masonry: geniş ekranda 2, çok geniş ekranda 3 sütun — tüm genişliği
-          boşluk bırakmadan doldurur, kart oranları dengeli kalır. */}
-      <div className="columns-1 lg:columns-2 xl:columns-3 gap-5">
+      {/* İşleve göre gruplu düzen: okuma sırası korunur (CSS columns masonry
+          sıralamayı bozuyordu), her grup genişliği kullanan bir grid. */}
+      <div className="space-y-7">
+        <SettingsGroup label="Kurulum">
         {/* Analist */}
         <Section title="Analist" icon="👤">
           <p className="text-xs text-gray-400 mb-3">
@@ -279,6 +280,9 @@ export default function SettingsPage() {
           )}
         </Section>
 
+        </SettingsGroup>
+
+        <SettingsGroup label="Hedef & Keşif" cols={1}>
         {/* Target App */}
         <Section title="Hedef Uygulama" icon="🌐">
           <p className="text-xs text-gray-400 mb-3">
@@ -353,6 +357,9 @@ export default function SettingsPage() {
           </details>
         </Section>
 
+        </SettingsGroup>
+
+        <SettingsGroup label="Otomasyon">
         {/* Zamanlanmış Tazeleme */}
         <Section title="Zamanlanmış Tazeleme" icon="🔄">
           <p className="text-xs text-gray-400 mb-3">
@@ -453,6 +460,9 @@ export default function SettingsPage() {
           })()}
         </Section>
 
+        </SettingsGroup>
+
+        <SettingsGroup label="Entegrasyon" cols={1}>
         {/* Atlassian OAuth */}
         <Section title="Atlassian (Confluence + Jira)" icon="📘">
           <p className="text-xs text-gray-400 mb-3">
@@ -536,6 +546,7 @@ export default function SettingsPage() {
             />
           </div>
         </Section>
+        </SettingsGroup>
       </div>
 
       {/* Save */}
@@ -651,12 +662,33 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="glass rounded-xl p-5 mb-5 break-inside-avoid">
+    <div className="glass rounded-xl p-5">
       <h2 className="text-[13px] font-semibold text-fg mb-4 flex items-center gap-2">
         <span>{icon}</span>
         {title}
       </h2>
       <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function SettingsGroup({
+  label,
+  cols = 2,
+  children,
+}: {
+  label: string;
+  cols?: 1 | 2;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-fg3 uppercase tracking-wider mb-3 flex items-center gap-2 after:content-[''] after:flex-1 after:h-px after:bg-line">
+        {label}
+      </p>
+      <div className={`grid gap-5 items-start ${cols === 2 ? "md:grid-cols-2" : "grid-cols-1"}`}>
+        {children}
+      </div>
     </div>
   );
 }
