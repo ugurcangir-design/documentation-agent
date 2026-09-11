@@ -121,4 +121,13 @@ export const env = {
     const n = parseInt(process.env.LIVE_APP_MCP_TIMEOUT_MS || "480000", 10);
     return Number.isFinite(n) && n > 0 ? n : 480000;
   },
+  /** Zamanlanmış tazeleme (opt-in, varsayılan kapalı). */
+  get scheduleEnabled(): boolean {
+    return (process.env.SCHEDULE_ENABLED || "").toLowerCase() === "true";
+  },
+  /** Tazeleme aralığı (saat). Varsayılan 24. */
+  get scheduleIntervalHours(): number {
+    const n = parseInt(process.env.SCHEDULE_INTERVAL_HOURS || "24", 10);
+    return Number.isFinite(n) && n > 0 ? n : 24;
+  },
 };

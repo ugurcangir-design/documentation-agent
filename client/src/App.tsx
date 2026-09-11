@@ -7,6 +7,7 @@ import DashboardPage from "./pages/DashboardPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
 import JobProgressPage from "./pages/JobProgressPage";
 import DocumentsPage from "./pages/DocumentsPage";
+import FreshnessPage from "./pages/FreshnessPage";
 import SettingsPage from "./pages/SettingsPage";
 import ReferencesPage from "./pages/ReferencesPage";
 import PromptsPage from "./pages/PromptsPage";
@@ -85,6 +86,7 @@ function AppInner() {
           onAutoSelectConsumed={() => setLastCompletedDocJobId(null)}
         />
       )}
+      {page === "freshness" && <FreshnessPage onJobStarted={setActiveJobId} />}
       {page === "history" && <HistoryPage />}
       {page === "references" && <ReferencesPage />}
       {page === "settings" && <SettingsPage />}

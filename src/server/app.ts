@@ -19,6 +19,8 @@ import { jobCancellation } from "./store/jobCancellation";
 import maintenanceRoutes from "./routes/maintenanceRoutes";
 import updateRoutes from "./routes/updateRoutes";
 import liveAppRoutes from "./routes/liveAppRoutes";
+import freshnessRoutes from "./routes/freshnessRoutes";
+import { startScheduler } from "./scheduler";
 import { env } from "../config/env";
 import { csrfGuard } from "./middleware/csrfGuard";
 
@@ -90,6 +92,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/update", updateRoutes);
 app.use("/api/live-app", liveAppRoutes);
+app.use("/api/freshness", freshnessRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -254,6 +257,8 @@ app.listen(PORT, () => {
   console.log(`  API  → http://localhost:${PORT}/api`);
   console.log(`  UI   → http://localhost:${PORT} (production build)`);
   console.log(`\n  For development: cd client && npm run dev`);
+  // Zamanlanmış tazeleme denetleyicisi (kapalıyken no-op; Ayarlar'dan açılır).
+  startScheduler();
 });
 
 export default app;

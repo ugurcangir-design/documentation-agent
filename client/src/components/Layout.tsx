@@ -4,6 +4,7 @@ export type Page =
   | "dashboard"
   | "discovery"
   | "documents"
+  | "freshness"
   | "history"
   | "references"
   | "settings"
@@ -71,6 +72,7 @@ const SIDEBAR_GROUPS = [
     label: "ÇIKTILAR",
     items: [
       { id: "documents" as Page, label: "Dökümanlar", icon: icons.documents, badgeKey: "docs" },
+      { id: "freshness" as Page, label: "Tazelik", icon: "M13.5 6A6 6 0 0 0 3 4.5M2.5 10A6 6 0 0 0 13 11.5M13 2v3h-3M3 14v-3h3" },
       { id: "history" as Page, label: "Geçmiş", icon: icons.history },
     ],
   },

@@ -20,6 +20,8 @@ interface SettingsValues {
   ANNOTATE_STEPS: string;
   REDACT_SENSITIVE: string;
   STYLE_LINT: string;
+  SCHEDULE_ENABLED: string;
+  SCHEDULE_INTERVAL_HOURS: string;
 }
 
 const DEFAULTS: SettingsValues = {
@@ -42,6 +44,8 @@ const DEFAULTS: SettingsValues = {
   ANNOTATE_STEPS: "true",
   REDACT_SENSITIVE: "false",
   STYLE_LINT: "true",
+  SCHEDULE_ENABLED: "false",
+  SCHEDULE_INTERVAL_HOURS: "24",
 };
 
 interface LiveAppStatus {
@@ -346,6 +350,32 @@ export default function SettingsPage() {
             />
             </div>
           </details>
+        </Section>
+
+        {/* Zamanlanmış Tazeleme */}
+        <Section title="Zamanlanmış Tazeleme" icon="🔄">
+          <p className="text-xs text-gray-400 mb-3">
+            Açıkken agent periyodik olarak dokümanları tazeler; <b>değişmeyen ekranlar atlanır (0 token)</b>, yalnız kaynak/analiz değişenler yeniden üretilir. Yalnız <b>üretim</b> tazelenir — ekranların yeniden keşfi (tarama) manueldir.
+          </p>
+          <Toggle
+            checked={values.SCHEDULE_ENABLED === "true"}
+            onChange={(v) => set("SCHEDULE_ENABLED", v ? "true" : "false")}
+            label="Zamanlanmış tazelemeyi etkinleştir"
+            hint="Kapalıyken hiçbir otomatik iş çalışmaz (varsayılan). Değişiklik anında geçerli olur."
+          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tazeleme aralığı</label>
+            <select
+              value={values.SCHEDULE_INTERVAL_HOURS}
+              onChange={(e) => set("SCHEDULE_INTERVAL_HOURS", e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="6">6 saatte bir</option>
+              <option value="12">12 saatte bir</option>
+              <option value="24">Günde bir (önerilen)</option>
+              <option value="168">Haftada bir</option>
+            </select>
+          </div>
         </Section>
 
         {/* Canlı Uygulama Kanıtı (MCP) */}
