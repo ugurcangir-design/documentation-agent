@@ -16,7 +16,8 @@ import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
 import { loadJobContext } from "./contextLoader";
 import { processScreen } from "./screenProcessor";
-import { checkPromptConfigHealth } from "../../config/promptConfig";
+import { checkPromptConfigHealth, loadPromptConfig } from "../../config/promptConfig";
+import { computeGenFingerprint } from "../../quality/docFingerprint";
 
 const CONCURRENCY = 3;
 
@@ -39,7 +40,8 @@ async function processInParallel<T>(
 
 export async function runDocumentationJob(
   jobId: string,
-  selectedScreenPaths: string[]
+  selectedScreenPaths: string[],
+  force = false
 ): Promise<void> {
   const total = selectedScreenPaths.length;
 
@@ -85,12 +87,22 @@ export async function runDocumentationJob(
   const getCompleted = () => completed;
   const incCompleted = () => ++completed;
 
-  // Ekran-başı "yumuşak" uyarılar (doküman üretildi ama eksik/şüpheli olabilir).
-  // Worker'lar tek-thread event-loop'ta çalıştığından push yarışsızdır.
+  // Üretim-config parmak izi (job-stable): prompt config + şablonlar. Artımlı
+  // üretimde ekran parmak izinin bir parçası; değişince tüm ekranlar yeniden üretilir.
+  const genFp = computeGenFingerprint(
+    loadPromptConfig("userManual"),
+    loadPromptConfig("screenAnalysis"),
+    templateContents
+  );
+  if (force) console.log(`[docjob ${jobId}] force=true — parmak izi eşleşse bile tüm ekranlar yeniden üretilecek`);
+
+  // Ekran-başı "yumuşak" uyarılar + artımlı atlanan sayısı. Worker'lar
+  // tek-thread event-loop'ta çalıştığından push/artırma yarışsızdır.
   const allWarnings: string[] = [];
+  let skippedCount = 0;
 
   await processInParallel(selectedScreenPaths, CONCURRENCY, async (screenPath) => {
-    const w = await processScreen({
+    const r = await processScreen({
       jobId,
       screenPath,
       allSections,
@@ -100,8 +112,11 @@ export async function runDocumentationJob(
       getCompleted,
       incCompleted,
       promptConfigProblems,
+      genFp,
+      force,
     });
-    if (w.length > 0) allWarnings.push(...w);
+    if (r.warnings.length > 0) allWarnings.push(...r.warnings);
+    if (r.skipped) skippedCount++;
   });
 
   const wasCancelled = jobCancellation.isCancelled(jobId);
@@ -113,8 +128,13 @@ export async function runDocumentationJob(
   // demek yanıltıcıydı (kullanıcı başarı görüp Dökümanlar sayfasını boş
   // buluyordu — örn. Claude kullanım limiti / auth / analiz hatası).
   const createdDocs = documentStore.getByJobId(jobId).length;
-  const allFailed = !wasCancelled && createdDocs === 0 && total > 0;
-  const partial = !wasCancelled && createdDocs > 0 && createdDocs < total;
+  // Artımlı üretim: ATLANAN ekranlar bu job'a yeni doküman EKLEMEZ (mevcut
+  // doküman korunur) ama BAŞARIdır. "İşlenen" = üretilen + atlanan; başarısız
+  // yalnız ikisi de değilse.
+  const doneCount = createdDocs + skippedCount;
+  const allFailed = !wasCancelled && doneCount === 0 && total > 0;
+  const partial = !wasCancelled && doneCount > 0 && doneCount < total;
+  const skipNote = skippedCount > 0 ? ` · ${skippedCount} değişmedi (atlandı, 0 token)` : "";
   // screenProcessor bir limit/hata durumunda job.error'a NET mesaj yazdı;
   // terminal mesajda onu göstererek kullanıcıyı bilgilendir.
   const recordedError = jobStore.getById(jobId)?.error;
@@ -135,12 +155,14 @@ export async function runDocumentationJob(
   } else if (partial) {
     status = "completed"; eventType = "complete";
     message = recordedError
-      ? `${createdDocs}/${total} doküman üretildi — ${recordedError}`
-      : `${createdDocs}/${total} doküman üretildi (bazı ekranlar başarısız — eksikler için 'Eksikleri Üret').`;
+      ? `${doneCount}/${total} ekran işlendi${skipNote} — ${recordedError}`
+      : `${doneCount}/${total} ekran işlendi${skipNote} (bazı ekranlar başarısız — eksikler için 'Eksikleri Üret').`;
     if (recordedError) error = recordedError;
   } else {
     status = "completed"; eventType = "complete";
-    message = "Tüm dökümanlar oluşturuldu";
+    message = skippedCount > 0
+      ? `${createdDocs} üretildi${skipNote} — tümü güncel`
+      : "Tüm dökümanlar oluşturuldu";
   }
 
   // "Yumuşak" uyarılar: doküman üretildi ama eksik/şüpheli olabilir. Job

@@ -26,6 +26,7 @@ import { buildTrace } from "./traceBuilder";
 import { env } from "../../config/env";
 import { fetchLiveAppEvidence } from "../../browser/liveAppMcp";
 import { runStyleLint } from "../../quality/styleLint";
+import { computeDocFingerprint, docHasQualityWarning } from "../../quality/docFingerprint";
 
 import type { Endpoint } from "../../types/endpoint";
 import type { DocumentSection } from "../../types/documentSource";
@@ -43,24 +44,34 @@ export interface ProcessArgs {
   /** Job başında bir kez tespit edilen prompt yapılandırma sorunları
    *  (checkPromptConfigHealth). Boş değilse doküman-başı uyarı basılır. */
   promptConfigProblems?: string[];
+  /** Üretim-config parmak izi (job-stable) — artımlı üretim skip'i için. */
+  genFp: string;
+  /** true → parmak izi eşleşse bile yeniden üret (kullanıcı "force" seçti). */
+  force?: boolean;
 }
 
-/** Bu ekran için üretilen "yumuşak" uyarıların kısa etiketleri (doküman yine
- *  oluşturuldu ama eksik/şüpheli olabilir). documentationJob bunları toplayıp
- *  job özetine yazar. Ekran hata verirse / erken çıkarsa boş dizi döner. */
-export async function processScreen(args: ProcessArgs): Promise<string[]> {
+export interface ProcessResult {
+  /** Üretim atlandı mı (değişmedi → mevcut doküman korundu, 0 token). */
+  skipped: boolean;
+  /** "Yumuşak" uyarı etiketleri (doküman üretildi ama eksik/şüpheli olabilir). */
+  warnings: string[];
+}
+
+/** Tek ekran: analiz + (artımlı skip kontrolü) + üretim + doğrulama + persist.
+ *  Ekran hata verirse / erken çıkarsa `{skipped:false, warnings:[]}` döner. */
+export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
   const { jobId, screenPath, allSections, allEndpoints, templateContents, total,
-    getCompleted, incCompleted, promptConfigProblems } = args;
+    getCompleted, incCompleted, promptConfigProblems, genFp, force } = args;
 
   console.log(`[docjob ${jobId}] worker başladı: ${screenPath}`);
 
   if (!(await jobCancellation.waitIfPaused(jobId))) {
     console.log(`[docjob ${jobId}] worker bailed (pause+cancel) for ${screenPath}`);
-    return [];
+    return { skipped: false, warnings: [] };
   }
   if (jobCancellation.isCancelled(jobId)) {
     console.log(`[docjob ${jobId}] worker bailed (cancelled) for ${screenPath}`);
-    return [];
+    return { skipped: false, warnings: [] };
   }
 
   const storedScreen = screenStore.getByPath(screenPath);
@@ -73,7 +84,7 @@ export async function processScreen(args: ProcessArgs): Promise<string[]> {
       current: incCompleted(),
       total,
     });
-    return [];
+    return { skipped: false, warnings: [] };
   }
 
   const screenTitle = storedScreen.title || screenPath;
@@ -91,6 +102,31 @@ export async function processScreen(args: ProcessArgs): Promise<string[]> {
     const screen = screenStore.toDiscoveredScreen(storedScreen);
     const analysis = await analyzeScreen(screen);
     const context = buildScreenContext(screen, analysis, allSections, allEndpoints);
+
+    // ── Artımlı üretim: girdi parmak izi değişmediyse ÜRETİMİ ATLA ──────
+    // Analiz (ucuz/cache'li) yapıldı; asıl pahalı olan ÜRETİM'i, ekranın
+    // çıktı-belirleyici girdileri (analiz + bu ekrana seçilmiş RAG chunk'ları
+    // + state'ler + üretim-config) önceki dokümandakiyle AYNIysa atlıyoruz →
+    // 0 token. Mevcut doküman eksik/uyarılı ise atlanmaz (düzeltme şansı).
+    const stateLabels = (storedScreen.states ?? []).map((s) => s.label);
+    const fingerprint = computeDocFingerprint({
+      analysis, preparedChunks: context.preparedChunks, stateLabels, genFp,
+    });
+    if (!force) {
+      const existing = documentStore.getLatestByScreenPath(screenPath);
+      if (existing && existing.inputFingerprint === fingerprint && !docHasQualityWarning(existing.userManualContent)) {
+        const completed = incCompleted();
+        console.log(`[docjob ${jobId}] ${screenTitle}: değişmedi — üretim atlandı (parmak izi eşleşti, 0 token)`);
+        jobStore.update(jobId, { progress: { current: completed, total, message: `Değişmedi, atlandı: ${screenTitle}` } });
+        emitJobEvent(jobId, {
+          type: "screen",
+          message: `↺ ${screenTitle} (değişmedi, atlandı)`,
+          current: completed, total,
+          data: { screenPath, screenTitle },
+        });
+        return { skipped: true, warnings: [] };
+      }
+    }
 
     // Canlı uygulama kanıtı (opsiyonel, LIVE_APP_MCP_ENABLED) — Claude'un
     // gerçek ekranı MCP ile gezip topladığı network/CRUD/mesaj gözlemi.
@@ -352,6 +388,7 @@ export async function processScreen(args: ProcessArgs): Promise<string[]> {
       outputTokens: userManual.outputTokens + umExtraTokens.output,
       cacheReadTokens: (userManual.cacheReadTokens ?? 0) + umExtraTokens.cacheRead,
       cacheCreationTokens: (userManual.cacheCreationTokens ?? 0) + umExtraTokens.cacheCreate,
+      inputFingerprint: fingerprint,
     });
 
     const completed = incCompleted();
@@ -365,7 +402,7 @@ export async function processScreen(args: ProcessArgs): Promise<string[]> {
       total,
       data: { screenPath, screenTitle },
     });
-    return screenWarnings;
+    return { skipped: false, warnings: screenWarnings };
   } catch (err) {
     const completed = incCompleted();
     const errMsg = (err as Error).message;
@@ -390,7 +427,7 @@ export async function processScreen(args: ProcessArgs): Promise<string[]> {
         total,
       });
     }
-    return [];
+    return { skipped: false, warnings: [] };
   }
 }
 

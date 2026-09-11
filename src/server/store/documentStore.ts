@@ -29,6 +29,9 @@ export interface StoredDocument {
   cacheReadTokens?: number;
   /** Cache yaratımı input token (1.25× ücret). */
   cacheCreationTokens?: number;
+  /** Artımlı üretim parmak izi (analiz+bağlam+üretim-config). Aynı parmak
+   *  izli bir ekran yeniden üretime girerse üretim ATLANIR (0 token). */
+  inputFingerprint?: string;
 }
 
 const DB_PATH = path.join(
@@ -63,6 +66,13 @@ export const documentStore = {
 
   getByScreenPath(screenPath: string): StoredDocument[] {
     return load().filter((d) => d.screenPath === screenPath);
+  },
+
+  /** Bir ekranın EN GÜNCEL dokümanı (artımlı üretim skip kontrolü için). */
+  getLatestByScreenPath(screenPath: string): StoredDocument | undefined {
+    return load()
+      .filter((d) => d.screenPath === screenPath)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
   },
 
   getByJobId(jobId: string): StoredDocument[] {

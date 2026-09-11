@@ -26,6 +26,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
   const [discoveryJobId, setDiscoveryJobId] = useState<string | null>(null);
   const [discovering, setDiscovering] = useState(false);
   const [docJobLoading, setDocJobLoading] = useState(false);
+  const [forceRegen, setForceRegen] = useState(false);
   const [appUrl, setAppUrl] = useState("");
   const [contextOpen, setContextOpen] = useState(true);
   const [keywords, setKeywords] = useState(() => localStorage.getItem("ctx_keywords") ?? "");
@@ -145,7 +146,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
     if (selected.size === 0) { alert("En az bir ekran seçin."); return; }
     setDocJobLoading(true);
     try {
-      const { jobId } = await jobs.start(Array.from(selected));
+      const { jobId } = await jobs.start(Array.from(selected), forceRegen);
       onJobStarted(jobId);
     } catch (err) {
       alert((err as Error).message);
@@ -483,11 +484,18 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
           </div>
 
           <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-            <p className="text-[13px] text-gray-500">
-              {selected.size === 0
-                ? "Döküman oluşturmak için en az bir ekran seçin"
-                : `${selected.size} ekran için Claude${deepAnalysis ? " (Derin Analiz)" : ""} ile döküman oluşturulacak`}
-            </p>
+            <div className="min-w-0">
+              <p className="text-[13px] text-gray-500">
+                {selected.size === 0
+                  ? "Döküman oluşturmak için en az bir ekran seçin"
+                  : `${selected.size} ekran için Claude${deepAnalysis ? " (Derin Analiz)" : ""} ile döküman oluşturulacak`}
+              </p>
+              <label className="mt-1.5 flex items-center gap-2 text-[12px] text-gray-500 cursor-pointer select-none">
+                <input type="checkbox" checked={forceRegen} onChange={(e) => setForceRegen(e.target.checked)} className="accent-blue-600" />
+                Değişmeyenleri de yeniden üret
+                <span className="text-gray-400">— kapalıyken değişmemiş ekranlar atlanır (0 token)</span>
+              </label>
+            </div>
             <button
               onClick={startDocumentation}
               disabled={selected.size === 0 || docJobLoading}

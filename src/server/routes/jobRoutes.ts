@@ -24,6 +24,8 @@ const router = Router();
 // POST /api/jobs/start
 router.post("/start", (req: Request, res: Response) => {
   const screenPaths: string[] = req.body?.screenPaths ?? [];
+  // force=true → değişmeyen ekranlar da yeniden üretilir (artımlı skip kapalı).
+  const force: boolean = req.body?.force === true;
 
   if (screenPaths.length === 0) {
     res
@@ -49,7 +51,7 @@ router.post("/start", (req: Request, res: Response) => {
     screenPaths,
   });
 
-  runDocumentationJob(jobId, screenPaths).catch((err) => {
+  runDocumentationJob(jobId, screenPaths, force).catch((err) => {
     console.error("Documentation job failed:", err.message);
   });
 

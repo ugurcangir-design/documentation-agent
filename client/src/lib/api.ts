@@ -86,10 +86,11 @@ export const discovery = {
 
 // ── Jobs ─────────────────────────────────────────────────────────
 export const jobs = {
-  start: (screenPaths: string[]) =>
+  /** force=true → değişmeyen ekranlar da yeniden üretilir (artımlı skip kapalı). */
+  start: (screenPaths: string[], force = false) =>
     request<{ jobId: string }>("/jobs/start", {
       method: "POST",
-      body: JSON.stringify({ screenPaths }),
+      body: JSON.stringify({ screenPaths, force }),
     }),
 
   getAll: () => request<Job[]>("/jobs"),
