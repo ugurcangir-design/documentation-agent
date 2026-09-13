@@ -49,6 +49,15 @@ export const env = {
   // unutma — değiştirirsen Atlassian tarafında da güncelle.
   get port() { return parseInt(process.env.PORT || "3000", 10); },
 
+  // Sunucunun dinleyeceği ağ arayüzü. GÜVENLİK: varsayılan 127.0.0.1 —
+  // yalnız bu makineden erişilir. DocAgent yerel tek-kullanıcılık bir
+  // masaüstü uygulamasıdır; 0.0.0.0'a bind edilirse yerel ağdaki HERHANGİ
+  // bir makine `curl` ile API'yi çağırabilir (CORS yalnız tarayıcıyı korur,
+  // CSRF header'ı statik olduğu için script'le eklenebilir) → üretilen şirket
+  // dokümanları, ayar metadata'sı, self-update tetikleme dışarı açılır.
+  // Bilinçli olarak LAN erişimi gerekiyorsa HOST=0.0.0.0 yapın (önerilmez).
+  get host() { return process.env.HOST || "127.0.0.1"; },
+
   // 'cli'  → shell out to `claude` (Claude Code CLI), uses local Claude Code auth
   // 'api'  → Anthropic SDK with ANTHROPIC_API_KEY
   get claudeBackend(): "cli" | "api" {

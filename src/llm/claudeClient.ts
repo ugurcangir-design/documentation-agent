@@ -194,9 +194,22 @@ export function looksTruncated(text: string): boolean {
  *  log dosyasına yazılmasın. Boş/kısa değerler maskelenmez (yanlış-pozitif
  *  metin bozulmasını önlemek için ≥4 karakter şartı). */
 export function redactSecrets(text: string): string {
-  const pw = env.appPassword;
-  if (!pw || pw.length < 4) return text;
-  return text.split(pw).join("***REDACTED***");
+  // Bilinen TÜM sırları (yalnız APP_PASSWORD değil) opt-in prompt/debug
+  // dökümlerinden maskele. Prompt normalde şifre/token içermez ama live-app
+  // (MCP) akışında APP_PASSWORD, hata mesajlarında token parçaları geçebilir.
+  let out = text;
+  const secrets = [
+    env.appPassword,
+    process.env.ANTHROPIC_API_KEY,
+    env.confluenceApiToken,
+    process.env.ATLASSIAN_OAUTH_CLIENT_SECRET,
+    process.env.ATLASSIAN_ACCESS_TOKEN,
+    process.env.ATLASSIAN_REFRESH_TOKEN,
+  ];
+  for (const s of secrets) {
+    if (s && s.length >= 4) out = out.split(s).join("***REDACTED***");
+  }
+  return out;
 }
 
 /** CLI çıktısından (stdout JSON / stderr / exit code) kullanıcı için

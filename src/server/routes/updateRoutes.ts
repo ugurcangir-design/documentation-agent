@@ -1,14 +1,18 @@
 import { Router, type Request, type Response } from "express";
-import { spawn, execSync } from "child_process";
+import { spawn, execFileSync } from "child_process";
 import path from "path";
 import fs from "fs";
 
 const router = Router();
 const PROJECT_ROOT = process.cwd();
 
-function git(args: string): string {
+// GÜVENLİK: git komutları shell'siz (execFileSync + argüman dizisi) çalışır —
+// argümanlar bir shell tarafından yorumlanmadığı için `;`, `$(...)`, backtick
+// gibi metakarakterler enjeksiyon oluşturamaz (eski `execSync(\`git ${args}\`)`
+// string-interpolation'ının aksine).
+function git(args: string[]): string {
   try {
-    return execSync(`git ${args}`, {
+    return execFileSync("git", args, {
       cwd: PROJECT_ROOT,
       encoding: "utf-8",
     }).trim();
@@ -17,22 +21,29 @@ function git(args: string): string {
   }
 }
 
+// Git ref-adı güvenli alt kümesi. `rev-parse --abbrev-ref HEAD` normalde
+// güvenli döner; yine de defense-in-depth olarak fetch/rev-list'e geçmeden
+// önce doğrula (git ref adları teoride bazı metakarakterlere izin verir).
+function safeBranch(name: string): string {
+  return /^[A-Za-z0-9._\/-]{1,200}$/.test(name) && !name.includes("..") ? name : "main";
+}
+
 // GET /api/update/info — current commit info
 router.get("/info", (_req: Request, res: Response) => {
-  const hash = git("rev-parse --short HEAD") || "unknown";
-  const fullHash = git("rev-parse HEAD") || "unknown";
-  const date = git("log -1 --format=%cI") || "";
-  const message = git("log -1 --format=%s") || "";
-  const branch = git("rev-parse --abbrev-ref HEAD") || "main";
-  const author = git("log -1 --format=%an") || "";
+  const hash = git(["rev-parse", "--short", "HEAD"]) || "unknown";
+  const fullHash = git(["rev-parse", "HEAD"]) || "unknown";
+  const date = git(["log", "-1", "--format=%cI"]) || "";
+  const message = git(["log", "-1", "--format=%s"]) || "";
+  const branch = safeBranch(git(["rev-parse", "--abbrev-ref", "HEAD"]) || "main");
+  const author = git(["log", "-1", "--format=%an"]) || "";
 
   // Check if there's a newer commit on origin
   let behind = 0;
   let remoteHash = "";
   try {
-    execSync(`git fetch origin ${branch}`, { cwd: PROJECT_ROOT });
-    behind = parseInt(git(`rev-list --count HEAD..origin/${branch}`) || "0", 10);
-    remoteHash = git(`rev-parse origin/${branch}`) || "";
+    git(["fetch", "origin", branch]);
+    behind = parseInt(git(["rev-list", "--count", `HEAD..origin/${branch}`]) || "0", 10);
+    remoteHash = git(["rev-parse", `origin/${branch}`]) || "";
   } catch {
     // Network failure — keep behind=0
   }

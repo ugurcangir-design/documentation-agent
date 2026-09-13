@@ -132,6 +132,13 @@ router.post("/confluence/fetch", async (req: Request, res: Response) => {
       res.status(400).json({ error: page.message ?? "Sayfa bulunamadı veya erişim yok." });
       return;
     }
+    // GÜVENLİK: page.id Confluence yanıtından gelir ve dosya adına girer
+    // (`${page.id}.txt`). Kötü/ele geçmiş bir yanıt `../../..` döndürürse
+    // path traversal ile yazma olur → güvenli id alt kümesiyle doğrula.
+    if (!/^[A-Za-z0-9._-]{1,128}$/.test(String(page.id))) {
+      res.status(502).json({ error: "Confluence beklenmeyen sayfa kimliği döndürdü." });
+      return;
+    }
 
     const htmlContent = page.body?.storage?.value ?? "";
     const plainText = decodeHtmlEntities(htmlContent.replace(/<[^>]+>/g, " "))

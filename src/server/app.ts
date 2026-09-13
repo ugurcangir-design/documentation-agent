@@ -23,6 +23,7 @@ import freshnessRoutes from "./routes/freshnessRoutes";
 import { startScheduler } from "./scheduler";
 import { env } from "../config/env";
 import { csrfGuard } from "./middleware/csrfGuard";
+import { securityHeaders } from "./middleware/securityHeaders";
 
 const app = express();
 const PORT = env.port;
@@ -68,6 +69,7 @@ app.use(cors({
     }
   },
 }));
+app.use(securityHeaders);
 app.use(express.json({ limit: "10mb" }));
 app.use(csrfGuard);
 
@@ -252,9 +254,9 @@ if (fs.existsSync(clientBuild)) {
   if (reaped > 0) console.log(`[boot] ${reaped} orphan job 'failed' olarak işaretlendi`);
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, env.host, () => {
   console.log(`\n Documentation Agent Server`);
-  console.log(`  API  → http://localhost:${PORT}/api`);
+  console.log(`  API  → http://localhost:${PORT}/api  (bind: ${env.host})`);
   console.log(`  UI   → http://localhost:${PORT} (production build)`);
   console.log(`\n  For development: cd client && npm run dev`);
   // Zamanlanmış tazeleme denetleyicisi (kapalıyken no-op; Ayarlar'dan açılır).
