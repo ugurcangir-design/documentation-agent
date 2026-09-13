@@ -49,6 +49,8 @@ data/references/_tmp/
 # makineye özel MCP config. Asla commit edilmez.
 data/.live-app-profile/
 data/.mcp.live-app.json
+# Playwright MCP runtime çıktısı (konsol/sayfa dökümü — hedef uygulama URL/verisi içerir)
+.playwright-mcp/
 dist-electron/
 dist/
 node_modules/
