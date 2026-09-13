@@ -38,6 +38,12 @@ Node + TS. API **:3000**, Vite client **:5173**.
    gitignore'lu. `scripts/git-hooks/pre-commit` guardrail'i (aktivasyon:
    `core.hooksPath=scripts/git-hooks`, `npm install` otomatik ayarlar) token/JWT/
    API key/kurumsal e-posta/iç adres ve `data/` dosyası staging'ini engeller.
+10. **Güvenlik duvarı — bozma.** Sunucu `env.host` (varsayılan `127.0.0.1`) ile
+   bind olur — `0.0.0.0` yapma (LAN erişimi açar). Mutasyon route'ları `csrfGuard`
+   (`X-DocAgent: 1`) arkasında; her yanıt `securityHeaders` middleware'inden geçer.
+   Ayar yazımı `settingsRoutes` allowlist'i ile sınırlı. Shell'e komut →
+   `execFileSync`/`spawn` + argüman dizisi (string interpolation yok). Prompt/log
+   dökümü → `redactSecrets`. Kullanıcı yanıtına sır döndürme (bkz. `SECRET_KEYS`).
 
 ## Env bayrakları (varsayılan)
 `CLAUDE_BACKEND=cli` · `MAX_DISCOVERY_DEPTH=0` (0=tek ekran+interactive) ·
