@@ -131,7 +131,13 @@ src/
       atomicJson.ts              writeJsonAtomic + readJsonSafe
       jobStore.ts                data/db/jobs.json
       screenStore.ts             data/db/screens.json
-      documentStore.ts           data/db/documents.json (versions[] dahil)
+      documentStore.ts           data/db/documents.json (yalnız güncel içerik +
+                                 hafif sürüm META'sı). Sürüm GÖVDELERİ per-doküman
+                                 sidecar'da: data/db/versions/<id>.json. getVersions(id)
+                                 içerikli tam listeyi sidecar'dan okur; /:id/versions
+                                 endpoint'i de. Eski inline sürümler açılışta bir kez
+                                 migrate edilir. (Amaç: documents.json'ı ince tut →
+                                 her create/update'te 20× içerik yeniden yazımı yok.)
       referenceStore.ts          data/db/references.json (confluence/swagger/documents/sources/jira)
       eventBus.ts                SSE event emitter (job ID → subscribers).
                                  JobEvent.type: progress | screen |
@@ -918,8 +924,12 @@ publishMarkdown(spaceKey, title, markdown, parentPageId?) →
 ```
 POST /api/export/docx       title + docs[] → .docx (docx paketi)
 POST /api/export/markdown   tek birleşik .md (TOC + her ekran)
-POST /api/export/pdf        marked → HTML → inlineScreenshots → Playwright
-                              HTML→PDF. inlineScreenshots `/screenshots/<ad>`
+POST /api/export/pdf        marked → sanitize-html (allowlist) → HTML →
+                              inlineScreenshots → Playwright HTML→PDF.
+                              GÜVENLİK: marked ham HTML geçirir; sanitize-html
+                              gömülü script/onerror'u temizler (içerik LLM +
+                              güvenilmeyen referanstan gelir, headless Chromium'da
+                              çalışabilirdi). inlineScreenshots `/screenshots/<ad>`
                               referanslarını base64 data-URI ile GÖMER
                               (setContent origin'siz; aksi halde görseller boş).
 POST /api/export/zip        bundle:
