@@ -34,6 +34,10 @@ Node + TS. API **:3000**, Vite client **:5173**.
 6. UI renkleri semantic token (`bg-surface`, `text-fg2`, `bg-accent`) — sabit renk yazma.
 7. Yeni route → `app.ts` mount listesine ekle. Yeni store status → orphan-reap'e uyumlu.
 8. SSE `JobEvent.type`: terminal = `complete|failed|cancelled`; `error` = tek-ekran (non-terminal).
+9. **Şirket verisi / sır / PII asla git'e girmez.** İş verileri `data/` altında ve
+   gitignore'lu. `scripts/git-hooks/pre-commit` guardrail'i (aktivasyon:
+   `core.hooksPath=scripts/git-hooks`, `npm install` otomatik ayarlar) token/JWT/
+   API key/kurumsal e-posta/iç adres ve `data/` dosyası staging'ini engeller.
 
 ## Env bayrakları (varsayılan)
 `CLAUDE_BACKEND=cli` · `MAX_DISCOVERY_DEPTH=0` (0=tek ekran+interactive) ·
