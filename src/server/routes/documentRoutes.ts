@@ -150,7 +150,8 @@ router.get("/:id/versions", (req: Request, res: Response) => {
     res.status(404).json({ error: "Document not found" });
     return;
   }
-  res.json(doc.versions ?? []);
+  // Sürüm gövdeleri sidecar'da; içerikli tam listeyi oradan döndür.
+  res.json(documentStore.getVersions(req.params["id"] as string));
 });
 
 // POST /api/documents/:id/restore/:versionId

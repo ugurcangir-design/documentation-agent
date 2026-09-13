@@ -14,13 +14,15 @@
 
 import type { Page, Locator } from "playwright";
 import { env } from "../config/env";
+import type { CaptureOptions } from "./screenshotCapture";
 
 const OVERLAY_ID = "__docagent_step_highlight__";
 
 type PushFn = (
   label: string,
   triggeredBy: string,
-  filename: string
+  filename: string,
+  capture?: CaptureOptions
 ) => Promise<void>;
 
 /** Hedef öğenin üzerine vurgu çizer, viewport görüntüsünü push eder,
@@ -44,11 +46,13 @@ export async function captureStepHighlight(
         const pad = 4;
         const wrap = document.createElement("div");
         wrap.id = id;
-        // Belge koordinatına sabitle (viewport scroll'dan bağımsız).
+        // Viewport'a sabitle (position:fixed). boundingBox() viewport-göreli
+        // koordinat verir; yakalama keepScroll:true ile scroll'u SIFIRLAMADAN
+        // aynı viewport'u aldığından öğe ve işaret tam hizalı çıkar.
         wrap.style.cssText = [
-          "position:absolute",
-          `left:${x + window.scrollX - pad}px`,
-          `top:${y + window.scrollY - pad}px`,
+          "position:fixed",
+          `left:${x - pad}px`,
+          `top:${y - pad}px`,
           `width:${w + pad * 2}px`,
           `height:${h + pad * 2}px`,
           "border:3px solid #e11d48",
@@ -78,11 +82,13 @@ export async function captureStepHighlight(
       { id: OVERLAY_ID, x: box.x, y: box.y, w: box.width, h: box.height }
     );
 
-    // Viewport yakalama (öğe scrollIntoView ile görünür alanda).
+    // Viewport yakalama (öğe scrollIntoView ile görünür alanda). keepScroll:
+    // true → scroll sıfırlanmaz, işaretli öğe kadrajda kalır.
     await push(
       `Adım: "${actionLabel}" (konumu işaretli)`,
       "adım vurgusu — tıklanacak öğe kırmızı çerçeveyle gösterildi",
-      filename
+      filename,
+      { keepScroll: true }
     );
   } catch {
     // en-iyi-çaba — vurgu başarısızsa keşif normal devam eder

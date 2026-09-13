@@ -15,6 +15,11 @@ export interface CaptureOptions {
   /** Yalnız bu öğeyi (genelde açık bir modal) kırparak yakala — arka plan
    *  karartması olmadan temiz modal görüntüsü. fullPage'i geçersiz kılar. */
   clip?: Locator;
+  /** Yakalamadan önce sayfayı en üste KAYDIRMA (varsayılan kaydırır). Adım
+   *  vurgusu gibi, öğe scrollIntoView ile görünür alana getirilip viewport'a
+   *  sabitlenmiş bir overlay ile yakalandığında, scroll'u sıfırlamak öğeyi
+   *  (ve işaretini) kadraj dışına atar → bu durumda true geç. */
+  keepScroll?: boolean;
 }
 
 // Vision tokens scale roughly with image area. 1280×800 keeps UI text
@@ -107,8 +112,10 @@ export async function captureScreenshot(
     }
   } else {
     // 2. Tam sayfa / viewport
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(500);
+    if (!opts.keepScroll) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(500);
+    }
     if (opts.fullPage) {
       rawBuffer = await page.screenshot({ fullPage: true, type: "png" });
       maxHeight = MAX_FULLPAGE_HEIGHT;

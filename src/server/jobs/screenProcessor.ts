@@ -57,6 +57,34 @@ export interface ProcessResult {
   warnings: string[];
 }
 
+// ── İlerleme kalıcılığı — disk yazımını throttle et ─────────────────
+// Ara ilerleme mesajları SSE ile CANLI yayınlanır (emitJobEvent); ayrıca
+// `jobs.json`'a yazılmaları GEREKMEZ. Eskiden `setProgress` her tick'te
+// (ekran başına 6-8×, CONCURRENCY=3 ile saniyede onlarca) senkron dosya
+// yazıyordu → gereksiz I/O fırtınası. Artık job başına en fazla ~1sn'de
+// bir yazıyoruz; kesin sayaç (current/total) zaten skip/tamamlandı/hata
+// yollarında doğrudan `jobStore.update` ile kalıcılaşıyor, o yüzden
+// sayfa yenilemesinde durum güncel kalır.
+const lastProgressPersist = new Map<string, number>();
+const PROGRESS_PERSIST_MS = 1000;
+
+function persistProgressThrottled(
+  jobId: string,
+  progress: { current: number; total: number; message: string }
+): void {
+  const now = Date.now();
+  const last = lastProgressPersist.get(jobId) ?? 0;
+  if (now - last >= PROGRESS_PERSIST_MS) {
+    lastProgressPersist.set(jobId, now);
+    jobStore.update(jobId, { progress });
+  }
+}
+
+/** Job bittiğinde throttle kaydını temizle (bellek sızıntısı olmasın). */
+export function clearProgressThrottle(jobId: string): void {
+  lastProgressPersist.delete(jobId);
+}
+
 /** Tek ekran: analiz + (artımlı skip kontrolü) + üretim + doğrulama + persist.
  *  Ekran hata verirse / erken çıkarsa `{skipped:false, warnings:[]}` döner. */
 export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
@@ -92,8 +120,9 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
   console.log(`[docjob ${jobId}] screen bulundu: ${storedScreen.title} (${stateCount} state)`);
 
   const setProgress = (msg: string) => {
-    jobStore.update(jobId, { progress: { current: getCompleted(), total, message: msg } });
-    emitJobEvent(jobId, { type: "progress", message: msg, current: getCompleted(), total });
+    const current = getCompleted();
+    persistProgressThrottled(jobId, { current, total, message: msg });
+    emitJobEvent(jobId, { type: "progress", message: msg, current, total });
   };
 
   setProgress(`Ekran analiz ediliyor: ${screenTitle} (${stateCount} state ile)`);

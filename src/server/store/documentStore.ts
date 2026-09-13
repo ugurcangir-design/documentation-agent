@@ -1,12 +1,19 @@
 import path from "path";
+import fs from "fs";
 import { writeJsonAtomic, readJsonSafe } from "./atomicJson";
 
 export type DocumentStatus = "draft" | "approved" | "published";
 
-export interface DocumentVersion {
+/** Sürüm meta verisi — ana `documents.json`'da yalnız bu tutulur (hafif). */
+export interface DocumentVersionMeta {
   id: string;
   savedAt: string;
   reason: "edit" | "regenerate" | "publish";
+}
+
+/** Tam sürüm — gövde (userManualContent) yalnız per-doküman sidecar
+ *  dosyasında (`data/db/versions/<id>.json`) saklanır. */
+export interface DocumentVersion extends DocumentVersionMeta {
   userManualContent: string;
 }
 
@@ -22,7 +29,9 @@ export interface StoredDocument {
   updatedAt: string;
   publishedAt?: string;
   confluenceUrl?: string;
-  versions?: DocumentVersion[];
+  /** Yalnız sürüm META'sı (id/savedAt/reason). Sürüm GÖVDELERİ sidecar'da;
+   *  içerik için `documentStore.getVersions(id)` kullan. */
+  versions?: DocumentVersionMeta[];
   inputTokens?: number;
   outputTokens?: number;
   /** Cache'ten okunan input token (0.1× ücret). Maliyet hesabında ayrı. */
@@ -34,12 +43,10 @@ export interface StoredDocument {
   inputFingerprint?: string;
 }
 
-const DB_PATH = path.join(
-  process.cwd(),
-  "data",
-  "db",
-  "documents.json"
-);
+const DB_PATH = path.join(process.cwd(), "data", "db", "documents.json");
+const VERSIONS_DIR = path.join(process.cwd(), "data", "db", "versions");
+
+const MAX_VERSIONS = 20;
 
 function load(): StoredDocument[] {
   return readJsonSafe<StoredDocument[]>(DB_PATH, []);
@@ -48,6 +55,60 @@ function load(): StoredDocument[] {
 function save(docs: StoredDocument[]): void {
   writeJsonAtomic(DB_PATH, docs);
 }
+
+// ── Sürüm gövdeleri: per-doküman sidecar ────────────────────────────
+// GEREKÇE: eskiden her doküman `versions[]` içinde son 20 sürümün TAM
+// markdown'ını taşıyordu ve tek `documents.json` dosyası her create/update'te
+// baştan yazılıyordu → ekran başına ~20× içerik şişmesi + O(n) yazım. Artık
+// sürüm gövdeleri yalnız ilgili dokümanın sidecar dosyasına yazılır; ana
+// `documents.json` yalnız güncel içerik + hafif sürüm meta'sı tutar.
+function versionsPath(id: string): string {
+  return path.join(VERSIONS_DIR, `${id}.json`);
+}
+
+function loadVersions(id: string): DocumentVersion[] {
+  return readJsonSafe<DocumentVersion[]>(versionsPath(id), []);
+}
+
+function saveVersions(id: string, versions: DocumentVersion[]): void {
+  writeJsonAtomic(versionsPath(id), versions);
+}
+
+function deleteVersions(id: string): void {
+  try { fs.rmSync(versionsPath(id), { force: true }); } catch { /* best effort */ }
+}
+
+function toMeta(v: DocumentVersion): DocumentVersionMeta {
+  return { id: v.id, savedAt: v.savedAt, reason: v.reason };
+}
+
+// ── Bir kerelik migrasyon: eski satır-içi sürüm gövdelerini sidecar'a taşı ──
+// Eski `documents.json` sürüm içeriğini inline tutuyordu. Sunucu açılışında
+// bir kez: içerik taşıyan sürümleri sidecar'a yaz, ana dosyada meta'ya indir.
+// Migrasyon sonrası inline içerik kalmadığından sonraki açılışlarda no-op.
+(function migrateInlineVersions(): void {
+  try {
+    const docs = load();
+    let changed = false;
+    for (const d of docs) {
+      const vs = (d.versions ?? []) as Array<DocumentVersionMeta & { userManualContent?: string }>;
+      const hasInline = vs.some((v) => typeof v.userManualContent === "string" && v.userManualContent.length > 0);
+      if (!hasInline) continue;
+      const full: DocumentVersion[] = vs
+        .map((v) => ({ id: v.id, savedAt: v.savedAt, reason: v.reason, userManualContent: v.userManualContent ?? "" }))
+        .slice(-MAX_VERSIONS);
+      saveVersions(d.id, full);
+      d.versions = full.map(toMeta);
+      changed = true;
+    }
+    if (changed) {
+      save(docs);
+      console.log("[documentStore] sürüm gövdeleri sidecar'a taşındı (bir kerelik migrasyon)");
+    }
+  } catch (err) {
+    console.warn("[documentStore] sürüm migrasyonu atlandı:", (err as Error).message);
+  }
+})();
 
 // NOT: Tüm mutasyonlar (create/update/delete/restoreVersion) **tamamen
 // senkron** kalmalı. Node tek-thread'li; load → modify → save zinciri
@@ -79,8 +140,22 @@ export const documentStore = {
     return load().filter((d) => d.jobId === jobId);
   },
 
+  /** Bir dokümanın tam sürüm listesi (gövdeler dahil) — sidecar'dan okur. */
+  getVersions(id: string): DocumentVersion[] {
+    return loadVersions(id);
+  },
+
   create(doc: StoredDocument): void {
     const docs = load();
+    // Yeni doküman normalde sürümsüz gelir; olası inline gövdeyi sidecar'a al.
+    const incoming = (doc.versions ?? []) as Array<DocumentVersionMeta & { userManualContent?: string }>;
+    if (incoming.some((v) => v.userManualContent)) {
+      const full = incoming.map((v) => ({
+        id: v.id, savedAt: v.savedAt, reason: v.reason, userManualContent: v.userManualContent ?? "",
+      })).slice(-MAX_VERSIONS);
+      saveVersions(doc.id, full);
+      doc.versions = full.map(toMeta);
+    }
     docs.push(doc);
     save(docs);
   },
@@ -95,25 +170,29 @@ export const documentStore = {
     if (idx === -1) return undefined;
     const current = docs[idx] as StoredDocument;
 
-    // Snapshot current state before mutating, if content actually changes
+    // İçerik gerçekten değişiyorsa, MEVCUT içeriği bir sürüm olarak sidecar'a al.
     const contentChanged =
       patch.userManualContent !== undefined &&
       patch.userManualContent !== current.userManualContent;
 
-    const versions = current.versions ?? [];
+    let versionMeta = current.versions ?? [];
     if (contentChanged) {
-      versions.push({
-        id: `v${versions.length + 1}_${Date.now()}`,
+      const bodies = loadVersions(id);
+      bodies.push({
+        id: `v${bodies.length + 1}_${Date.now()}`,
         savedAt: new Date().toISOString(),
         reason: versionReason,
         userManualContent: current.userManualContent,
       });
+      const trimmed = bodies.slice(-MAX_VERSIONS);
+      saveVersions(id, trimmed);
+      versionMeta = trimmed.map(toMeta);
     }
 
     const updated = {
       ...current,
       ...patch,
-      versions: versions.slice(-20), // keep last 20
+      versions: versionMeta,
       updatedAt: new Date().toISOString(),
     } as StoredDocument;
     docs[idx] = updated;
@@ -126,26 +205,27 @@ export const documentStore = {
     const idx = docs.findIndex((d) => d.id === id);
     if (idx === -1) return undefined;
     const doc = docs[idx] as StoredDocument;
-    const version = doc.versions?.find((v) => v.id === versionId);
+
+    const bodies = loadVersions(id);
+    const version = bodies.find((v) => v.id === versionId);
     if (!version) return undefined;
 
-    // Save current as a new version before restoring
-    const versions = [
-      ...(doc.versions ?? []),
-      {
-        id: `v${(doc.versions?.length ?? 0) + 1}_${Date.now()}`,
-        savedAt: new Date().toISOString(),
-        reason: "edit" as const,
-        userManualContent: doc.userManualContent,
-      },
-    ];
+    // Geri yüklemeden önce mevcut içeriği yeni bir sürüm olarak sakla.
+    bodies.push({
+      id: `v${bodies.length + 1}_${Date.now()}`,
+      savedAt: new Date().toISOString(),
+      reason: "edit",
+      userManualContent: doc.userManualContent,
+    });
+    const trimmed = bodies.slice(-MAX_VERSIONS);
+    saveVersions(id, trimmed);
 
     const restored = {
       ...doc,
       userManualContent: version.userManualContent,
-      versions: versions.slice(-20),
+      versions: trimmed.map(toMeta),
       updatedAt: new Date().toISOString(),
-    };
+    } as StoredDocument;
     docs[idx] = restored;
     save(docs);
     return restored;
@@ -154,6 +234,7 @@ export const documentStore = {
   delete(id: string): void {
     const docs = load().filter((d) => d.id !== id);
     save(docs);
+    deleteVersions(id);
   },
 
   // Group documents by screenPath for the library view

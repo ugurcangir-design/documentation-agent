@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import AdmZip from "adm-zip";
 import { marked } from "marked";
+import sanitizeHtml from "sanitize-html";
 import { chromium } from "playwright";
 
 import { documentStore, type StoredDocument } from "../store/documentStore";
@@ -40,9 +41,35 @@ function buildCombinedMarkdown(docs: StoredDocument[], title: string): string {
   return parts.join("\n");
 }
 
+// GÜVENLİK: userManualContent, LLM + (potansiyel olarak güvenilmeyen) referans
+// içeriğinden türer. marked ham HTML'i geçirir → gömülü <script>/onerror gibi
+// yükler PDF'i üreten headless Chromium'da (page.setContent) çalışabilir. Bu
+// yüzden marked çıktısını, kılavuzun ürettiği güvenli etiket/attribute setine
+// izin veren bir allowlist ile sanitize ediyoruz (ekran görüntüsü img'leri dahil).
+const SANITIZE_OPTS: sanitizeHtml.IOptions = {
+  allowedTags: [
+    "h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "li", "blockquote",
+    "strong", "em", "b", "i", "u", "s", "code", "pre", "hr", "br",
+    "table", "thead", "tbody", "tr", "th", "td", "a", "img", "span", "div",
+  ],
+  allowedAttributes: {
+    a: ["href", "title"],
+    img: ["src", "alt", "title"],
+    th: ["align", "colspan", "rowspan"],
+    td: ["align", "colspan", "rowspan"],
+    code: ["class"],
+    span: ["class"],
+    pre: ["class"],
+  },
+  // img src: /screenshots/… (sonradan inlineScreenshots ile data: URI'ye çevrilir)
+  // relatif URL'ler varsayılan olarak izinlidir; <a> için güvenli şemalar.
+  allowedSchemes: ["http", "https", "mailto"],
+  disallowedTagsMode: "discard",
+};
+
 function buildHtml(docs: StoredDocument[], title: string): string {
   const sections = docs.map((doc) => {
-    const userHtml = marked.parse(doc.userManualContent) as string;
+    const userHtml = sanitizeHtml(marked.parse(doc.userManualContent) as string, SANITIZE_OPTS);
     return `
       <section class="page">
         <h1>${escapeHtml(doc.screenTitle)}</h1>

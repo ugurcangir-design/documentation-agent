@@ -15,7 +15,7 @@ import { documentStore } from "../store/documentStore";
 import { emitJobEvent } from "../store/eventBus";
 import { jobCancellation } from "../store/jobCancellation";
 import { loadJobContext } from "./contextLoader";
-import { processScreen } from "./screenProcessor";
+import { processScreen, clearProgressThrottle } from "./screenProcessor";
 import { checkPromptConfigHealth, loadPromptConfig } from "../../config/promptConfig";
 import { computeGenFingerprint } from "../../quality/docFingerprint";
 
@@ -181,4 +181,5 @@ export async function runDocumentationJob(
     ...(allWarnings.length > 0 ? { warnings: allWarnings } : {}),
   });
   emitJobEvent(jobId, { type: eventType, message, current: completed, total });
+  clearProgressThrottle(jobId);
 }
