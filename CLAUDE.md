@@ -53,7 +53,9 @@ Node + TS. API **:3000**, Vite client **:5173**.
 bkz. docs/ARCHITECTURE.md "Canlı Uygulama Kanıtı — MCP") ·
 `ANNOTATE_STEPS=true` (tıklanacak öğeyi görselde işaretle) ·
 `REDACT_SENSITIVE=false` (görselde PII blur) · `STYLE_LINT=true` (Haiku
-biçimsel yazım denetimi, guardrail'li)
+biçimsel yazım denetimi, guardrail'li) · `HOST=127.0.0.1` (bind; 0.0.0.0 LAN
+açar — bkz. güvenlik) · `CLAUDE_MAX_CONCURRENCY=4` (tüm Claude çağrıları için
+global eşzamanlılık sınırı) · `FIX_UP_THRESHOLD=85` · `FIX_UP_MAX_PASSES=1`
 
 ## Belge bakımı
 Bir commit dosya yapısı/sabit/route/persistence/çekirdek davranışı değiştirdiyse,

@@ -277,6 +277,14 @@ modele indirgeme yalnız judge (Haiku) için yapılır; diğer görevler kalitey
 doğrudan etkilediği için Sonnet'te kalır (bkz. `tests/claudeClient.test.ts`
 "model sabitleri" — regresyon koruması).
 
+**Global semafor:** Tüm `callClaude()` çağrıları tek bir eşzamanlılık havuzundan
+geçer (`CLAUDE_MAX_CONCURRENCY`, varsayılan 4). Ekran (CONCURRENCY=3) × sekme
+(TAB_GEN_CONCURRENCY=3) + analiz/judge/styleLint/fix-up çarpımı aksi halde aynı
+anda onlarca `claude` süreci/isteği açar → CPU/bellek doygunluğu + rate-limit
+(429/529). Havuz doluysa çağrı sıraya girer; retry backoff'u slot tutarak yapılır.
+Hiçbir `callClaude` slot tutarken başka bir `callClaude` beklemez (deadlock yok —
+iç içelik orkestrasyon seviyesinde). Değişiklik restart ister.
+
 İki yol:
 - **CLI**: `spawn(claude, [prompt, --output-format=json])` — Claude Code'un
   yerel oturumunu kullanır, API key gerekmez. PATH sanitize edilmişse
@@ -504,8 +512,8 @@ generateUserManualComplete(context, templates, onProgress)
 
 ### Coverage + Fix-up
 ```ts
-env.fixUpThreshold     // FIX_UP_THRESHOLD (.env, 0-100, varsayılan 90)
-env.fixUpMaxPasses     // FIX_UP_MAX_PASSES (.env, 0-5, varsayılan 2)
+env.fixUpThreshold     // FIX_UP_THRESHOLD (.env, 0-100, varsayılan 85)
+env.fixUpMaxPasses     // FIX_UP_MAX_PASSES (.env, 0-5, varsayılan 1; erken-durdurma var)
 
 inScopeForCoverage = uiElements
    .filter(el => el.type !== "menu" && !isSidebarNav(el))
@@ -524,6 +532,11 @@ denenler missing'e geri taşınır → fix-up doğru hedefe yönelir. Fix-up
 iterasyonları raw substring kullanır (hız). Haiku çağrısı başarısız
 olursa raw substring'e graceful fallback (asla regresyon yapmaz).
 Maliyet ~$0.005/ekran. `COVERAGE_LLM_JUDGE=false` ile devre dışı.
+**Judge görselleri:** ana ekran + TEMSİLİ state'ler (selectRepresentativeStates
+ilk ≤6 — sekme/modal/dolu-form dahil). Yalnız ana görselle sekme/modal
+bölümlerindeki uydurma kör noktaydı; temsili state'ler bunu kapatır. Fix-up
+ise YALNIZ ana görselle çalışır (metin tüm dokümanı içerir; state görsellerini
+fix-up'a yığmak en pahalı vision kalemiydi).
 Her tur:
 - `runCoverageFixUp({docKind, currentContent, missing, uiElementsMissing})`
 - Yeni kapsam **eski kapsam ≥** ise kabul, gerileme reddedilir
