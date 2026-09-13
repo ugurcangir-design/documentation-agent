@@ -18,9 +18,11 @@ IFS='
 '
 for f in $names; do
   case "$f" in
-    */.gitkeep) : ;;
-    data/brd/*|data/swagger/*|data/references/*)
-      report "veri klasörüne dosya ekleniyor: $f  (data/ commit edilmez)" ;;
+    */.gitkeep|data/prompts/config.json) : ;;
+    data/*)
+      # Yüklenen referans dokümanları + agent'ın ürettiği kılavuz/çıktılar dahil
+      # data/ altındaki HİÇBİR içerik commit edilmez (yalnız .gitkeep + prompt şablonu).
+      report "data/ altına dosya ekleniyor: $f  (yüklenen/üretilen içerik commit edilmez)" ;;
     .env|.env.local|.env.*)
       case "$f" in .env.example) : ;; *) report "ortam dosyası: $f  (.env commit edilmez)";; esac ;;
   esac

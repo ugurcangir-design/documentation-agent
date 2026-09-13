@@ -45,6 +45,15 @@ data/references/live-app/*
 !data/references/live-app/.gitkeep
 data/references/_tmp/
 
+# --- SERTLEŞTİRME: data/ altındaki HER içerik ignore edilir (catch-all). ---
+# Yüklenen referans dokümanları VE agent'ın ürettiği kılavuzlar/çıktılar —
+# bilinmeyen ya da yeni oluşan alt klasörler dahil — hiçbir koşulda commit
+# edilmez. Yalnız klasör iskeleti (.gitkeep) ve prompt şablonu izlenir.
+data/**
+!data/**/
+!data/**/.gitkeep
+!data/prompts/config.json
+
 # Canlı uygulama MCP (Playwright) — kalıcı Chrome profili (çerez/oturum) +
 # makineye özel MCP config. Asla commit edilmez.
 data/.live-app-profile/
