@@ -161,7 +161,10 @@ function buildPrompt(
   // büyük kısmı (sekme bölümleri) örnek şablonun üslup/formatına benzemiyordu.
   // Sekmelerde şablon DAHA KISA tutulur (stil çapası yeter, tam metin gerekmez).
   const lean = !!tabFocus;
-  const tmplLimit = lean ? 3500 : 7000;
+  // Şablon yalnız ÜSLUP çapasıdır (içerik kopyalanmaz). CLI'da prefix
+  // cache'lenemediğinden her çağrıda tam gider → gereğinden uzun tutmak boşa
+  // token. 4000 karakter üslup/format için yeterli (eskiden 7000).
+  const tmplLimit = lean ? 3500 : 4000;
 
   const templateBlock = templates.length === 0
     ? ""

@@ -22,7 +22,7 @@
  */
 
 import type { UIElement } from "../types/screen";
-import { callClaude, MODEL_FAST } from "../llm/claudeClient";
+import { callClaude, MODEL_FAST, type ClaudeImage } from "../llm/claudeClient";
 import { computeCoverage, type CoverageReport } from "./coverageCheck";
 
 const JUDGE_MODEL = MODEL_FAST;
@@ -74,17 +74,18 @@ ama etiketler (label) yukarıdakiyle bire bir aynı olmalı.`;
 async function judgeCovered(
   body: string,
   covered: UIElement[],
-  mainImage?: { base64?: string; path?: string }
+  images?: ClaudeImage[]
 ): Promise<Map<string, boolean>> {
   if (covered.length === 0) return new Map();
   const result = await callClaude({
     prompt: buildJudgePrompt(body, covered),
     model: JUDGE_MODEL,
     maxTokens: Math.min(8000, 200 + covered.length * 40),
-    // Ana ekran görseli → judge açıklamayı görselle karşılaştırıp uydurmayı
-    // yakalayabilir. Maliyeti sınırlamak için yalnız ANA görsel (state'ler değil).
-    ...(mainImage?.base64 ? { imageBase64: mainImage.base64 } : {}),
-    ...(mainImage?.path ? { imagePath: mainImage.path } : {}),
+    // Ana ekran + TEMSİLİ state görselleri → judge, sekme/modal/dolu-form
+    // bölümlerindeki uydurmayı da görselle karşılaştırıp yakalayabilir
+    // (yalnız ana görselle bu bölümler kör noktaydı). Judge Haiku (ucuz);
+    // görsel kümesi çağıran tarafça sınırlanır.
+    ...(images && images.length > 0 ? { images } : {}),
   });
   const m = result.text.match(/\{[\s\S]*\}/);
   if (!m) throw new Error(`Judge yanıtında JSON yok: ${result.text.slice(0, 200)}`);
@@ -110,7 +111,7 @@ async function judgeCovered(
 export async function computeVerifiedCoverage(
   elements: UIElement[],
   body: string,
-  mainImage?: { base64?: string; path?: string }
+  images?: ClaudeImage[]
 ): Promise<CoverageReport> {
   const raw = computeCoverage(elements, body);
   const coveredEls = elements.filter((el) => {
@@ -121,7 +122,7 @@ export async function computeVerifiedCoverage(
 
   let verdicts: Map<string, boolean>;
   try {
-    verdicts = await judgeCovered(body, coveredEls, mainImage);
+    verdicts = await judgeCovered(body, coveredEls, images);
   } catch (e) {
     // Judge komple başarısız → raw döndür ama `verified:false` işaretle.
     // Sessiz atlama YOK: screenProcessor bunu görünür uyarıya çevirir.

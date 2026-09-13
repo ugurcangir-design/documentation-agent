@@ -25,7 +25,7 @@ describe("selectRepresentativeStates", () => {
     const filled = picked.filter(
       (s) => s.label.toLowerCase().includes("dolu") || s.triggeredBy.includes("dolduruldu")
     );
-    // 'dolu' kategorisi cap 4 → en az 3 dolu state hayatta kalmalı
+    // 'dolu' kategorisi cap 3 → en az 3 dolu state hayatta kalmalı
     expect(filled.length).toBeGreaterThanOrEqual(3);
   });
 
@@ -42,14 +42,14 @@ describe("selectRepresentativeStates", () => {
     expect(picked.some((s) => s.label.includes("Filtre/arama sonucu"))).toBe(true);
   });
 
-  it("tab'ları cömertçe korur (her sekme ayrı alt-ekran)", () => {
+  it("tab'ları korur (her sekme ayrı alt-ekran) — token diyeti sonrası cap 5", () => {
     const states: ScreenState[] = [];
     // 8 sekme + 12 gürültü state'i (cap 1'lik kategoriler)
     for (let i = 0; i < 8; i++) states.push(st(`Sekme: T${i}`, `tab tıklandı: T${i}`));
     for (let i = 0; i < 12; i++) states.push(st(`Sıralama: k${i}`, `kolon header tıklandı: k${i}`));
     const picked = selectRepresentativeStates(states);
     const tabs = picked.filter((s) => s.triggeredBy.includes("tab tıklandı"));
-    // sekme cap 8 → 8 sekmenin tümü hayatta kalmalı
-    expect(tabs.length).toBe(8);
+    // sekme cap 5 → ilk 5 sekme hayatta kalmalı (token diyeti; near-dup azaltıldı)
+    expect(tabs.length).toBe(5);
   });
 });

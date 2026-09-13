@@ -241,6 +241,36 @@ export function friendlyCliError(stdout: string, stderr: string, code: number | 
   return detail || `claude CLI exit ${code}`;
 }
 
+// ── Global Claude çağrı semaforu ────────────────────────────────────
+// Ekran (CONCURRENCY=3) × sekme (TAB_GEN_CONCURRENCY=3) + her ekranda ayrıca
+// analiz + coverage-judge + styleLint + fix-up çağrıları — global bir sınır
+// olmadan aynı anda ONLARCA `claude` süreci/isteği açılabilir → CPU/bellek
+// doygunluğu ve rate-limit (429/529). TÜM callClaude çağrıları bu tek havuzdan
+// geçer; havuz dolu ise sıraya girer. Varsayılan 4 (CLI'da her çağrı ağır bir
+// `claude` süreci); CLAUDE_MAX_CONCURRENCY ile ayarlanır (değişiklik restart ister).
+const CLAUDE_MAX_CONCURRENCY = (() => {
+  const n = parseInt(process.env.CLAUDE_MAX_CONCURRENCY || "4", 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(16, n) : 4;
+})();
+
+let activeClaudeCalls = 0;
+const claudeWaitQueue: Array<() => void> = [];
+
+function acquireClaudeSlot(): Promise<void> {
+  if (activeClaudeCalls < CLAUDE_MAX_CONCURRENCY) {
+    activeClaudeCalls++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => claudeWaitQueue.push(resolve));
+}
+
+function releaseClaudeSlot(): void {
+  const next = claudeWaitQueue.shift();
+  // Sıradaki varsa slot ona DEVREDİLİR (sayaç sabit); yoksa sayaç düşer.
+  if (next) next();
+  else activeClaudeCalls = Math.max(0, activeClaudeCalls - 1);
+}
+
 export async function callClaude(opts: ClaudeCallOptions): Promise<ClaudeResult> {
   const imageCount = (opts.images?.length ?? 0) + (opts.imageBase64 || opts.imagePath ? 1 : 0);
   const promptLen = opts.prompt.length;
@@ -257,21 +287,28 @@ export async function callClaude(opts: ClaudeCallOptions): Promise<ClaudeResult>
     console.log(`[claude] prompt dumped → ${f}`);
   }
 
-  // Retry transient failures with exponential backoff (1s, 4s).
-  const maxRetries = 2;
-  let lastErr: unknown;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await (env.claudeBackend === "api" ? callApi(opts) : callCli(opts));
-    } catch (err) {
-      lastErr = err;
-      if (attempt === maxRetries || !isTransientError(err)) throw err;
-      const delay = 1000 * Math.pow(4, attempt);
-      console.warn(`[claude] geçici hata, ${delay}ms sonra tekrar (${attempt + 1}/${maxRetries}): ${(err as Error).message}`);
-      await sleep(delay);
+  // Global eşzamanlılık sınırı — havuz doluysa burada beklenir. Retry
+  // backoff'u da slot tutarak yapılır (retry eden çağrı sırasını korur).
+  await acquireClaudeSlot();
+  try {
+    // Retry transient failures with exponential backoff (1s, 4s).
+    const maxRetries = 2;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await (env.claudeBackend === "api" ? callApi(opts) : callCli(opts));
+      } catch (err) {
+        lastErr = err;
+        if (attempt === maxRetries || !isTransientError(err)) throw err;
+        const delay = 1000 * Math.pow(4, attempt);
+        console.warn(`[claude] geçici hata, ${delay}ms sonra tekrar (${attempt + 1}/${maxRetries}): ${(err as Error).message}`);
+        await sleep(delay);
+      }
     }
+    throw lastErr;
+  } finally {
+    releaseClaudeSlot();
   }
-  throw lastErr;
 }
 
 // ── API backend ─────────────────────────────────────────────────

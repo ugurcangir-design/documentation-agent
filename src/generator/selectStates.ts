@@ -4,27 +4,33 @@
  * column sorts in a row, but at most 1-2 of each kind), so the model
  * sees one of every UI behaviour rather than redundant variations.
  *
- * Reduces input-token cost ~50% on busy screens (22 → 10 images) while
+ * Reduces input-token cost on busy screens (up to ~14 images) while
  * keeping every distinct interaction class represented.
+ *
+ * TOKEN DİYETİ: Görsel, taze girdinin baskın maliyet kalemidir (CLI'da asla
+ * cache'lenmez). Bu yüzden ÇOK-TEKRARLI kategorilerin cap'i düşük tutulur
+ * (adım vurgusu görselleri çoğu zaman kendi "sonuç" görselinin near-duplicate'i;
+ * modal/sekme cap'leri de yüksekti). Buna karşılık ÖĞE-TİPİ çeşitliliği
+ * (dropdown/input/checkbox… her biri 1) KORUNUR — her etkileşim sınıfından
+ * en az bir örnek gitsin. Böylece token düşer, kapsam düşmez.
  */
 
 import type { ScreenState } from "../types/screen";
 
 const MAX_PER_CATEGORY: Record<string, number> = {
   // Adım vurgusu (Scribe tarzı "tıklanacak öğe işaretli" görüntüler) —
-  // kılavuzun "X'e tıklayın" adımlarına konum gösteren görsel sağlar.
-  adim: 6,
-  kayit: 4, // kayıt-sonrası ekranlar (başarı/post-save) — yüksek değer
+  // near-duplicate olmaya en yatkın kategori; birkaç örnek yeter.
+  adim: 3,
+  kayit: 3, // kayıt-sonrası ekranlar (başarı/post-save) — yüksek değer
   uyari: 3, // doğrulama/validation uyarıları
   sonuc: 3, // filtre/arama sonuç ekranları
-  dolu: 6,
-  // Derin keşifte her sekmenin kendi modalları olur → cap yüksek tutulur
-  // ki sekme-içi modal/popup/alert state'leri kılavuza girebilsin.
-  modal: 6,
+  dolu: 3,  // dolu-form state'leri — birkaç temsili örnek yeterli
+  // Derin keşifte her sekmenin kendi modalları olur → makul cap.
+  modal: 4,
   panel: 2,
-  // Tab'lar ayrı alt-ekranlardır; her biri kılavuzda kendi başlığını hak
-  // eder → cap yüksek (eskiden 2 idi, çoğu tab kılavuza giremiyordu).
-  sekme: 8,
+  // Tab'lar ayrı alt-ekranlardır; her biri kılavuzda kendi başlığını hak eder.
+  sekme: 5,
+  // ── Öğe-tipi çeşitliliği: her tipten 1 (kapsam çapası — düşürME) ──
   dropdown: 1,
   tarih: 1,
   checkbox: 1,
@@ -37,7 +43,7 @@ const MAX_PER_CATEGORY: Record<string, number> = {
   buton: 1,
 };
 
-const TOTAL_MAX = 22;
+const TOTAL_MAX = 14;
 
 function categorize(state: ScreenState): string {
   const t = state.triggeredBy.toLowerCase();

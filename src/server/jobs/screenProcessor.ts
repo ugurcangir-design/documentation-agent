@@ -11,6 +11,7 @@ import { v4 as uuid } from "uuid";
 import { analyzeScreen } from "../../analysis/screenAnalyzer";
 import { buildScreenContext } from "../../analysis/screenContextBuilder";
 import { generateUserManualComplete, SECTION_JOINER } from "../../generator/userManualGenerator";
+import { selectRepresentativeStates } from "../../generator/selectStates";
 import { computeCoverage, type CoverageReport } from "../../quality/coverageCheck";
 import { computeVerifiedCoverage } from "../../quality/verifiedCoverage";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
@@ -179,13 +180,17 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
     // Coverage scope = analyzer'ın çıkardığı UI öğeleri, sidebar nav hariç.
     const inScopeForCoverage = analysis.uiElements.filter((el) => !isSidebarNav(el));
 
-    // Fix-up ve coverage-judge'a verilecek ekran görselleri (ana ekran +
-    // state'ler). Fix-up eskiden GÖRSELSİZ çalışıp eksik öğeyi uyduruyordu;
-    // artık ana üretimle aynı görsel kanıtı görür (bkz. coverageFixUp UYDURMA
-    // YASAK). State sayısı bant genişliği için sınırlı tutulur.
-    const screenImages: ClaudeImage[] = (screen.states ?? [])
-      .slice(0, 10)
-      .map((s) => ({ base64: s.screenshotBase64, path: s.screenshotPath, label: s.label }));
+    // Coverage-judge görselleri: ana ekran + TEMSİLİ state'ler (sekme/modal/
+    // dolu-form dahil). Yalnız ana görselle judge, sekme/modal bölümlerindeki
+    // uydurmayı göremiyordu (kör nokta); temsili state'ler bunu kapatır. Judge
+    // Haiku (ucuz), yine de bir üst sınırla (bant genişliği).
+    const judgeStateImages = selectRepresentativeStates(screen.states ?? []).slice(0, 6);
+    const judgeImages: ClaudeImage[] = [
+      ...(screen.screenshotBase64 || screen.screenshotPath
+        ? [{ base64: screen.screenshotBase64, path: screen.screenshotPath, label: "Ana ekran" } as ClaudeImage]
+        : []),
+      ...judgeStateImages.map((s) => ({ base64: s.screenshotBase64, path: s.screenshotPath, label: s.label })),
+    ];
 
     // Fix-up (yeniden yazma) HEDEFİ hâlâ yalnız GENEL BAKIŞ bölümüdür (token
     // tasarrufu: sekme bölümleri kendi görsellerinden üretilir, yeniden
@@ -201,9 +206,7 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
     const tabsSuffix = isMultiTab && tabsContent ? SECTION_JOINER + tabsContent : "";
 
     const initialUmCoverage = env.coverageLlmJudge
-      ? await computeVerifiedCoverage(inScopeForCoverage, coverageTarget + tabsSuffix, {
-          base64: screen.screenshotBase64, path: screen.screenshotPath,
-        })
+      ? await computeVerifiedCoverage(inScopeForCoverage, coverageTarget + tabsSuffix, judgeImages)
       : computeCoverage(inScopeForCoverage, coverageTarget + tabsSuffix);
     let umCoverage = initialUmCoverage;
     let umExtraTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
@@ -251,10 +254,12 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
             missing: curCov.missing,
             uiElementsMissing: missingAsElements(curCov.missing),
             screenTitle,
-            // Görsel kanıt — eksik öğe uydurmasın, ekrandan anlatsın.
+            // Görsel kanıt — eksik öğe uydurmasın, ekrandan anlatsın. Yalnız ANA
+            // görsel: metin zaten tüm dokümanı içeriyor, eksik öğeler için ana
+            // ekran yeterli kanıt. State görsellerini fix-up'a yığmak (tur başına
+            // ~10 görsel × pass, Sonnet) en pahalı vision kalemiydi → kaldırıldı.
             ...(screen.screenshotBase64 ? { mainImageBase64: screen.screenshotBase64 } : {}),
             ...(screen.screenshotPath ? { mainImagePath: screen.screenshotPath } : {}),
-            images: screenImages,
           });
           // Kapsam TÜM dokümana karşı ölçülür (düzeltilmiş genel bakış +
           // değişmeyen sekmeler) — fix.content yalnız genel bakışı yeniden yazar.

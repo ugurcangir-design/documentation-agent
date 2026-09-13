@@ -24,14 +24,16 @@ export const env = {
   // Kullanıcı "%80 yetsin, hızlı bitsin" diyebilir; 100'e yaklaşınca
   // daha fazla LLM çağrısı + maliyet artar.
   get fixUpThreshold(): number {
-    const n = parseInt(process.env.FIX_UP_THRESHOLD || "90", 10);
-    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 90;
+    const n = parseInt(process.env.FIX_UP_THRESHOLD || "85", 10);
+    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 85;
   },
-  // Fix-up döngüsü kaç tur deneyebilir (varsayılan 2; her tur ekstra
-  // LLM çağrısı demektir, eşik karşılanmadan önce vazgeç).
+  // Fix-up döngüsü kaç tur deneyebilir (varsayılan 1; her tur ekstra pahalı
+  // LLM çağrısı). screenProcessor zaten "eksik set değişmedi" erken-durdurması
+  // yapıyor; ikinci tur çoğunlukla marjinal. Kalite için artırmak istersen
+  // FIX_UP_MAX_PASSES=2.
   get fixUpMaxPasses(): number {
-    const n = parseInt(process.env.FIX_UP_MAX_PASSES || "2", 10);
-    return Number.isFinite(n) ? Math.min(5, Math.max(0, n)) : 2;
+    const n = parseInt(process.env.FIX_UP_MAX_PASSES || "1", 10);
+    return Number.isFinite(n) ? Math.min(5, Math.max(0, n)) : 1;
   },
 
   // Coverage doğrulama: substring match "label gövdede geçti" der ama
