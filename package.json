@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "install:browsers": "playwright install chromium",
-    "launcher": "bash scripts/create-launcher.sh"
+    "launcher": "bash scripts/create-launcher.sh",
+    "prepare": "git config core.hooksPath scripts/git-hooks || true"
   },
   "keywords": [],
   "author": "",

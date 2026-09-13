@@ -1,0 +1,54 @@
+#!/bin/sh
+# Güvenlik guardrail — şirket verisi / sır / PII git'e girmesin.
+# Yalnızca STAGED (eklenmiş) içeriği tarar. Eşleşme yoksa sessizce geçer;
+# uygulamanın çalışmasını veya normal geliştirmeyi ENGELLEMEZ.
+# Zorunlu bir istisna gerekirse:  git commit --no-verify
+#
+# Bu hook'u aktive etmek için (repo başına bir kez, npm install da otomatik yapar):
+#   git config core.hooksPath scripts/git-hooks
+
+fail=0
+report() { echo "🚫 pre-commit ENGELLEDİ: $1"; fail=1; }
+
+# --- 1) Şirket verisi klasörlerine dosya eklenmesini engelle (.gitkeep hariç) ---
+# data/ altındaki gerçek iş verileri (BRD/Swagger/Jira/Confluence/şablon) commit'lenmez.
+names=$(git diff --cached --name-only --diff-filter=ACM)
+OLDIFS=$IFS
+IFS='
+'
+for f in $names; do
+  case "$f" in
+    */.gitkeep) : ;;
+    data/brd/*|data/swagger/*|data/references/*)
+      report "veri klasörüne dosya ekleniyor: $f  (data/ commit edilmez)" ;;
+    .env|.env.local|.env.*)
+      case "$f" in .env.example) : ;; *) report "ortam dosyası: $f  (.env commit edilmez)";; esac ;;
+  esac
+done
+IFS=$OLDIFS
+
+# --- 2) Eklenen satır içeriğinde sır / token / PII deseni ---
+# Hook'un kendisi hariç (kendi desenlerini yakalamasın).
+added=$(git diff --cached --diff-filter=ACM -- . ':(exclude)scripts/git-hooks/' \
+        | grep '^+' | grep -v '^+++')
+
+printf '%s\n' "$added" | grep -qE 'Authorization: (Basic|Bearer) [A-Za-z0-9+/=._-]{16,}' \
+  && report "Authorization header (token/parola gömülü)"
+printf '%s\n' "$added" | grep -qE 'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}' \
+  && report "JWT token"
+printf '%s\n' "$added" | grep -qE 'sk-ant-[A-Za-z0-9_-]{20,}' \
+  && report "Anthropic API key"
+printf '%s\n' "$added" | grep -qE 'ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ATATT[A-Za-z0-9_-]{20,}' \
+  && report "API key / erişim token'ı"
+printf '%s\n' "$added" | grep -qE -- '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' \
+  && report "özel anahtar (private key)"
+printf '%s\n' "$added" | grep -qiE 'sanstech\.[a-z]|@sans-technology\.com' \
+  && report "şirket iç adresi / kurumsal e-posta (PII / altyapı)"
+
+if [ "$fail" = "1" ]; then
+  echo ""
+  echo "Commit iptal edildi. Hassas veri git'e girmemeli."
+  echo "Yanlış alarm olduğuna eminsen:  git commit --no-verify"
+  exit 1
+fi
+exit 0
