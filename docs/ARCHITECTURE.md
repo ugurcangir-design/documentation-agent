@@ -593,12 +593,19 @@ default             0.5
 
 ### contextBudget.prepareDocumentChunks
 ```ts
-totalBudget   = 16_000   (screenContextBuilder çağrısı)
-perChunkMax   =  2_200
+totalBudget   = env.contextDocBudget (CONTEXT_DOC_BUDGET, varsayılan 28_000)
+perChunkMax   =  2_600
 chunkSection: long content → split by ## / ### sub-heading then paragraph
 diversity dedup: Jaccard(title-tokens) > 0.7 AND same sourceType → atla
 firstChunk-only: uzun section için yalnız ilk chunk (giriş paragrafı)
 ```
+Not: bütçe 16KB→28KB'ye çıkarıldı — 16KB'de yalnız ~7 bölüm sığıyor, ilgili
+Ticket Detail/History/Ön-Çalışma gibi kaynaklar prompt'a giremiyor, anlatım
+sığ kalıyordu. paragraphSearch maxTotal da 9→14 (env.contextParagraphs).
+**Endpoint sorgusu AYRI:** section sorgusu tüm kolon etiketlerini içerir; bu
+endpoint eşleşmesinde ekranın gerçek varlığıyla alakasız sonuç veriyordu (ör.
+'Retailer ID' kolonu → risk-service/retailers). searchEndpoints artık ekran
+başlığı + URL path segmentleri (ticket-explorer→ticket) odaklı sorgu alır.
 
 ### balanceBySourceType (screenContextBuilder.ts)
 ```ts
@@ -782,15 +789,24 @@ Ekranın kendisi formsa (oluştur/düzenle/liste+filtre) en sonda ana-içerik
 sokar: `kayit` (cap 4), `uyari` (cap 3), `sonuc` (cap 3), `dolu` (cap 6),
 `modal` (cap 6 — derin keşifte sekme-içi modallar için yüksek),
 `sekme` (cap 8 — her tab ayrı alt-ekran, hepsi kılavuza girmeli).
-`TOTAL_MAX=22`. Bunlar adım-adım + submit-sonrası kılavuzun temeli olduğu
-için eleme sırasında korunur.
+`TOTAL_MAX=14` (token diyeti — tekrarlı kategori cap'leri düşük: adim/dolu 3,
+modal 4, sekme 5; öğe-tipi çeşitliliği 1'er KORUNUR). Bunlar adım-adım +
+submit-sonrası kılavuzun temeli olduğu için eleme sırasında korunur.
 
 ### Sekme-içi derin keşif (env.deepExplore, default açık)
 `interactiveExplorer.exploreContentArea` = TEK KAYNAK içerik keşfi:
 dropdown → action button (create/add modal) → `runColumnHeaderPass` (kolon
-sıralama) → `runRowActionPass` (satır menüsü) → `runRowEditDrilldown`
+sıralama) → `runRowActionPass` (satır menüsü) → `runRowDetailDrilldown`
 (önizleme/düzenle/detay ≤3) → tarih/checkbox/toggle/input → accordion →
 inline form doldurma + okuma/yazma submit. Çağrılma:
+
+`runRowDetailDrilldown`: satır ikonlarının yanı sıra **ID hücresi link'i**
+('533' gibi, etiketsiz), Actions ikonu (göz) ve satır birincil link'ini de
+dener. Detay MODAL olarak da **NAVİGASYONLA (yeni route)** da açılabilir —
+ikisi de ele alınır. Navigasyonda: detay tam-sayfa yakalanır + İÇİ
+`exploreContentArea(allowRowDrilldown=false)` ile gezilir (butonlar/alanlar
+state olur; özyineleme yok), sonra `page.goto(returnUrl)` ile listeye dönülür.
+`allowRowDrilldown` bayrağı özyinelemeyi engeller.
 - **Sekme varsa:** her sekme için ayrı (TAZE dedup scope + TAZE clickedLabels),
   state dosyaları `${base}_tab_${i}_*`. Ana içerik keşfi ATLANIR
   (`tabsExplored` guard) — aksi halde aktif sekme iki kez yakalanıp kılavuza

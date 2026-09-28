@@ -55,7 +55,9 @@ bkz. docs/ARCHITECTURE.md "Canlı Uygulama Kanıtı — MCP") ·
 `REDACT_SENSITIVE=false` (görselde PII blur) · `STYLE_LINT=true` (Haiku
 biçimsel yazım denetimi, guardrail'li) · `HOST=127.0.0.1` (bind; 0.0.0.0 LAN
 açar — bkz. güvenlik) · `CLAUDE_MAX_CONCURRENCY=4` (tüm Claude çağrıları için
-global eşzamanlılık sınırı) · `FIX_UP_THRESHOLD=85` · `FIX_UP_MAX_PASSES=1`
+global eşzamanlılık sınırı) · `FIX_UP_THRESHOLD=85` · `FIX_UP_MAX_PASSES=1` ·
+`CONTEXT_DOC_BUDGET=28000` / `CONTEXT_PARAGRAPHS=14` (RAG bağlam derinliği —
+referanslardan yararlanma; büyüdükçe zengin anlatım, CLI'da token ↑)
 
 ## Belge bakımı
 Bir commit dosya yapısı/sabit/route/persistence/çekirdek davranışı değiştirdiyse,
