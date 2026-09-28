@@ -140,10 +140,13 @@ export const env = {
   get liveAppMcpEnabled(): boolean {
     return (process.env.LIVE_APP_MCP_ENABLED || "false").toLowerCase() === "true";
   },
-  // Gezinme sabit analiz çağrısından (360s) daha uzun sürebilir — varsayılan 8dk.
+  // Canlı gözlem artık SINIRLI bir örnekleme görevi (bkz. liveAppMcp
+  // buildTaskPrompt) → bounded, hızlı bitmeli. Varsayılan 180s: bounded görev
+  // bunun çok altında biter; takılırsa 8dk yerine 3dk'da başarısız olur (boşa
+  // beklemeyi azaltır). LIVE_APP_MCP_TIMEOUT_MS ile ayarlanır.
   get liveAppMcpTimeoutMs(): number {
-    const n = parseInt(process.env.LIVE_APP_MCP_TIMEOUT_MS || "480000", 10);
-    return Number.isFinite(n) && n > 0 ? n : 480000;
+    const n = parseInt(process.env.LIVE_APP_MCP_TIMEOUT_MS || "180000", 10);
+    return Number.isFinite(n) && n > 0 ? n : 180000;
   },
   /** Zamanlanmış tazeleme (opt-in, varsayılan kapalı). */
   get scheduleEnabled(): boolean {

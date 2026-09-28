@@ -178,13 +178,19 @@ function buildTaskPrompt(screen: DiscoveredScreen): string {
 
 ${loginLine}
 
-Görevin: bu ekranı gerçek bir kullanıcı gibi gez — TÜM sekmeleri, ve mümkünse
-her CRUD akışını (ekle/düzenle/sil/görüntüle) gerçekten dene. Her aksiyon için:
-1. Tetiklenen network isteğini (yöntem + path, kısa özet — browser_network_requests/
-   browser_network_request ile) raporla.
-2. Ekranda görülen doğrulama/başarı/hata mesajını (varsa) birebir metniyle raporla.
-3. browser_snapshot ile DOM'da gördüğün ama ekran görüntüsünden anlaşılmayabilecek
-   yapısal detayları (gizli alan, disabled buton, tooltip metni vb.) not et.
+Görevin: bu ekrandan HIZLI bir ÖRNEKLEME kanıtı topla (kapsamlı test DEĞİL).
+Bu adım bir zaman-sınırlı gözlemdir; kapsamlı UI keşfi zaten ayrı yapılıyor —
+sen yalnız ekran görüntüsünden ANLAŞILMAYAN network/mesaj kanıtını topla.
+
+VERİMLİ OL — TOPLAM ~8-12 tool çağrısını AŞMA, şu sırayla:
+1. browser_navigate ile ekrana git; gerekiyorsa BİR kez login ol.
+2. browser_network_requests ile sayfa/liste yüklenirken tetiklenen ANA istekleri
+   (yöntem + path, kısa özet) al — hepsini değil, en çok 5-6 ayırt edici olanı.
+3. Varsa BİR temsili kaydın detayını aç (tek tık) ve onun tetiklediği isteği +
+   görünen alanları not et. BAŞKA satır/kayıt DENEME.
+4. Ekranda o an görünen doğrulama/başarı/hata mesajı varsa birebir metniyle yaz.
+TÜM sekmeleri gezme, ekle/düzenle/sil gibi yazma akışlarını DENEME — yalnız
+yukarıdaki hızlı örnekleme yeter. İşin bitince HEMEN raporu döndür, döngüyü uzatma.
 
 **UYDURMA YASAK — EN ÖNEMLİ KURAL:** Yalnız GERÇEKTEN gözlemlediğini yaz.
 Bir aksiyonu deneyemediysen (yetki yok, veri yok, zaman yetmedi) bunu açıkça

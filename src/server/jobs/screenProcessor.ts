@@ -11,7 +11,6 @@ import { v4 as uuid } from "uuid";
 import { analyzeScreen } from "../../analysis/screenAnalyzer";
 import { buildScreenContext } from "../../analysis/screenContextBuilder";
 import { generateUserManualComplete, SECTION_JOINER } from "../../generator/userManualGenerator";
-import { selectRepresentativeStates } from "../../generator/selectStates";
 import { computeCoverage, type CoverageReport } from "../../quality/coverageCheck";
 import { computeVerifiedCoverage } from "../../quality/verifiedCoverage";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
@@ -180,17 +179,13 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
     // Coverage scope = analyzer'ın çıkardığı UI öğeleri, sidebar nav hariç.
     const inScopeForCoverage = analysis.uiElements.filter((el) => !isSidebarNav(el));
 
-    // Coverage-judge görselleri: ana ekran + TEMSİLİ state'ler (sekme/modal/
-    // dolu-form dahil). Yalnız ana görselle judge, sekme/modal bölümlerindeki
-    // uydurmayı göremiyordu (kör nokta); temsili state'ler bunu kapatır. Judge
-    // Haiku (ucuz), yine de bir üst sınırla (bant genişliği).
-    const judgeStateImages = selectRepresentativeStates(screen.states ?? []).slice(0, 6);
-    const judgeImages: ClaudeImage[] = [
-      ...(screen.screenshotBase64 || screen.screenshotPath
-        ? [{ base64: screen.screenshotBase64, path: screen.screenshotPath, label: "Ana ekran" } as ClaudeImage]
-        : []),
-      ...judgeStateImages.map((s) => ({ base64: s.screenshotBase64, path: s.screenshotPath, label: s.label })),
-    ];
+    // Coverage-judge görseli: YALNIZ ana ekran. (Denendi: judge'a çok sayıda
+    // temsili state görseli vermek — sekme/modal kör noktasını kapatmak için —
+    // Haiku'yu belirgin şekilde bozdu: neredeyse her öğeyi 'anlatılmadı' sayıp
+    // kapsamı %0'a düşürdü. Ana-görsel-only kanıtlanmış, kararlı davranıştır.)
+    const judgeImages: ClaudeImage[] = (screen.screenshotBase64 || screen.screenshotPath)
+      ? [{ base64: screen.screenshotBase64, path: screen.screenshotPath, label: "Ana ekran" } as ClaudeImage]
+      : [];
 
     // Fix-up (yeniden yazma) HEDEFİ hâlâ yalnız GENEL BAKIŞ bölümüdür (token
     // tasarrufu: sekme bölümleri kendi görsellerinden üretilir, yeniden
