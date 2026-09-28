@@ -6,6 +6,7 @@ import { searchDocumentSections, type RankedDocumentSection } from "../retrieval
 import { searchEndpoints } from "../retrieval/endpointSearch";
 import { searchParagraphs } from "../retrieval/paragraphSearch";
 import { prepareDocumentChunks } from "../retrieval/contextBudget";
+import { env } from "../config/env";
 
 /**
  * Re-order ranked sections so every source type that has a relevant
@@ -78,26 +79,42 @@ export function buildScreenContext(
 
   const keywords = queryParts.join(" ");
 
+  // ENDPOINT sorgusu AYRI ve DAHA ODAKLI: yukarıdaki `keywords` ekranın TÜM
+  // kolon etiketlerini içerir (ör. "Retailer ID/Location") → tek başına "retailer"
+  // token'ı, ekranın gerçek varlığıyla (ticket) ALAKASIZ endpoint'leri
+  // (risk-service/retailers) öne çıkarıyordu. Endpoint eşleşmesi için ekranın
+  // BİRİNCİL varlığını (başlık + URL path segmentleri, ör. ticket-explorer →
+  // "ticket","explorer") ağırlıklandır; kolon etiketleri gürültüsünü ele.
+  const pathTokens = screen.path.split(/[/\-_.]+/).filter((s) => s.length > 2);
+  const endpointQuery = [
+    analysis.screenTitle, analysis.screenTitle, analysis.screenTitle,
+    ...pathTokens, ...pathTokens,
+    ...analysis.workflows.map((wf) => wf.name),
+    analysis.purpose,
+  ].filter(Boolean).join(" ");
+
   // Rank every relevant section (score > 0), then balance the ordering
   // so BRD, Confluence, Jira and uploaded-doc references all surface.
   const rankedSections = searchDocumentSections(allSections, keywords);
   const balancedSections = balanceBySourceType(rankedSections);
-  const relatedSections = balancedSections.slice(0, 20);
-  const relatedEndpoints = searchEndpoints(allEndpoints, keywords).slice(0, 30);
+  const relatedSections = balancedSections.slice(0, 24);
+  const relatedEndpoints = searchEndpoints(allEndpoints, endpointQuery).slice(0, 30);
 
-  // Section-level chunks — 16KB total budget, 2.2KB per chunk. Fed from
-  // the balanced list so a guaranteed slot of each source type lands in
-  // the prompt. Generators fall back to a smaller prompt if Claude
-  // rejects with 'prompt too long', so we don't pre-emptively cut here.
-  const preparedChunks = prepareDocumentChunks(balancedSections, 16_000, 2200);
+  // Section-level chunks — bütçe env.contextDocBudget (varsayılan ~28KB) ile,
+  // ~2.6KB/chunk. Balanced listeden beslenir → her kaynak tipinden ilgili
+  // bölüm prompt'a girer. Bütçe artırıldı: eskiden 16KB'de ~7 bölümde kesiliyor,
+  // ilgili Ticket Detail/History/Ön-Çalışma gibi kaynaklar prompt'a giremiyordu.
+  // Generator 'prompt too long' alırsa küçük prompt'a düşer, o yüzden burada
+  // ön-kesme yapmıyoruz.
+  const preparedChunks = prepareDocumentChunks(balancedSections, env.contextDocBudget, 2600);
 
-  // Paragraph-level matches — 9 paragraphs from any section, captures
-  // long-tail BRD detail buried in low-ranked sections.
+  // Paragraph-level matches — env.contextParagraphs (varsayılan 14) paragraf,
+  // düşük-sıralı bölümlerde gömülü uzun-kuyruk BRD detayını yakalar.
   const usedSectionTitles = new Set(preparedChunks.map((c) => c.title));
   const paragraphMatches = searchParagraphs(allSections, keywords, {
     minHits: 2,
     maxPerSection: 2,
-    maxTotal: 9,
+    maxTotal: env.contextParagraphs,
   }).filter((m) => !usedSectionTitles.has(m.sectionTitle));
 
   return {

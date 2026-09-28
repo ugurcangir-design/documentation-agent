@@ -45,6 +45,19 @@ export const env = {
     return (process.env.COVERAGE_LLM_JUDGE || "true").toLowerCase() !== "false";
   },
 
+  // RAG bağlam derinliği (kılavuz zenginliği). Genel-bakış prompt'una giren
+  // referans (BRD/Confluence/Jira/doküman) bölüm bütçesi (byte) ve paragraf
+  // sayısı. Artırınca kılavuz kaynaklardan daha çok yararlanır ama CLI'da her
+  // çağrıda daha çok token gider. Düşürünce token ↓, anlatım sığlaşır.
+  get contextDocBudget(): number {
+    const n = parseInt(process.env.CONTEXT_DOC_BUDGET || "28000", 10);
+    return Number.isFinite(n) && n > 0 ? n : 28000;
+  },
+  get contextParagraphs(): number {
+    const n = parseInt(process.env.CONTEXT_PARAGRAPHS || "14", 10);
+    return Number.isFinite(n) && n > 0 ? n : 14;
+  },
+
   // Express server portu — tüm yerel URL'ler (OAuth redirect, frontend
   // fetch BASE, screenshots) bu değerden türer. Atlassian developer
   // konsoluna kayıtlı redirect URI'nin bu portla eşleşmesi gerektiğini

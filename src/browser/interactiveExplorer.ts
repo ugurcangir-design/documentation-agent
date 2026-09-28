@@ -514,13 +514,20 @@ async function runRowActionPass(
   );
 }
 
-/** Satır içi önizleme/düzenle/detay ikonlarına tıklayıp modalı (ve dolu
- *  hâlini) yakalar. Önce silme/destructive ikonları atlanır. */
-async function runRowEditDrilldown(
-  page: Page, basePath: string, log: (m: string) => void, pushState: PushStateFn
+/** Satır içi önizleme/düzenle/detay ikonlarına VE satırın birincil link'ine
+ *  (ör. "Ticket ID" hücresindeki "533" link'i) tıklayıp açılan detayı yakalar.
+ *  Detay MODAL olarak da NAVİGASYONLA (yeni route) da açılabilir — ikisi de
+ *  ele alınır. Navigasyon durumunda detay sayfası tam-sayfa yakalanır VE
+ *  içindeki butonlar/alanlar `exploreContentArea` ile (satır-drilldown'suz,
+ *  özyineleme yok) gezilir; sonra listeye geri dönülür. Silme/destructive
+ *  ikonları atlanır. */
+async function runRowDetailDrilldown(
+  page: Page, basePath: string, log: (m: string) => void, pushState: PushStateFn, maxModals: number
 ): Promise<void> {
   let captured = 0;
+  let navDetailCaptured = false; // navigasyonla açılan detay bir kez yeter (yapı satırlar arası aynı)
   for (const editSel of [
+    // 1) Etiketli görüntüle/önizle/detay/düzenle ikon veya linkleri
     'tbody tr:first-child [aria-label*="view" i]', 'tbody tr:first-child [aria-label*="önizle" i]',
     'tbody tr:first-child [aria-label*="preview" i]', 'tbody tr:first-child [aria-label*="detay" i]',
     'tbody tr:first-child [aria-label*="detail" i]', 'tbody tr:first-child [aria-label*="görüntüle" i]',
@@ -528,27 +535,40 @@ async function runRowEditDrilldown(
     'tbody tr:first-child [title*="edit" i]', 'tbody tr:first-child [title*="düzenle" i]',
     'tbody tr:first-child [title*="detay" i]', 'tbody tr:first-child [title*="önizle" i]',
     'tbody tr:first-child a[href*="edit" i]', 'tbody tr:first-child [class*="edit" i]',
+    // 2) Actions hücresindeki ikon (göz/eye) — genelde detayı açar
+    'tbody tr:first-child td:last-child a[href]', 'tbody tr:first-child td:last-child button:has(svg)',
+    // 3) Satırın BİRİNCİL link'i: ID hücresindeki tıklanabilir değer ("533")
+    //    çoğu tabloda kayıt detayını açan ana yoldur ama hiçbir "detay/edit"
+    //    etiketi taşımaz → eskiden atlanıyordu.
+    'tbody tr:first-child td:first-child a[href]',
+    'tbody tr:first-child a[href]:not([href="#"]):not([href="/"])',
+    'tbody tr:first-child [role="button"]',
   ]) {
     if (captured >= 3) break; // önizleme + düzenle + detay yeter
     try {
       const icon = page.locator(editSel).first();
       if (!(await icon.isVisible({ timeout: 300 }))) continue;
+      if (await isInNavOrSidebar(icon)) continue;
       const lbl =
         (await icon.getAttribute("aria-label").catch(() => null)) ||
-        (await icon.getAttribute("title").catch(() => null)) || "Satır işlemi";
+        (await icon.getAttribute("title").catch(() => null)) ||
+        (await safeText(icon)) || "Kayıt detayı";
       if (isDestructive(lbl)) continue;
-      log(`Satır ikonu deneniyor: ${lbl} (${editSel})`);
-      // Adım vurgusu: satır ikonunun yerini işaretleyen görüntü (tıklamadan önce).
+      log(`Satır detayı deneniyor: ${lbl} (${editSel})`);
+      const returnUrl = page.url();
+      // Adım vurgusu: tıklanacak öğenin yerini işaretleyen görüntü (tıklamadan önce).
       await captureStepHighlight(page, icon, `${lbl} (satır)`, `${basePath}_rowedit_${captured}_step`,
-        (l, t, f) => pushState(l, t, f));
+        (l, t, f, c) => pushState(l, t, f, c));
       await icon.click({ timeout: ACTION_TIMEOUT }).catch(async () => {
         await icon.click({ timeout: ACTION_TIMEOUT, force: true });
       });
       await page.waitForTimeout(RENDER_WAIT + 400);
+
       const editModal = await openModalLocator(page);
       if (editModal) {
+        // ── Detay MODAL olarak açıldı ──
         const clipOpt: CaptureOptions = { clip: editModal };
-        await pushState(`Modal: "${lbl}" (satır)`, `satır ${lbl} ikonu tıklandı`, `${basePath}_rowedit_${captured}`, clipOpt);
+        await pushState(`Modal: "${lbl}" (satır)`, `satır ${lbl} tıklandı`, `${basePath}_rowedit_${captured}`, clipOpt);
         log(`  ✓ Satır ${lbl} modalı yakalandı`);
         if (env.fillTestData) {
           try {
@@ -561,6 +581,27 @@ async function runRowEditDrilldown(
         }
         await closeModal(page);
         captured++;
+      } else if (page.url() !== returnUrl && !navDetailCaptured) {
+        // ── Detay NAVİGASYONLA açıldı (yeni route) ──
+        log(`  ✓ Detay ekranına gidildi: ${page.url()}`);
+        await page.waitForTimeout(RENDER_WAIT);
+        try { await page.waitForLoadState("networkidle", { timeout: 5000 }); } catch { /* noop */ }
+        await pushState(`Kayıt detay ekranı: "${lbl}"`, `satırdaki "${lbl}" link'i tıklandı → detay ekranı açıldı`, `${basePath}_detail_${captured}`, { fullPage: true });
+        // Detay ekranının İÇİNİ gez: butonlar, alanlar, dropdown, modal vb.
+        // (satır-drilldown KAPALI → özyineleme yok). Kullanıcı "detayda çok
+        // buton/alan var" dedi; bunlar burada yakalanır.
+        try {
+          await exploreContentArea(page, `${basePath}_detail`, log, new Set<string>(), pushState, maxModals, false);
+        } catch (e) {
+          log(`  detay içi keşif uyarısı: ${(e as Error).message}`);
+        }
+        navDetailCaptured = true;
+        captured++;
+        // Listeye geri dön (sonraki satır işlemleri/pass'ler için).
+        try {
+          await page.goto(returnUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+          await page.waitForTimeout(RENDER_WAIT);
+        } catch { /* geri dönülemedi — kalan pass'ler zaten en-iyi-çaba */ }
       }
     } catch { /* try next */ }
   }
@@ -580,7 +621,10 @@ async function exploreContentArea(
   log: (m: string) => void,
   clickedLabels: Set<string>,
   pushState: PushStateFn,
-  maxModals: number
+  maxModals: number,
+  /** false → satır detay drilldown'ı ATLA. Detay ekranının İÇİ gezilirken
+   *  (runRowDetailDrilldown içinden) true bırakılırsa sonsuz özyineleme olur. */
+  allowRowDrilldown = true
 ): Promise<void> {
   // Dropdownlar / select'ler
   await forEachVisible(
@@ -606,10 +650,12 @@ async function exploreContentArea(
   // Action butonları (create/add → modal/popup/alert + form doldurma + submit)
   await runActionButtonPass(page, basePath, log, clickedLabels, pushState, maxModals);
 
-  // Veri tablosu: kolon sıralama + satır aksiyonları + satır drill-down
+  // Veri tablosu: kolon sıralama + satır aksiyonları + satır detay drill-down
   await runColumnHeaderPass(page, basePath, log, clickedLabels, pushState);
   await runRowActionPass(page, basePath, log, pushState);
-  await runRowEditDrilldown(page, basePath, log, pushState);
+  if (allowRowDrilldown) {
+    await runRowDetailDrilldown(page, basePath, log, pushState, maxModals);
+  }
 
   // Tarih seçiciler
   await forEachVisible(
