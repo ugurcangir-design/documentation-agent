@@ -422,10 +422,16 @@ Playwright-heuristic keşfin (`screenDiscovery.ts`/`interactiveExplorer.ts`)
 - `claude` CLI'a (yalnız `CLAUDE_BACKEND=cli`) `--mcp-config
   data/.mcp.live-app.json --strict-mcp-config --allowedTools <15 araç>`
   argümanlarıyla bir **Playwright MCP sunucusu** (`@playwright/mcp`, `npx -y`
-  ile spawn edilir) bağlanır — Claude gerçek bir tarayıcıyı KENDİSİ sürer:
-  ekranı ziyaret eder, sekmeleri/CRUD akışlarını dener, network isteklerini
-  (`browser_network_requests`/`browser_network_request`) ve doğrulama/hata
-  mesajlarını gözlemler. `LIVE_APP_ALLOWED_TOOLS` bilinçli dar tutulmuş
+  ile spawn edilir) bağlanır — Claude gerçek bir tarayıcıyı KENDİSİ sürer.
+  **Görev SINIRLI bir HIZLI ÖRNEKLEME'dir** (`buildTaskPrompt`): ≤8-12 tool
+  çağrısı — ekranı ziyaret + (gerekirse) tek login, ana liste yüklenirken
+  tetiklenen ~5-6 ayırt edici network isteği, BİR temsili kaydın detayı,
+  görünür doğrulama/hata mesajı. **TÜM sekmeleri gezmez, CRUD (ekle/düzenle/sil)
+  DENEMEZ** — kapsamlı UI keşfi zaten heuristik tarafta yapılıyor; bu tur yalnız
+  ekran görüntüsünden anlaşılmayan network/mesaj kanıtını toplar. (Eskiden görev
+  sınırsızdı — 'TÜM sekmeler + her CRUD' — ve agentic döngü 480s timeout'u aşıp
+  hiç kanıt üretmeden ölüyordu; bounded görev + `LIVE_APP_MCP_TIMEOUT_MS`
+  varsayılanı 480s→180s ile düzeltildi.) `LIVE_APP_ALLOWED_TOOLS` bilinçli dar tutulmuş
   (navigate/snapshot/network/console/click/type/…) — `browser_evaluate`
   (keyfi JS) ve dosya yükleme YOK. `--allowedTools` verilmezse headless
   modda araçlar SESSİZCE reddedilir (kritik — verilmeden asla çağırma).
@@ -532,11 +538,11 @@ denenler missing'e geri taşınır → fix-up doğru hedefe yönelir. Fix-up
 iterasyonları raw substring kullanır (hız). Haiku çağrısı başarısız
 olursa raw substring'e graceful fallback (asla regresyon yapmaz).
 Maliyet ~$0.005/ekran. `COVERAGE_LLM_JUDGE=false` ile devre dışı.
-**Judge görselleri:** ana ekran + TEMSİLİ state'ler (selectRepresentativeStates
-ilk ≤6 — sekme/modal/dolu-form dahil). Yalnız ana görselle sekme/modal
-bölümlerindeki uydurma kör noktaydı; temsili state'ler bunu kapatır. Fix-up
-ise YALNIZ ana görselle çalışır (metin tüm dokümanı içerir; state görsellerini
-fix-up'a yığmak en pahalı vision kalemiydi).
+**Judge görseli:** YALNIZ ana ekran. (Denendi: judge'a ≤6 temsili state görseli
+eklemek — sekme/modal kör noktasını kapatmak için — Haiku'yu bozdu, kapsamı %0'a
+düşürdü; ana-görsel-only kanıtlanmış, kararlı davranıştır.) Fix-up da YALNIZ ana
+görselle çalışır (metin tüm dokümanı içerir; state görsellerini fix-up'a yığmak
+en pahalı vision kalemiydi).
 Her tur:
 - `runCoverageFixUp({docKind, currentContent, missing, uiElementsMissing})`
 - Yeni kapsam **eski kapsam ≥** ise kabul, gerileme reddedilir
