@@ -166,9 +166,8 @@ export class BrowserSession {
 
     let usernameSel = "";
     for (const sel of usernameSelectors) {
-      const exists = await this.page.$(sel);
-      if (exists) {
-        await this.page.fill(sel, env.appUsername, { timeout: 5000 }).catch(() => {});
+      if (await this.page.$(sel)) {
+        await this.fillField(sel, env.appUsername);
         usernameSel = sel;
         console.log(`  Kullanıcı adı dolduruldu: ${sel}`);
         break;
@@ -183,7 +182,7 @@ export class BrowserSession {
     let passwordSel = "";
     for (const sel of passwordSelectors) {
       if (await this.page.$(sel)) {
-        await this.page.fill(sel, env.appPassword, { timeout: 5000 }).catch(() => {});
+        await this.fillField(sel, env.appPassword);
         passwordSel = sel;
         console.log(`  Şifre dolduruldu: ${sel}`);
         break;
@@ -193,16 +192,24 @@ export class BrowserSession {
       throw new Error("Şifre alanı bulunamadı.");
     }
 
-    let submitted = false;
+    let submitSel = "";
     for (const sel of submitSelectors) {
-      if (await this.page.$(sel)) {
-        await this.page.click(sel, { timeout: 5000 }).catch(() => {});
-        console.log(`  Submit tıklandı: ${sel}`);
-        submitted = true;
-        break;
-      }
+      if (await this.page.$(sel)) { submitSel = sel; break; }
     }
-    if (!submitted) {
+    if (submitSel) {
+      // React formlarında submit butonu alanlar geçerli olana dek `disabled`
+      // olabilir; fillField blur ile doğrulamayı tetikledi, yine de aktifleşmeyi
+      // kısa süre bekle (aksi halde disabled butona tıklama sessizce yutulur).
+      await this.page
+        .waitForFunction(
+          (s) => { const b = document.querySelector(s) as HTMLButtonElement | null; return !!b && !b.disabled; },
+          submitSel,
+          { timeout: 4000 }
+        )
+        .catch(() => {});
+      await this.page.click(submitSel, { timeout: 5000 }).catch(() => {});
+      console.log(`  Submit tıklandı: ${submitSel}`);
+    } else {
       // Last resort: press Enter
       await this.page.press(passwordSel, "Enter").catch(() => {});
       console.log("  Enter ile submit denendi");
@@ -227,9 +234,17 @@ export class BrowserSession {
     console.log(`  Login sonrası URL: ${afterLoginUrl}`);
 
     if (/\/(login|signin|auth)\b/i.test(afterLoginUrl)) {
-      // Still on login → likely invalid creds or extra MFA
+      // Still on login → likely invalid creds, MFA/OTP step, or locked account.
+      // Sayfadaki GERÇEK hata mesajını oku → kullanıcı nedeni anında görsün
+      // (yanlış şifre / MFA / hesap kilitli vb.), tahmin etmesin.
+      const pageErr = await this.extractVisibleError();
+      if (pageErr) console.warn(`  Login sayfası hata mesajı: ${pageErr}`);
       throw new Error(
-        `Login başarısız görünüyor — hâlâ login sayfasındayız (${afterLoginUrl}). Kullanıcı adı/şifreyi kontrol edin.`
+        `Login başarısız görünüyor — hâlâ login sayfasındayız (${afterLoginUrl}).` +
+          (pageErr
+            ? ` Uygulamanın verdiği mesaj: "${pageErr}". `
+            : " Sayfada görünür bir hata mesajı yok. ") +
+          "Ayarlar'dan APP_USERNAME/APP_PASSWORD'ü kontrol edin; ek doğrulama (MFA/OTP) varsa bu akış desteklemez."
       );
     }
 
@@ -246,6 +261,53 @@ export class BrowserSession {
         console.warn(`  target nav warning: ${(err as Error).message.split("\n")[0]}`);
       }
     }
+  }
+
+  /**
+   * React/SPA login formlarına dayanıklı alan doldurma. `fill` çoğu React
+   * formunda çalışır (value + input event → onChange), ama bazı formlar
+   * (react-hook-form register, blur-doğrulaması) alanı "dokunulmadı" sayıp
+   * submit'i engelleyebilir. Bu yüzden: fill → değeri DOĞRULA → tutmadıysa
+   * gerçek tuş girişiyle (pressSequentially) tekrar dene → blur ile doğrulamayı
+   * tetikle. Şifre değeri koda `env`'den gelir; burada asla loglanmaz.
+   */
+  private async fillField(sel: string, value: string): Promise<void> {
+    if (!this.page) return;
+    const loc = this.page.locator(sel).first();
+    await loc.click({ timeout: 5000 }).catch(() => {});
+    await loc.fill(value, { timeout: 5000 }).catch(() => {});
+    // Değer gerçekten girildi mi? (kontrollü input reset etmiş olabilir)
+    const stuck = await loc.inputValue().catch(() => "");
+    if (stuck !== value) {
+      await loc.fill("", { timeout: 3000 }).catch(() => {});
+      await loc.pressSequentially(value, { delay: 20, timeout: 8000 }).catch(() => {});
+    }
+    await loc.blur().catch(() => {});
+  }
+
+  /** Login sayfasındaki görünür hata/uyarı metnini en-iyi-çaba ile okur
+   *  (yanlış kimlik, MFA, kilitli hesap vb.). Bulunamazsa boş döner. */
+  private async extractVisibleError(): Promise<string> {
+    if (!this.page) return "";
+    const selectors = [
+      '[role="alert"]',
+      '[aria-live="assertive"]',
+      '[aria-live="polite"]',
+      ".error", ".error-message", ".invalid-feedback", ".field-error",
+      ".text-red-500", ".text-danger", ".text-error",
+      ".ant-message-error", ".ant-form-item-explain-error",
+      ".Toastify__toast--error", ".toast-error", ".MuiAlert-message",
+    ];
+    for (const sel of selectors) {
+      try {
+        const el = await this.page.$(sel);
+        if (!el) continue;
+        if (!(await el.isVisible().catch(() => false))) continue;
+        const txt = ((await el.innerText().catch(() => "")) || "").trim();
+        if (txt) return txt.replace(/\s+/g, " ").slice(0, 200);
+      } catch { /* devam */ }
+    }
+    return "";
   }
 
   getPage(): Page {
