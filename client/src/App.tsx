@@ -78,7 +78,14 @@ function AppInner() {
     >
       {page === "dashboard" && <DashboardPage />}
       {page === "discovery" && (
-        <DiscoveryPage onJobStarted={setActiveJobId} deepAnalysis={deepAnalysis} />
+        <DiscoveryPage
+          deepAnalysis={deepAnalysis}
+          onDocsComplete={(jobId) => {
+            setLastCompletedDocJobId(jobId);
+            toast.show("✓ Döküman oluşturuldu — Dökümanlar sekmesinde açıldı", "success");
+            setPage("documents");
+          }}
+        />
       )}
       {page === "documents" && (
         <DocumentsPage

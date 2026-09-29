@@ -5,8 +5,10 @@ import { useToast } from "../components/Toast";
 import type { StoredScreen } from "../types";
 
 interface DiscoveryPageProps {
-  /** Documentation job started (after Döküman Oluştur) */
-  onJobStarted: (jobId: string) => void;
+  /** Döküman üretimi TAMAMLANDIĞINDA çağrılır (Dökümanlar'a geçiş için).
+   *  Not: üretim ilerlemesi ARTIK bu sayfada, satır içinde gösterilir —
+   *  ayrı bir tam-ekran sayfaya geçilmez. */
+  onDocsComplete: (jobId: string) => void;
   deepAnalysis: boolean;
 }
 
@@ -17,7 +19,9 @@ const STEPS = [
   { n: 4, label: "Döküman Oluştur" },
 ];
 
-export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryPageProps) {
+const DOC_STAGES = ["Bağlam", "Analiz", "Üretim", "Kalite", "Tamamlandı"];
+
+export default function DiscoveryPage({ onDocsComplete, deepAnalysis }: DiscoveryPageProps) {
   const toast = useToast();
   const [screens, setScreens] = useState<StoredScreen[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -26,6 +30,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
   const [discoveryJobId, setDiscoveryJobId] = useState<string | null>(null);
   const [discovering, setDiscovering] = useState(false);
   const [docJobLoading, setDocJobLoading] = useState(false);
+  const [docJobId, setDocJobId] = useState<string | null>(null);
   const [forceRegen, setForceRegen] = useState(false);
   const [appUrl, setAppUrl] = useState("");
   const [contextOpen, setContextOpen] = useState(false);
@@ -137,7 +142,8 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
     setDocJobLoading(true);
     try {
       const { jobId } = await jobs.start(Array.from(selected), forceRegen);
-      onJobStarted(jobId);
+      // Ayrı sayfaya GEÇME — ilerlemeyi bu sayfada, sağ sütunda göster.
+      setDocJobId(jobId);
     } catch (err) {
       alert((err as Error).message);
     } finally {
@@ -276,7 +282,28 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
 
         {/* ── SAĞ: Sonuç (galeri / ilerleme / boş durum) ───────── */}
         <div className="min-w-0 space-y-5">
-          {discovering && discoveryJobId ? (
+          {docJobId ? (
+            <div className="glass rounded-xl p-5">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <p className="text-[10px] font-semibold text-fg3 tracking-wider uppercase mb-1">İlerleme</p>
+                  <h3 className="text-[14px] font-semibold text-fg">Döküman Üretiliyor</h3>
+                </div>
+                <button onClick={() => setDocJobId(null)} className="text-[12px] text-fg3 hover:text-fg transition-colors flex-shrink-0">
+                  ← Ekranlara dön
+                </button>
+              </div>
+              <ProgressView
+                streamUrl={`/api/jobs/${docJobId}/stream`}
+                stages={DOC_STAGES}
+                onComplete={() => { const id = docJobId; setDocJobId(null); onDocsComplete(id); }}
+                onError={() => { /* hata paneli ProgressView içinde görünür; kart açık kalır */ }}
+                onPause={async () => { await jobControl.pause(docJobId); }}
+                onResume={async () => { await jobControl.resume(docJobId); }}
+                onCancel={async () => { if (!confirm("Döküman üretimini iptal etmek istiyor musun?")) return; await jobControl.cancel(docJobId); }}
+              />
+            </div>
+          ) : discovering && discoveryJobId ? (
             <div className="glass rounded-xl p-5">
               <p className="text-[10px] font-semibold text-fg3 tracking-wider uppercase mb-1">İlerleme</p>
               <h3 className="text-[14px] font-semibold text-fg mb-4">Ekranlar Keşfediliyor</h3>
