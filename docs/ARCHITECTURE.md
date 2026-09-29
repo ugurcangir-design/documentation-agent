@@ -809,10 +809,14 @@ inline form doldurma + okuma/yazma submit. Çağrılma:
 `runRowDetailDrilldown`: satır ikonlarının yanı sıra **ID hücresi link'i**
 ('533' gibi, etiketsiz), Actions ikonu (göz) ve satır birincil link'ini de
 dener. Detay MODAL olarak da **NAVİGASYONLA (yeni route)** da açılabilir —
-ikisi de ele alınır. Navigasyonda: detay tam-sayfa yakalanır + İÇİ
-`exploreContentArea(allowRowDrilldown=false)` ile gezilir (butonlar/alanlar
-state olur; özyineleme yok), sonra `page.goto(returnUrl)` ile listeye dönülür.
-`allowRowDrilldown` bayrağı özyinelemeyi engeller.
+ikisi de ele alınır. Navigasyonda: detay tam-sayfa yakalanır, sonra **ÖNCE
+`exploreTabs(detail, allowRowDrilldown=false)`** ile detayın SEKMELERİ tek tek
+gezilir (History/Wager/… her biri `Sekme:` state'i + kendi içerik keşfiyle →
+generator ayrı, detaylı bölüm üretir); sekme yoksa
+`exploreContentArea(allowRowDrilldown=false)`. Sonra `page.goto(returnUrl)` ile
+listeye dönülür. `allowRowDrilldown` bayrağı (exploreTabs + exploreContentArea)
+özyinelemeyi engeller; `makePushState` factory'si drilldown'a threadlenir
+(detay sekmelerinde per-sekme taze dedup scope).
 - **Sekme varsa:** her sekme için ayrı (TAZE dedup scope + TAZE clickedLabels),
   state dosyaları `${base}_tab_${i}_*`. Ana içerik keşfi ATLANIR
   (`tabsExplored` guard) — aksi halde aktif sekme iki kez yakalanıp kılavuza
