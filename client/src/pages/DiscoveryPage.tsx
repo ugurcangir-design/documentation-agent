@@ -282,6 +282,7 @@ export default function DiscoveryPage({ onJobStarted, deepAnalysis }: DiscoveryP
               <h3 className="text-[14px] font-semibold text-fg mb-4">Ekranlar Keşfediliyor</h3>
               <ProgressView
                 streamUrl={`/api/discovery/${discoveryJobId}/stream`}
+                stages={["Hazırlık", "Tarama", "Etkileşim", "Tamamlandı"]}
                 onComplete={handleDiscoveryComplete}
                 onError={handleDiscoveryError}
                 onPause={async () => { await jobControl.pause(discoveryJobId); }}
