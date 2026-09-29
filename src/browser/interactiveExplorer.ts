@@ -522,7 +522,10 @@ async function runRowActionPass(
  *  özyineleme yok) gezilir; sonra listeye geri dönülür. Silme/destructive
  *  ikonları atlanır. */
 async function runRowDetailDrilldown(
-  page: Page, basePath: string, log: (m: string) => void, pushState: PushStateFn, maxModals: number
+  page: Page, basePath: string, log: (m: string) => void, pushState: PushStateFn, maxModals: number,
+  /** Detay NAVİGASYONLA açıldığında, detayın SEKMELERİNİ de gezmek için
+   *  (exploreTabs). Verilmezse yalnız içerik keşfi yapılır. */
+  makePushState?: (seen: Set<string>) => PushStateFn
 ): Promise<void> {
   let captured = 0;
   let navDetailCaptured = false; // navigasyonla açılan detay bir kez yeter (yapı satırlar arası aynı)
@@ -587,11 +590,21 @@ async function runRowDetailDrilldown(
         await page.waitForTimeout(RENDER_WAIT);
         try { await page.waitForLoadState("networkidle", { timeout: 5000 }); } catch { /* noop */ }
         await pushState(`Kayıt detay ekranı: "${lbl}"`, `satırdaki "${lbl}" link'i tıklandı → detay ekranı açıldı`, `${basePath}_detail_${captured}`, { fullPage: true });
-        // Detay ekranının İÇİNİ gez: butonlar, alanlar, dropdown, modal vb.
-        // (satır-drilldown KAPALI → özyineleme yok). Kullanıcı "detayda çok
-        // buton/alan var" dedi; bunlar burada yakalanır.
+        // Detay ekranının İÇİNİ gez. ÖNCE SEKMELER (History/Wager/… gibi) tek tek
+        // exploreTabs ile gezilir → her sekme "Sekme:" state'i + kendi içerik
+        // keşfiyle yakalanır (generator bunları ayrı sekme bölümü olarak DETAYLI
+        // anlatır). Sekme yoksa düz içerik keşfine düşülür. Her iki yolda da
+        // satır-drilldown KAPALI (allowRowDrilldown=false) → özyineleme yok.
         try {
-          await exploreContentArea(page, `${basePath}_detail`, log, new Set<string>(), pushState, maxModals, false);
+          let detailTabs = 0;
+          if (makePushState) {
+            detailTabs = await exploreTabs(page, `${basePath}_detail`, log, makePushState, false);
+          }
+          if (detailTabs < 2) {
+            await exploreContentArea(page, `${basePath}_detail`, log, new Set<string>(), pushState, maxModals, false, makePushState);
+          } else {
+            log(`  ✓ Detay ekranında ${detailTabs} sekme ayrı ayrı gezildi`);
+          }
         } catch (e) {
           log(`  detay içi keşif uyarısı: ${(e as Error).message}`);
         }
@@ -624,7 +637,10 @@ async function exploreContentArea(
   maxModals: number,
   /** false → satır detay drilldown'ı ATLA. Detay ekranının İÇİ gezilirken
    *  (runRowDetailDrilldown içinden) true bırakılırsa sonsuz özyineleme olur. */
-  allowRowDrilldown = true
+  allowRowDrilldown = true,
+  /** Detay ekranının SEKMELERİNİ gezebilmek için (runRowDetailDrilldown →
+   *  exploreTabs). Taze dedup scope'lu push'lar üretir. */
+  makePushState?: (seen: Set<string>) => PushStateFn
 ): Promise<void> {
   // Dropdownlar / select'ler
   await forEachVisible(
@@ -654,7 +670,7 @@ async function exploreContentArea(
   await runColumnHeaderPass(page, basePath, log, clickedLabels, pushState);
   await runRowActionPass(page, basePath, log, pushState);
   if (allowRowDrilldown) {
-    await runRowDetailDrilldown(page, basePath, log, pushState, maxModals);
+    await runRowDetailDrilldown(page, basePath, log, pushState, maxModals, makePushState);
   }
 
   // Tarih seçiciler
@@ -816,7 +832,11 @@ async function exploreTabs(
   page: Page,
   basePath: string,
   log: (m: string) => void,
-  makePushState: (seen: Set<string>) => PushStateFn
+  makePushState: (seen: Set<string>) => PushStateFn,
+  /** Sekme içeriğinde satır→detay drilldown'a izin ver. Ana ekranın
+   *  sekmeleri için true (bir sekmedeki tablo satırı detay açabilir); DETAY
+   *  ekranının sekmeleri için false (özyineleme koruması). */
+  allowRowDrilldown = true
 ): Promise<number> {
   const homeUrl = page.url();
   const root = page.locator(TAB_SELECTOR);
@@ -880,7 +900,7 @@ async function exploreTabs(
     await tabPush(`Sekme: "${t.label}"`, `sekmeye gidildi: ${t.label}${urlChanges ? ` (${t.url})` : ""}`, `${basePath}_tab_${t.index}`, { fullPage: true });
     if (env.deepExplore) {
       log(`  ↳ Sekme içi derin keşif: ${t.label}`);
-      await exploreContentArea(page, `${basePath}_tab_${t.index}`, log, new Set<string>(), tabPush, 6);
+      await exploreContentArea(page, `${basePath}_tab_${t.index}`, log, new Set<string>(), tabPush, 6, allowRowDrilldown, makePushState);
     }
   }
 
@@ -994,7 +1014,7 @@ export async function exploreInteractiveStates(
 
   // ── 2. ANA İÇERİK KEŞFİ — yalnız SEKME YOKSA.
   if (!tabsExplored) {
-    await exploreContentArea(page, basePath, log, clickedLabels, pushState, MAX.modals);
+    await exploreContentArea(page, basePath, log, clickedLabels, pushState, MAX.modals, true, makePushState);
   } else {
     log(`  (${tabCount} sekme ayrı ayrı gezildi — ana içerik keşfi atlandı, tekrar önlendi)`);
   }
