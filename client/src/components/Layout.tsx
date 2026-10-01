@@ -101,8 +101,11 @@ const SIDEBAR_GROUPS = [
 type Theme = "dark" | "light";
 
 function getInitialTheme(): Theme {
+  // VARSAYILAN: beyaz (light) — Analyst Studio light-first. Yalnız kullanıcı
+  // açıkça dark'a geçtiyse (localStorage'da "dark") koyu açılır. Toggle (☀/🌙)
+  // ile her an değiştirilebilir.
   const stored = localStorage.getItem("theme");
-  return stored === "light" ? "light" : "dark";
+  return stored === "dark" ? "dark" : "light";
 }
 
 function readAnalyst(): string {

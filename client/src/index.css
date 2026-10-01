@@ -9,6 +9,7 @@
 
 :root,
 [data-theme="dark"] {
+  color-scheme: dark;
   --c-bg:            #080B12;
   --c-surface:       #0E141E;
   --c-surface2:      #131A26;
@@ -43,6 +44,7 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   --c-bg:            #F5F7FA;
   --c-surface:       #FFFFFF;
   --c-surface2:      #F0F3F7;
