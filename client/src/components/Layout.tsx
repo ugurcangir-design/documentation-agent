@@ -102,9 +102,11 @@ type Theme = "dark" | "light";
 
 function getInitialTheme(): Theme {
   // VARSAYILAN: beyaz (light) — Analyst Studio light-first. Yalnız kullanıcı
-  // açıkça dark'a geçtiyse (localStorage'da "dark") koyu açılır. Toggle (☀/🌙)
-  // ile her an değiştirilebilir.
-  const stored = localStorage.getItem("theme");
+  // açıkça dark'a geçtiyse koyu açılır. Toggle (☀/🌙) ile her an değiştirilir.
+  // NOT: YENİ anahtar ("docagent_theme"). Eski kod her açılışta eski "theme"
+  // anahtarına "dark" yazıyordu; o bayat değer yüzünden mevcut kullanıcılar
+  // light varsayılanı göremezdi → yeni anahtarla eski değer yok sayılır.
+  const stored = localStorage.getItem("docagent_theme");
   return stored === "dark" ? "dark" : "light";
 }
 
@@ -145,7 +147,7 @@ export default function Layout({
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("theme", theme);
+    localStorage.setItem("docagent_theme", theme);
   }, [theme]);
 
   useEffect(() => {
