@@ -1082,6 +1082,10 @@ quality/referenceCoverage  deterministik: `Kaynak: …` gövdeleri ↔ citeKey /
                            buildSourcesSection → kılavuz sonuna '### Kaynaklar' (yalnız
                            atıflananlar, bağlantılı). Trace: 'Referans kullanımı: %'.
 jobs/contextLoader         Confluence/Jira bölümlerine url; kaynaklar ≥7 gün bayatsa uyarı.
+server/referenceAutoSync   günlük oto-senkron (açılış+20sn, saatlik kontrol; aktif job varsa erteler)
+                           → Atlassian refresh token her gün yenilenir, 90 günlük düşme olmaz;
+                           kaynak yoksa yalnız token keep-alive. AUTO_REF_SYNC=false kapatır.
+                           Geçersiz refresh token → token'lar temizlenir, UI 'yeniden bağlan' der.
 ingestion/sourceSync       htmlToText blok sınırlarını (p/li/tr/başlık/br) satır sonu olarak
                            korur → parçalama paragraf sınırı bulur (yeniden sync gerekir).
 ```

@@ -57,7 +57,8 @@ bkz. docs/ARCHITECTURE.md "Canlı Uygulama Kanıtı — MCP") ·
 biçimsel yazım denetimi, guardrail'li) · `HOST=127.0.0.1` (bind; 0.0.0.0 LAN
 açar — bkz. güvenlik) · `CLAUDE_MAX_CONCURRENCY=4` (tüm Claude çağrıları için
 global eşzamanlılık sınırı) · `CLAUDE_CLI_TIMEOUT_MS=900000` (CLI çağrı zaman aşımı; görselli uzun
-kılavuz çıktısı 6 dk'yı aşabiliyor) · `FIX_UP_THRESHOLD=85` · `FIX_UP_MAX_PASSES=1` ·
+kılavuz çıktısı 6 dk'yı aşabiliyor) · `AUTO_REF_SYNC=true` (günlük referans oto-senkron +
+Atlassian token keep-alive — bkz. `src/server/referenceAutoSync.ts`) · `FIX_UP_THRESHOLD=85` · `FIX_UP_MAX_PASSES=1` ·
 `CONTEXT_DOC_BUDGET=48000` / `CONTEXT_PARAGRAPHS=14` (RAG bağlam derinliği —
 referanslardan yararlanma; büyüdükçe zengin anlatım, CLI'da token ↑) ·
 `CONTEXT_TYPE_CAPS=confluence:0.45,brd:0.35,process_analysis:0.2,jira_task:0.3,manual:0.15`
