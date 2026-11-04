@@ -6,6 +6,8 @@ import { searchDocumentSections, type RankedDocumentSection } from "../retrieval
 import { searchEndpoints } from "../retrieval/endpointSearch";
 import { searchParagraphs } from "../retrieval/paragraphSearch";
 import { prepareDocumentChunks } from "../retrieval/contextBudget";
+import { extractReferenceRules } from "../retrieval/ruleExtractor";
+import { crossCheckBehaviors } from "../quality/behaviorCrossCheck";
 import { env } from "../config/env";
 
 /**
@@ -68,6 +70,13 @@ export function buildScreenContext(
   allEndpoints: Endpoint[]
 ): ScreenContext {
   // Title is the strongest signal — give it double weight
+  // Faz 3: keşifte türetilen davranış kuralları (ör. "Ticket ID doluyken …")
+  // sorguya eklenir → ilgili kural bölümleri (Jira/BRD) daha isabetli gelir;
+  // istek parametre adları (ticketId → ticket id) da anahtar kelime olur.
+  const behaviorTerms = (screen.behaviors ?? []).flatMap((b) => [
+    b.statement,
+    ...(b.evidence.requests ?? []).flatMap((r) => Object.keys(r.query).map((k) => k.replace(/([a-z])([A-Z])/g, "$1 $2"))),
+  ]);
   const queryParts = [
     analysis.screenTitle,
     analysis.screenTitle,
@@ -75,6 +84,7 @@ export function buildScreenContext(
     ...analysis.workflows.map((wf) => wf.name),
     ...analysis.dataDisplayed,
     analysis.purpose,
+    ...behaviorTerms,
   ].filter(Boolean);
 
   const keywords = queryParts.join(" ");
@@ -117,6 +127,29 @@ export function buildScreenContext(
     maxTotal: env.contextParagraphs,
   }).filter((m) => !usedSectionTitles.has(m.sectionTitle));
 
+  // Faz 3: referans kural çıkarımı (yalnız bu ekranın RAG'le seçilmiş
+  // bölümlerinden — 2600+ bölümün tamamı değil) + gözlemle çapraz doğrulama.
+  // Gözlem yoksa bile ekranla ilgili referans kuralları 'reference' kaynaklı
+  // (koşullu anlatılacak) olarak döner.
+  const observed = screen.behaviors ?? [];
+  // Paragraf eşleşmeleri yalnız başlık/dosya taşır → tür/id'yi kaynağından al.
+  const byTitle = new Map(allSections.map((sec) => [sec.title, sec] as const));
+  const ruleSections: DocumentSection[] = [
+    ...relatedSections.map((r) => r.section),
+    ...paragraphMatches.map((m) => {
+      const src = byTitle.get(m.sectionTitle);
+      return {
+        id: `${m.sectionTitle}#p`, sourceId: src?.sourceId ?? "", sourceType: src?.sourceType ?? "manual",
+        sourceFile: m.sourceFile, title: m.sectionTitle, content: m.paragraph,
+      };
+    }),
+  ];
+  const refRules = extractReferenceRules(ruleSections);
+  const screenVocab = [analysis.screenTitle, ...analysis.uiElements.slice(0, 25).map((el) => el.label), analysis.purpose].join(" ");
+  const behaviors = (observed.length > 0 || refRules.length > 0)
+    ? crossCheckBehaviors(observed, refRules, screenVocab)
+    : [];
+
   return {
     screen,
     analysis,
@@ -124,5 +157,6 @@ export function buildScreenContext(
     relatedEndpoints: relatedEndpoints.slice(0, 12),
     preparedChunks,
     paragraphMatches,
+    ...(behaviors.length > 0 ? { behaviors } : {}),
   };
 }

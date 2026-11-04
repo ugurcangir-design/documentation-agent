@@ -1,3 +1,4 @@
+import type { BehaviorFact } from "./behavior";
 import { DiscoveredScreen, ScreenAnalysis } from "./screen";
 import { RankedDocumentSection } from "../retrieval/documentSearch";
 import { RankedEndpoint } from "../retrieval/endpointSearch";
@@ -14,6 +15,9 @@ export interface ScreenContext {
    *  mention multiple query terms but are inside otherwise-low-ranked
    *  sections. Captures detail the section-level retrieval misses. */
   paragraphMatches: MatchedParagraph[];
+  /** Faz 3: keşifte gözlemlenen + referanslarla çapraz doğrulanan davranış
+   *  kuralları (kaynak/güvenilirlik etiketli). Generator + trace kullanır. */
+  behaviors?: BehaviorFact[];
 }
 
 export interface ScreenDocumentation {

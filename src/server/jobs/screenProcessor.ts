@@ -140,6 +140,7 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
     const stateLabels = (storedScreen.states ?? []).map((s) => s.label);
     const fingerprint = computeDocFingerprint({
       analysis, preparedChunks: context.preparedChunks, stateLabels, genFp,
+      ...(context.behaviors ? { behaviors: context.behaviors } : {}),
     });
     if (!force) {
       const existing = documentStore.getLatestByScreenPath(screenPath);

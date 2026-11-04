@@ -50,6 +50,9 @@ export function computeDocFingerprint(input: {
   preparedChunks: PreparedChunk[];
   stateLabels: string[];
   genFp: string;
+  /** Faz 3: davranış kuralları değişirse (yeni gözlem/referans) doküman
+   *  yeniden üretilmeli → parmak izine dahil. */
+  behaviors?: Array<{ kind: string; statement: string; source: string }>;
 }): string {
   const a = input.analysis;
   const analysisSig = {
@@ -71,6 +74,7 @@ export function computeDocFingerprint(input: {
       a: analysisSig,
       c: ctxSig,
       s: [...input.stateLabels].sort(),
+      b: (input.behaviors ?? []).map((x) => `${x.kind}|${x.source}|${x.statement}`).sort(),
     })
   );
 }
