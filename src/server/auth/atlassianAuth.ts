@@ -244,7 +244,23 @@ async function refreshTokens(current: AtlassianTokens): Promise<AtlassianTokens>
   });
 
   if (resp.status !== 200) {
-    throw new Error(`Token refresh failed (${resp.status}): ${resp.body}`);
+    // Refresh token kalıcı olarak geçersiz (Atlassian döner refresh token'ları
+    // 90 gün kullanılmayınca düşer; uygulama yetkisi iptal edilmiş de olabilir).
+    // Yeniden denemek anlamsız → saklanan token'ları temizle, kullanıcıyı
+    // Ayarlar'dan yeniden yetkilendirmeye yönlendir. Ham yanıt gövdesi
+    // kullanıcıya gösterilmez (log'a gider).
+    const body = (resp.body || "").toLowerCase();
+    const dead = resp.status === 403 || resp.status === 401 ||
+      body.includes("unauthorized_client") || body.includes("invalid_grant") || body.includes("refresh_token is invalid");
+    if (dead) {
+      console.warn(`[atlassian] refresh token geçersiz (${resp.status}) — token'lar temizlendi, yeniden yetkilendirme gerekli`);
+      clearTokens();
+      throw new Error(
+        "Atlassian oturumunun süresi dolmuş (yenileme token'ı geçersiz — 90 gün kullanılmayınca düşer). " +
+        "Ayarlar > Atlassian bölümünden 'Bağlan' ile yeniden yetkilendirin, sonra Referanslar'dan senkronize edin."
+      );
+    }
+    throw new Error(`Atlassian token yenileme başarısız (HTTP ${resp.status}). Ayarlar > Atlassian'dan bağlantıyı test edin.`);
   }
 
   const tokens = JSON.parse(resp.body) as TokenResponse;

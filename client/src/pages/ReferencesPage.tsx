@@ -573,8 +573,9 @@ function SourcesTab({
     <div className="space-y-4">
       {!connected && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-[12px] text-amber-700">
-          Atlassian bağlantısı yok. Confluence space ve Jira projelerini senkronize edebilmek için
-          önce <span className="font-medium">Ayarlar</span> sayfasından OAuth ile bağlanın.
+          Atlassian bağlantısı yok ya da oturumun süresi dolmuş (yenileme token'ı 90 gün kullanılmayınca düşer).
+          Confluence space ve Jira projelerini senkronize edebilmek için
+          <span className="font-medium"> Ayarlar &gt; Atlassian</span> bölümünden 'Bağlan' ile yeniden yetkilendirin.
         </div>
       )}
 
