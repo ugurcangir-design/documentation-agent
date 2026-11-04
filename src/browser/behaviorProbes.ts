@@ -58,6 +58,46 @@ export async function ensureFiltersOpen(page: Page, log: (m: string) => void): P
   return false;
 }
 
+/**
+ * Deney değerini TABLODAN alır: alan etiketiyle eşleşen sütun başlığının ilk
+ * satırdaki hücresi (ör. "Retailer ID" → "4", "Barcode" → gerçek barkod).
+ * Gerçek değer → geçerli istek (400 yok) → kesin alan→parametre eşlemesi.
+ * String-evaluate: tsx/esbuild'in __name enjeksiyonundan kaçınmak için.
+ */
+export async function valueFromTable(page: Page, label: string): Promise<string | null> {
+  try {
+    const v = await page.evaluate(`((label) => {
+      const norm = (t) => (t || "").toLowerCase().replace(/[^a-z0-9ğüşıöç]+/g, " ").trim();
+      const want = norm(label);
+      if (!want) return null;
+      const headers = Array.from(document.querySelectorAll('thead th, [role="columnheader"], thead td'));
+      let idx = headers.findIndex((h) => norm(h.textContent) === want);
+      if (idx < 0) idx = headers.findIndex((h) => norm(h.textContent).includes(want) || want.includes(norm(h.textContent)));
+      if (idx < 0) return null;
+      const row = document.querySelector("tbody tr");
+      if (!row) return null;
+      const cells = Array.from(row.querySelectorAll('td, [role="cell"]'));
+      const cell = cells[idx];
+      if (!cell) return null;
+      const txt = (cell.textContent || "").replace(/\\s+/g, " ").trim();
+      return txt && txt.length <= 40 ? txt : null;
+    })(${JSON.stringify(label)})`) as string | null;
+    return v && v !== "—" && v !== "-" ? v : null;
+  } catch { return null; }
+}
+
+/** Boş arama sonrası (liste doluyken) deney değerlerini tablodaki gerçek
+ *  değerlerle tazeler; bulunamazsa örnek değer kalır. */
+async function refreshValuesFromTable(page: Page, fields: Field[], log: (m: string) => void): Promise<void> {
+  for (const f of fields) {
+    // "Search by retailer ID..." gibi ipuçlarından sütun adını çıkar.
+    const colLabel = f.label.replace(/^search by\s+/i, "").replace(/\.{2,}$/, "").trim();
+    const real = await valueFromTable(page, colLabel);
+    if (real) f.value = real;
+  }
+  log(`  deney değerleri: ${fields.map((f) => `${f.label}=${maskValue(f.label, f.value)}`).join(", ")}`);
+}
+
 async function collectFields(scope: Page | Locator): Promise<Field[]> {
   const root = "locator" in scope ? (scope as Locator) : (scope as Page);
   const inputs = root.locator(TEXT_SEL);
@@ -82,7 +122,20 @@ async function collectFields(scope: Page | Locator): Promise<Field[]> {
     .slice(0, MAX_FIELDS);
 }
 
-async function clearAll(fields: Field[]): Promise<void> {
+/** Kapsamdaki TÜM metin alanlarını temizler (yalnız deney alanlarını değil):
+ *  keşif sırasında doldurulmuş diğer filtreler (ör. Device ID) deneyi kirletir —
+ *  "boş" arama isteğinde fazladan parametre görünür, liste boş döner. */
+async function clearAll(scope: Page | Locator, fields: Field[]): Promise<void> {
+  const root = "locator" in scope ? (scope as Locator) : (scope as Page);
+  try {
+    const all = root.locator(TEXT_SEL);
+    const n = Math.min(await all.count().catch(() => 0), 30);
+    for (let i = 0; i < n; i++) {
+      const loc = all.nth(i);
+      const v = await loc.inputValue({ timeout: 300 }).catch(() => "");
+      if (v) await loc.fill("", { timeout: 1000 }).catch(() => {});
+    }
+  } catch { /* noop */ }
   for (const f of fields) await f.loc.fill("", { timeout: 1500 }).catch(() => {});
 }
 
@@ -208,6 +261,7 @@ export async function runBehaviorProbes(
   const A = fields[0]!, B = fields[1];
   log(`Davranış deneyleri başlıyor: ${fields.map((f) => f.label).join(", ")} (maks ${maxRuns} arama)`);
   const applyBtn = await findApplyButton(page, A.loc, log);
+  const applyInitiallyDisabled = applyBtn ? await applyBtn.isDisabled().catch(() => false) : false;
   if (!applyBtn) {
     // Apply yoksa clickSubmitButton(page) fallback'i panel BAŞLIĞINA basıp paneli
     // kapatıyor ve sonraki deneyleri zehirliyordu → deneyleri güvenle atla.
@@ -217,7 +271,7 @@ export async function runBehaviorProbes(
   // Her deney öncesi: panel kapanmışsa yeniden aç, alanları temizle.
   const prep = async () => {
     if (!(await A.loc.isVisible({ timeout: 300 }).catch(() => false))) await ensureFiltersOpen(page, log);
-    await clearAll(fields);
+    await clearAll(scope, fields);
   };
 
   try {
@@ -237,13 +291,16 @@ export async function runBehaviorProbes(
       } catch { /* noop */ }
       const res = await submitAndCapture(page, scope, recorder, log, applyBtn); used++;
       const { clicked, request } = res;
-      if (res.disabled) applyDisabled = true;
+      if (res.disabled || applyInitiallyDisabled) applyDisabled = true;
       if (!clicked && !applyDisabled) {
         log("  (okuma-submit butonu yok — davranış deneyleri atlandı; kural uydurulmaz)");
         return [];
       }
       const message = request ? "" : await visibleMessage(page);
       runs.push({ id: "empty", filled: {}, ...(request ? { request } : {}), ...(message ? { message } : {}), ...(applyDisabled ? { applyDisabled: true } : {}) });
+      // Liste artık filtresiz/dolu: tek-alan deneyleri için tablodan GERÇEK değer al
+      // (örnek değer → 400 / boş sonuç → alan→parametre eşlemesi çıkarılamaz).
+      await refreshValuesFromTable(page, fields, log);
     }
     // single A
     if (can()) {
@@ -298,7 +355,7 @@ export async function runBehaviorProbes(
       runs.push({ id: `validation:${A.label}`, filled: { [A.label]: bad.slice(0, 12) }, ...(request ? { request } : {}), ...(message ? { message } : {}) });
     }
   } finally {
-    await clearAll(fields);
+    await clearAll(scope, fields);
     recorder.reset();
   }
 

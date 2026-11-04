@@ -113,6 +113,11 @@ export function sampleValueForField(meta: FieldMeta, now: Date = new Date()): st
   }
 
   // Serbest metin (text / search / textarea / type'sız) — bağlama göre
+  // Kimlik/sayısal alanlar önce: "Retailer ID", pattern=[0-9]* → sayısal örnek
+  // (tr-lower "ID"→"ıd" olduğundan düz lower da denenir).
+  const hayEn = [meta.name, meta.id, meta.label, meta.placeholder].filter(Boolean).join(" ").toLowerCase();
+  const numericPattern = !!meta.pattern && /^\^?\[0-9\][*+]?\$?$|^\^?\\d[*+]?\$?$|^\^?\(\?:\[0-9\]\|\\d\)[*+]?\$?$/.test(meta.pattern.trim());
+  if (numericPattern || /\b(id|kimlik no|identifier)\b/.test(hayEn)) return "1";
   if (has("e-posta", "eposta", "email", "e-mail", "mail")) return "test@ornek.com";
   if (has("telefon", "phone", "gsm", "cep", "tel")) return "5321234567";
   if (has("iban")) return "TR000000000000000000000000";
@@ -124,7 +129,7 @@ export function sampleValueForField(meta: FieldMeta, now: Date = new Date()): st
     return "Örnek açıklama metni — test amaçlı doldurulmuştur.";
   }
   if (has("adres", "address")) return "Örnek Mah. Test Cad. No:1 Çankaya/Ankara";
-  if (has("şehir", "sehir", "city", "il")) return "Ankara";
+  if (has("şehir", "sehir", "city") || /\b(il|ilçe|ilce)\b/.test(hay)) return "Ankara";
   if (has("ülke", "ulke", "country")) return "Türkiye";
   if (has("posta kod", "zip", "postal")) return "06000";
   if (has("kod", "code", "numara", "no", "barkod", "sku", "referans")) return "ORN-123";

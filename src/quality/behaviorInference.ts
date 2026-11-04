@@ -80,8 +80,10 @@ export function inferBehaviors(screenPath: string, runs: ProbeRun[]): BehaviorFa
   if (empty) {
     if (empty.request) {
       out.push(fact(screenPath, "required-field",
-        "Hiçbir filtre girilmeden arama yapılabilir; sistem tüm kayıtları listeler.",
-        { requests: [empty.request], ...(empty.stateLabel ? { stateLabels: [empty.stateLabel] } : {}), note: "boş arama isteği gönderildi" }, "high"));
+        empty.applyDisabled
+          ? "Filtre girilmeden liste tüm kayıtlarla gelir; \"Uygula/Apply\" butonu en az bir filtre girilmeden pasiftir."
+          : "Hiçbir filtre girilmeden arama yapılabilir; sistem tüm kayıtları listeler.",
+        { requests: [empty.request], ...(empty.stateLabel ? { stateLabels: [empty.stateLabel] } : {}), note: empty.applyDisabled ? "filtresiz liste isteği + arama butonu pasif" : "boş arama isteği gönderildi" }, "high"));
     } else if (empty.message || empty.applyDisabled) {
       out.push(fact(screenPath, "required-field",
         `Arama için en az bir filtre girilmesi gerekir${empty.applyDisabled ? "; filtre girilmeden arama butonu pasiftir" : ""}${empty.message ? ` (uygulama mesajı: "${empty.message}")` : ""}.`,
