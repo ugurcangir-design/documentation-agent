@@ -110,6 +110,19 @@ const HEADER_ONLY = /^\s*(filters?|filtreler|filtre paneli|filter panel|gelişmi
  * uygulamada "Filters" panel başlığına basıp paneli KAPATIYORDU (istek yok).
  */
 async function findApplyButton(page: Page, anchor: Locator, log: (m: string) => void): Promise<Locator | null> {
+  // Yol 0 — erişilebilir ad (textContent boş olsa da aria-label/iç metin yakalanır).
+  try {
+    const byRole = page.getByRole("button", { name: /^(apply|uygula|ara|arama|search|sorgula|filtrele|listele)$/i });
+    const rn = await byRole.count().catch(() => 0);
+    for (let i = 0; i < rn; i++) {
+      const b = byRole.nth(i);
+      if (!(await b.isVisible().catch(() => false))) continue;
+      if ((await b.getAttribute("aria-expanded").catch(() => null)) !== null) continue;
+      if (await b.isDisabled().catch(() => false)) continue;
+      log(`  deney butonu (role): "${((await b.textContent().catch(() => "")) || "").trim().slice(0, 30)}"`);
+      return b;
+    }
+  } catch { /* yol 1'e düş */ }
   const btns = page.locator('button:not([disabled]), [role="button"]:not([aria-disabled="true"]), input[type="submit"]:not([disabled])');
   const n = await btns.count().catch(() => 0);
   const anchorHandle = await anchor.elementHandle().catch(() => null);
@@ -130,8 +143,21 @@ async function findApplyButton(page: Page, anchor: Locator, log: (m: string) => 
       if (!fallback) fallback = b;
     } catch { /* sonraki */ }
   }
-  if (fallback) log("  deney butonu (alanlardan önce): fallback");
-  return fallback;
+  if (fallback) { log("  deney butonu (alanlardan önce): fallback"); return fallback; }
+  // Tanı: neden bulunamadı? apply/filter benzeri TÜM butonları bayraklarıyla dök.
+  try {
+    const dump = await page.evaluate(() => {
+      const vis = (el: Element) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none"; };
+      return Array.from(document.querySelectorAll('button,[role="button"],input[type="submit"]'))
+        .filter((el) => /apply|uygula|\bara\b|search|filtre|filter|sorgula|listele/i.test(((el.textContent || "") + " " + (el.getAttribute("aria-label") || ""))))
+        .slice(0, 12)
+        .map((el) => `${el.tagName}"${(el.textContent || "").trim().slice(0, 24)}" vis=${vis(el)} dis=${(el as HTMLButtonElement).disabled === true || el.getAttribute("aria-disabled") === "true"} exp=${el.getAttribute("aria-expanded")} role=${el.getAttribute("role")}`);
+    });
+    log(`  deney butonu BULUNAMADI (taranan: ${n}). Adaylar: ${dump.join(" | ") || "(yok)"}`);
+  } catch (e) {
+    log(`  deney butonu BULUNAMADI (taranan: ${n}); tanı alınamadı: ${(e as Error).message}`);
+  }
+  return null;
 }
 
 /** Okuma-submit'e basıp bu etkileşimin tetiklediği "arama" isteğini döndürür. */
