@@ -7,6 +7,7 @@
 
 import { Router, type Request, type Response } from "express";
 
+import { syncAllSources } from "../referenceAutoSync";
 import { referenceStore } from "../store/referenceStore";
 import { getStoredTokens } from "../auth/atlassianAuth";
 import { syncConfluenceSpace, syncJiraProject } from "../../ingestion/sourceSync";
@@ -108,28 +109,8 @@ router.post("/sync", async (_req: Request, res: Response) => {
     return;
   }
 
-  const log: string[] = [];
-  const errors: string[] = [];
-
-  for (const src of referenceStore.getSources()) {
-    try {
-      const result =
-        src.kind === "confluence-space"
-          ? await syncConfluenceSpace(src.key)
-          : await syncJiraProject(src.key);
-      referenceStore.updateSource(src.id, {
-        lastSync: new Date().toISOString(),
-        itemCount: result.count,
-      });
-      log.push(...result.log);
-    } catch (err) {
-      const msg = `${src.key}: ${(err as Error).message}`;
-      errors.push(msg);
-      log.push(`✗ ${msg}`);
-    }
-  }
-
-  res.json({ ok: errors.length === 0, log, errors });
+  const { ok, log, errors } = await syncAllSources("manuel");
+  res.json({ ok, log, errors });
 });
 
 export default router;

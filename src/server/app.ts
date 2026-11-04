@@ -21,6 +21,7 @@ import updateRoutes from "./routes/updateRoutes";
 import liveAppRoutes from "./routes/liveAppRoutes";
 import freshnessRoutes from "./routes/freshnessRoutes";
 import { startScheduler } from "./scheduler";
+import { startReferenceAutoSync } from "./referenceAutoSync";
 import { env } from "../config/env";
 import { csrfGuard } from "./middleware/csrfGuard";
 import { securityHeaders } from "./middleware/securityHeaders";
@@ -261,6 +262,7 @@ app.listen(PORT, env.host, () => {
   console.log(`\n  For development: cd client && npm run dev`);
   // Zamanlanmış tazeleme denetleyicisi (kapalıyken no-op; Ayarlar'dan açılır).
   startScheduler();
+  startReferenceAutoSync();
 });
 
 export default app;

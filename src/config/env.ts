@@ -60,6 +60,8 @@ export const env = {
   // referans (BRD/Confluence/Jira/doküman) bölüm bütçesi (byte) ve paragraf
   // sayısı. Artırınca kılavuz kaynaklardan daha çok yararlanır ama CLI'da her
   // çağrıda daha çok token gider. Düşürünce token ↓, anlatım sığlaşır.
+  /** Günlük referans oto-senkron + Atlassian token keep-alive (AUTO_REF_SYNC=false kapatır). */
+  get autoRefSync(): boolean { return (process.env.AUTO_REF_SYNC || "true").toLowerCase() !== "false"; },
   get contextDocBudget(): number {
     const n = parseInt(process.env.CONTEXT_DOC_BUDGET || "48000", 10);
     return Number.isFinite(n) && n > 0 ? n : 48000;
