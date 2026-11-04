@@ -23,6 +23,26 @@ export interface FieldMeta {
   id?: string;
   label?: string;
   placeholder?: string;
+  /** Faz 6 — DOM'dan okunan alan semantiği (görselden anlaşılmaz). */
+  required?: boolean;
+  maxLength?: number;
+  pattern?: string;
+  min?: string;
+  max?: string;
+  /** select seçenekleri (ilk 8, görünen metin). */
+  options?: string[];
+}
+
+/** Alan semantiğini kılavuz için tek satır Türkçe gerçeğe çevirir. */
+export function describeField(meta: FieldMeta, label: string): string {
+  const bits: string[] = [`tür: ${meta.type}`];
+  if (meta.required) bits.push("zorunlu");
+  if (meta.maxLength) bits.push(`maks ${meta.maxLength} karakter`);
+  if (meta.pattern) bits.push(`format: ${meta.pattern}`);
+  if (meta.min || meta.max) bits.push(`aralık: ${meta.min || "…"}–${meta.max || "…"}`);
+  if (meta.options && meta.options.length > 0) bits.push(`seçenekler: ${meta.options.join(", ")}`);
+  if (meta.placeholder) bits.push(`ipucu: "${meta.placeholder}"`);
+  return `"${label}" — ${bits.join(", ")}`;
 }
 
 /** YYYY-MM-DD (date input value formatı). */
@@ -127,6 +147,8 @@ export interface FillResult {
   /** Faz 1: etiket → girilen değer (hassas değer maskeli). Kılavuzda "örnek
    *  değer" ve davranış deneylerinde "hangi alan doluydu" kanıtı. */
   values: Record<string, string>;
+  /** Faz 6: alan semantiği gerçekleri (zorunlu/format/seçenek) — "Alanlar" anlatımı için. */
+  domFacts: string[];
 }
 
 const FILL_TIMEOUT = 2000;
@@ -174,12 +196,23 @@ export async function fieldMetaOf(loc: Locator): Promise<FieldMeta> {
         const wrap = e.closest("label");
         if (wrap) label = (wrap.textContent || "").trim();
       }
+      const required = !!e.required || e.getAttribute("aria-required") === "true";
+      const ml = Number(e.getAttribute("maxlength") || 0);
+      const options = tag === "select"
+        ? Array.from((e as HTMLSelectElement).options).map((o) => (o.textContent || "").trim()).filter(Boolean).slice(0, 8)
+        : undefined;
       return {
         type: type.toLowerCase(),
         name: e.getAttribute("name") || "",
         id: e.id || "",
         label: label.slice(0, 60),
         placeholder: e.getAttribute("placeholder") || "",
+        ...(required ? { required: true } : {}),
+        ...(ml > 0 ? { maxLength: ml } : {}),
+        ...(e.getAttribute("pattern") ? { pattern: e.getAttribute("pattern") || "" } : {}),
+        ...(e.getAttribute("min") ? { min: e.getAttribute("min") || "" } : {}),
+        ...(e.getAttribute("max") ? { max: e.getAttribute("max") || "" } : {}),
+        ...(options && options.length > 0 ? { options } : {}),
       };
     });
   } catch {
@@ -200,6 +233,7 @@ export async function fillTestData(
 ): Promise<FillResult> {
   const labels: string[] = [];
   const values: Record<string, string> = {};
+  const domFacts: string[] = [];
   let filled = 0;
 
   const root = "locator" in scope ? (scope as Locator) : (scope as Page);
@@ -235,6 +269,7 @@ export async function fillTestData(
       const key = meta.label || meta.placeholder || meta.name || meta.type;
       labels.push(key);
       values[key] = maskValue(key, value);
+      domFacts.push(describeField(meta, key));
     } catch {
       /* alanı atla */
     }
@@ -261,6 +296,7 @@ export async function fillTestData(
       const key = meta.label || meta.name || "seçim";
       labels.push(key);
       values[key] = maskValue(key, picked);
+      domFacts.push(describeField(meta, key));
     } catch {
       /* atla */
     }
@@ -296,7 +332,7 @@ export async function fillTestData(
   if (filled > 0) {
     log(`  ↳ ${filled} alan test verisiyle dolduruldu: ${labels.slice(0, 6).join(", ")}${labels.length > 6 ? "…" : ""}`);
   }
-  return { filledCount: filled, labels, values };
+  return { filledCount: filled, labels, values, domFacts };
 }
 
 /**

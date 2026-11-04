@@ -784,10 +784,10 @@ async function exploreContentArea(
     try {
       const scopeLoc = page.locator("main, [role=main], form").first();
       const scope = (await scopeLoc.count().catch(() => 0)) > 0 ? scopeLoc : page;
-      const { filledCount, labels, values } = await fillTestData(page, scope, log);
+      const { filledCount, labels, values, domFacts } = await fillTestData(page, scope, log);
       if (filledCount >= 2) {
         await page.waitForTimeout(400);
-        await pushState(`Form dolu`, `form test verisiyle dolduruldu: ${labels.slice(0, 4).join(", ")}`, `${basePath}_form_filled`, { fullPage: true }, { formValues: values });
+        await pushState(`Form dolu`, `form test verisiyle dolduruldu: ${labels.slice(0, 4).join(", ")}`, `${basePath}_form_filled`, { fullPage: true }, { formValues: values, ...(domFacts.length > 0 ? { domFacts } : {}) });
         log(`  ✓ Dolu form state'i yakalandı (${filledCount} alan)`);
         try {
           const r = await clickSubmitButton(page, scope, "read", log);

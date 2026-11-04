@@ -1046,6 +1046,46 @@ CLAUDE.md'yi okur, kuralı görür, uygular.
 
 ---
 
+## Davranış Keşfi ve Kanıta Dayalı Kılavuz (Faz 0-6)
+Plan: `docs/PLAN-davranis-kesfi.md`. Amaç: ekranın DAVRANIŞ KURALLARINI (ör.
+*"Ticket ID doluyken diğer filtreler isteğe dahil edilmez"*) canlı gözlem +
+referansla **kanıtlı ve kaynaklı** olarak kılavuza sokmak. Kanıt önce
+deterministik (0 token); uydurma yasak korunur.
+
+```
+types/behavior.ts         NetRequest / StateEvidence / BehaviorFact (opsiyonel alanlar)
+browser/requestRecorder   page.on(requestfinished) → aynı-origin XHR/fetch; query ANAHTAR
+                          + maskeli değer, JSON gövde anahtarları, status. Header/gövde
+                          değeri tutulmaz; PII/sır maskelenir. Her pushState "son
+                          etkileşimden bu yana" istekleri state.evidence.requests yapar.
+formFiller.fillTestData   → values (etiket→maskeli değer) + domFacts (zorunlu/maxlength/
+                          pattern/min-max/select seçenekleri) → "Form dolu" state kanıtı.
+browser/behaviorProbes    keşif sonunda (FILL_TEST_DATA && BEHAVIOR_PROBES): okuma-submit
+                          deneyleri empty / single:A / single:B / combo:A+B / reset /
+                          validation. Okuma-submit butonu YOKSA tamamen atlanır (yanlış
+                          kural yok). ID-benzeri alan A adayı. A+B deneyi görsel state.
+quality/behaviorInference tek-alan deneylerinden alan→param eşlemesi; A+B diff →
+                          filter-precedence / filter-combine; empty → required-field;
+                          validation → mesaj(high)/istek-yok(medium); reset; pagination/sort.
+                          Eşleme bilinmiyorsa kural ÜRETMEZ.
+retrieval/ruleExtractor   seçilmiş RAG bölüm+paragraflarından kural cümleleri (-malı/-meli,
+                          dikkate alınmaz, zorunlu, yalnızca, öncelik, kabul kriteri…); Jira refId.
+quality/behaviorCrossCheck gözlem×referans TÜR-FARKINDA eşleşme (konu + tür sinyali/zıt
+                          sinyal) → source both + refs; zıt → conflict; ekranla ilgili
+                          gözlenmemiş kural → 'reference'/medium (koşullu anlatılır).
+analysis/screenContextBuilder davranış + istek param adları RAG sorgusunda;
+                          ScreenContext.behaviors; docFingerprint davranışları içerir.
+generator/behaviorBlock   prompt'a 'GÖZLEMLENEN DAVRANIŞ KURALLARI' (kaynak/güvenilirlik/
+                          kanıt/atıf); config.json '### Davranış Kuralları ve Özel Durumlar'.
+                          'ALAN ÖZELLİKLERİ' bloğu domFacts'ten.
+quality/behaviorCoverage  deterministik davranış kapsamı (etiket + tür sinyali); eksik kural
+                          → pseudo-UI-öğesi ile 1 tur fix-up; trace 'Davranış kapsamı'.
+```
+Akış: keşif (recorder + probes → screen.behaviors, states.evidence) → üretim
+(contextBuilder: kural çıkarımı + çapraz doğrulama → behaviorBlock + domFactsBlock
+→ generator → behaviorCoverage → fix-up → trace). Ertelenen (Faz 6c/6d): detay
+ekranı ayrı doküman, hybrid retrieval, genel atıf standardı.
+
 ## Bilinen Kısıtlamalar
 
 - **Tek kullanıcı / yerel uygulama** — multi-user veya server deploy yok.

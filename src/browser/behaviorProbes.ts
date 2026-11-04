@@ -74,16 +74,20 @@ async function visibleMessage(page: Page): Promise<string> {
 }
 
 /** Okuma-submit'e basıp bu etkileşimin tetiklediği "arama" isteğini döndürür. */
-async function submitAndCapture(page: Page, scope: Page | Locator, recorder: RequestRecorder, log: (m: string) => void): Promise<NetRequest | undefined> {
+/** Okuma-submit'e basıp bu etkileşimin tetiklediği "arama" isteğini döndürür.
+ *  `clicked:false` → okuma-submit butonu YOK (deneyler anlamsız → çağıran atlar);
+ *  `clicked:true, request:undefined` → tıklandı ama istek gitmedi (kanıt!). */
+async function submitAndCapture(page: Page, scope: Page | Locator, recorder: RequestRecorder, log: (m: string) => void): Promise<{ clicked: boolean; request?: NetRequest }> {
   recorder.reset();
   const r = await clickSubmitButton(page, scope, "read", log);
-  if (!r.clicked) return undefined;
+  if (!r.clicked) return { clicked: false };
   await page.waitForTimeout(1000);
   try { await page.waitForLoadState("networkidle", { timeout: 3000 }); } catch { /* noop */ }
   const reqs = recorder.drain().filter((q) => q.resourceType === "xhr" || q.resourceType === "fetch" || q.resourceType === "other");
   // Parametre taşıyan son istek tercih edilir (arama isteği); yoksa sonuncusu.
   const withParams = reqs.filter((q) => Object.keys(q.query).length > 0 || (q.bodyKeys?.length ?? 0) > 0);
-  return (withParams.length > 0 ? withParams : reqs).at(-1);
+  const request = (withParams.length > 0 ? withParams : reqs).at(-1);
+  return { clicked: true, ...(request ? { request } : {}) };
 }
 
 export async function runBehaviorProbes(
@@ -109,27 +113,31 @@ export async function runBehaviorProbes(
     // empty
     if (can()) {
       await clearAll(fields);
-      const request = await submitAndCapture(page, scope, recorder, log); used++;
+      const { clicked, request } = await submitAndCapture(page, scope, recorder, log); used++;
+      if (!clicked) {
+        log("  (okuma-submit butonu yok — davranış deneyleri atlandı; kural uydurulmaz)");
+        return [];
+      }
       const message = request ? "" : await visibleMessage(page);
       runs.push({ id: "empty", filled: {}, ...(request ? { request } : {}), ...(message ? { message } : {}) });
     }
     // single A
     if (can()) {
       await clearAll(fields); await A.loc.fill(A.value, { timeout: 1500 }).catch(() => {});
-      const request = await submitAndCapture(page, scope, recorder, log); used++;
+      const { request } = await submitAndCapture(page, scope, recorder, log); used++;
       runs.push({ id: `single:${A.label}`, filled: { [A.label]: maskValue(A.label, A.value) }, ...(request ? { request } : {}) });
     }
     // single B + combo
     if (B && can()) {
       await clearAll(fields); await B.loc.fill(B.value, { timeout: 1500 }).catch(() => {});
-      const request = await submitAndCapture(page, scope, recorder, log); used++;
+      const { request } = await submitAndCapture(page, scope, recorder, log); used++;
       runs.push({ id: `single:${B.label}`, filled: { [B.label]: maskValue(B.label, B.value) }, ...(request ? { request } : {}) });
     }
     if (B && can()) {
       await clearAll(fields);
       await A.loc.fill(A.value, { timeout: 1500 }).catch(() => {});
       await B.loc.fill(B.value, { timeout: 1500 }).catch(() => {});
-      const request = await submitAndCapture(page, scope, recorder, log); used++;
+      const { request } = await submitAndCapture(page, scope, recorder, log); used++;
       const filled = { [A.label]: maskValue(A.label, A.value), [B.label]: maskValue(B.label, B.value) };
       const stateLabel = `Davranış deneyi: "${A.label}" + "${B.label}" ile arama`;
       if (pushState) {
@@ -150,10 +158,20 @@ export async function runBehaviorProbes(
         await A.loc.fill(A.value, { timeout: 1500 }).catch(() => {});
         await b.click({ timeout: 2000 }).catch(() => {});
         await page.waitForTimeout(400);
-        const request = await submitAndCapture(page, scope, recorder, log); used++;
+        const { request } = await submitAndCapture(page, scope, recorder, log); used++;
         runs.push({ id: "reset", filled: {}, ...(request ? { request } : {}) });
         break;
       }
+    }
+    // validation: A'ya geçersiz değer → uyarı mesajı var mı / istek gidiyor mu?
+    if (can()) {
+      await clearAll(fields);
+      const atype = (await A.loc.getAttribute("type").catch(() => "")) || "";
+      const bad = /number/i.test(atype) || ID_LIKE.test(A.label) ? "abc!" : "x".repeat(300);
+      await A.loc.fill(bad, { timeout: 1500 }).catch(() => {});
+      const { request } = await submitAndCapture(page, scope, recorder, log); used++;
+      const message = await visibleMessage(page);
+      runs.push({ id: `validation:${A.label}`, filled: { [A.label]: bad.slice(0, 12) }, ...(request ? { request } : {}), ...(message ? { message } : {}) });
     }
   } finally {
     await clearAll(fields);

@@ -49,4 +49,13 @@ describe("inferBehaviors (Faz 2 saf çıkarım)", () => {
     expect(reqd?.statement).toContain("En az bir filtre giriniz");
     expect(facts.some((f) => f.kind === "filter-precedence")).toBe(false);
   });
+
+  it("geçersiz değer: mesaj varsa high, istek yoksa medium, ikisi de yoksa kural YOK", () => {
+    const withMsg = inferBehaviors("/v", [{ id: "validation:ID", filled: { ID: "abc!" }, message: "Sayısal değer giriniz" }]);
+    expect(withMsg.find((f) => f.kind === "validation")?.confidence).toBe("high");
+    const noReq = inferBehaviors("/v", [{ id: "validation:ID", filled: { ID: "abc!" } }]);
+    expect(noReq.find((f) => f.kind === "validation")?.confidence).toBe("medium");
+    const fired = inferBehaviors("/v", [{ id: "validation:ID", filled: { ID: "abc!" }, request: req({ id: "abc!" }) }]);
+    expect(fired.some((f) => f.kind === "validation")).toBe(false);
+  });
 });

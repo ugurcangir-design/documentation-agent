@@ -113,6 +113,21 @@ export function inferBehaviors(screenPath: string, runs: ProbeRun[]): BehaviorFa
     }
   }
 
+  // ── Geçersiz değer doğrulaması ── (kanıt yoksa kural YOK)
+  for (const r of runs) {
+    if (!r.id.startsWith("validation:")) continue;
+    const field = Object.keys(r.filled)[0] ?? r.id.slice("validation:".length);
+    if (r.message) {
+      out.push(fact(screenPath, "validation",
+        `"${field}" alanına geçersiz değer girildiğinde uygulama "${r.message}" uyarısı gösterir.`,
+        { ...(r.stateLabel ? { stateLabels: [r.stateLabel] } : {}), note: "geçersiz değerle arama denendi, uyarı görüldü" }, "high"));
+    } else if (!r.request) {
+      out.push(fact(screenPath, "validation",
+        `"${field}" alanına geçersiz değer girildiğinde arama gönderilmez (istemci tarafı doğrulama).`,
+        { note: "geçersiz değerle arama denendi, istek gitmedi" }, "medium"));
+    }
+  }
+
   // ── Temizle/Reset ──
   const reset = runs.find((r) => r.id === "reset");
   if (reset && reset.request && same(minus(keysOf(reset.request), baseline), [])) {

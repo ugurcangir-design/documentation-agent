@@ -242,6 +242,13 @@ function buildPrompt(
   // yalın); kural yoksa boş. Kaynak etiketleri korunarak kılavuza işlenir.
   const behaviorBlock = !lean ? buildBehaviorBlock(ctx.behaviors ?? []) : "";
 
+  // Faz 6 — alan semantiği (DOM'dan): zorunluluk / maks uzunluk / format /
+  // seçenekler. Görselden anlaşılmaz; "Alanlar" anlatımını doğru ve somut kılar.
+  const domFacts = [...new Set((ctx.screen.states ?? []).flatMap((s) => s.evidence?.domFacts ?? []))].slice(0, 40);
+  const domFactsBlock = !lean && domFacts.length > 0
+    ? `\n\n# ALAN ÖZELLİKLERİ (DOM'dan okundu — zorunluluk / format / seçenekler; görselden anlaşılmaz)\n${domFacts.map((f) => `- ${f}`).join("\n")}\nBu bilgileri ilgili alanın anlatımına ekle: zorunlu alanları belirt, format/uzunluk kuralını ve seçenekleri yaz. Burada OLMAYAN kural uydurma.`
+    : "";
+
   // Sekme bölümlerinde ağır iş-bağlamı yok; yalnız hedefli paragraf
   // eşleşmeleri (küçük, doğruluğu artıran) korunur.
   // Referans blokları "yalnızca veri" çerçevesine alınır (enjeksiyon savunması).
@@ -259,7 +266,7 @@ ${uiElementsBlock}
 
 # İŞ AKIŞLARI — HER BİRİ İÇİN 'ADIM ADIM KULLANIM' ALTINA ALT BAŞLIK AÇ (${ctx.analysis.workflows.length} adet)
 
-${workflowsBlock || "_(akış tespit edilmedi — 3-5 ana akışı görsellerden çıkar)_"}${contextBlock}
+${workflowsBlock || "_(akış tespit edilmedi — 3-5 ana akışı görsellerden çıkar)_"}${domFactsBlock}${contextBlock}
 ${stateBlock}
 ---
 

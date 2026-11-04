@@ -36,3 +36,14 @@ her kural **kaynak + güvenilirlik** taşır; **uydurma yasak** korunur.
 Her faz: tsc + vitest; deterministik modüller için birim testleri; keşif tarafı için
 yerel HTML fikstürlü Playwright entegrasyon testi (canlı uygulamaya bağımlı değil).
 Uçtan uca: Ticket Explorer → yalnız ID vs ID+Retailer isteği diff'i → kural kılavuzda.
+
+## Durum (2026-11-04)
+- ✅ Faz 0 — kanıt veri modeli
+- ✅ Faz 1 — deterministik network yakalama (entegrasyon testi: dolu arama isteği kanıtı)
+- ✅ Faz 2 — davranış deneyleri + çıkarım (kullanıcının kuralı türetildi: filter-precedence/high)
+- ✅ Faz 3 — referans kural çıkarımı + tür-farkında çapraz doğrulama (both / conflict / reference-only)
+- ✅ Faz 4 — generator bloğu + '### Davranış Kuralları ve Özel Durumlar' + trace
+- ✅ Faz 5 — davranış kapsamı + hedefli fix-up + trace
+- ✅ Faz 6a — alan semantiği (domFacts → 'ALAN ÖZELLİKLERİ')  ✅ Faz 6b — geçersiz-değer doğrulama probe'u
+- ⏳ Faz 6c — detay ekranı ayrı doküman  ⏳ Faz 6d — hybrid retrieval  ⏳ Faz 6e — genel atıf standardı
+- Canlı doğrulama: Chrome MCP ile UAT Ticket Explorer (oturum açıldığında).

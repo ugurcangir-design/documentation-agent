@@ -57,7 +57,9 @@ biçimsel yazım denetimi, guardrail'li) · `HOST=127.0.0.1` (bind; 0.0.0.0 LAN
 açar — bkz. güvenlik) · `CLAUDE_MAX_CONCURRENCY=4` (tüm Claude çağrıları için
 global eşzamanlılık sınırı) · `FIX_UP_THRESHOLD=85` · `FIX_UP_MAX_PASSES=1` ·
 `CONTEXT_DOC_BUDGET=28000` / `CONTEXT_PARAGRAPHS=14` (RAG bağlam derinliği —
-referanslardan yararlanma; büyüdükçe zengin anlatım, CLI'da token ↑)
+referanslardan yararlanma; büyüdükçe zengin anlatım, CLI'da token ↑) ·
+`BEHAVIOR_PROBES=true` / `BEHAVIOR_PROBES_MAX=6` (davranış deneyleri — filtre kuralları
+için kontrollü okuma-submit; 0 token; bkz. ARCHITECTURE 'Davranış Keşfi')
 
 ## Belge bakımı
 Bir commit dosya yapısı/sabit/route/persistence/çekirdek davranışı değiştirdiyse,

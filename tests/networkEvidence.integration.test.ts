@@ -13,9 +13,10 @@ const PAGE_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Ticke
 <style>body{font-family:sans-serif;padding:20px}input,button{margin:6px;padding:8px}</style></head><body>
 <h1>Ticket Explorer</h1>
 <form id="f" onsubmit="return false">
-  <label>Ticket ID <input type="text" name="ticketId" placeholder="Ticket ID"></label>
+  <label>Ticket ID <input type="text" name="ticketId" placeholder="Ticket ID" required maxlength="10"></label>
   <label>Retailer ID <input type="text" name="retailerId" placeholder="Retailer ID"></label>
   <label>Player ID <input type="text" name="playerId" placeholder="Player ID"></label>
+  <label>Durum <select name="status"><option value="">Seçiniz</option><option value="A">Aktif</option><option value="P">Pasif</option></select></label>
   <button type="button" id="ara" onclick="search()">Ara</button>
 </form>
 <div id="out">sonuç yok</div>
@@ -96,6 +97,10 @@ describe("Faz 1 — network kanıtı (entegrasyon)", () => {
       // Dolu-form state'i formValues taşımalı (etiket → değer).
       const filled = states.find((s) => s.evidence?.formValues && Object.keys(s.evidence.formValues).length > 0);
       expect(filled).toBeTruthy();
+      // Faz 6: alan semantiği DOM'dan okunmalı (zorunlu, maks uzunluk, seçenekler).
+      const facts6 = filled!.evidence!.domFacts ?? [];
+      expect(facts6.some((d) => /Ticket ID.*zorunlu/.test(d) && /maks 10 karakter/.test(d))).toBe(true);
+      expect(facts6.some((d) => /Durum.*seçenekler: .*Aktif, Pasif/.test(d))).toBe(true);
 
       // Faz 2: deneyler fikstür kuralını türetmeli — "Ticket ID doluyken Retailer/Player gönderilmez".
       const facts = out.behaviors ?? [];
