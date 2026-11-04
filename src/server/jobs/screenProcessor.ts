@@ -13,6 +13,7 @@ import { buildScreenContext } from "../../analysis/screenContextBuilder";
 import { generateUserManualComplete, SECTION_JOINER } from "../../generator/userManualGenerator";
 import { computeCoverage, type CoverageReport } from "../../quality/coverageCheck";
 import { computeBehaviorCoverage } from "../../quality/behaviorCoverage";
+import { computeReferenceCoverage, buildSourcesSection } from "../../quality/referenceCoverage";
 import type { UIElement } from "../../types/screen";
 import { computeVerifiedCoverage } from "../../quality/verifiedCoverage";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
@@ -347,6 +348,48 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
       }
     }
 
+    // ── Faz 6e: REFERANS KULLANIMI — prompt'a giren kaynaklar kılavuzda atıflandı mı? ──
+    // Deterministik (`Kaynak: …` etiketleri ↔ citeKey). Hiç atıf yoksa model
+    // referansları yok saymış demektir → tek hedefli fix-up turu (en ilgili
+    // kaynaklar pseudo-öğe olarak); atıf sayısı artmazsa reddedilir.
+    const refChunks = context.preparedChunks;
+    let refCov = computeReferenceCoverage(refChunks, coverageTarget + tabsSuffix);
+    if (refChunks.length > 0) {
+      console.log(`[docjob ${jobId}] Referans kullanımı: ${refCov.pct}% (${refCov.cited}/${refCov.total} kaynak atıflı)`);
+    }
+    if (refChunks.length > 0 && refCov.cited === 0 && env.fixUpMaxPasses > 0) {
+      setProgress(`Referanslar kılavuza işleniyor: ${screenTitle} (0 atıf)`);
+      try {
+        const top = refChunks.slice(0, 6);
+        const pseudo: UIElement[] = top.map((c) => ({
+          type: "other",
+          label: `Kaynak: ${(c.citeKey ?? c.title).slice(0, 60)}`,
+          description: `REFERANS İÇERİĞİ [${c.citeKey ?? c.title}]: ${c.content.replace(/\s+/g, " ").slice(0, 700)}…`,
+          action: `Bu kaynaktaki, BU ekranla ilgili iş kuralı / alan anlamı / özel durumu ilgili bölüme kullanıcı diliyle işle ve cümle sonuna _(Kaynak: ${c.citeKey ?? c.title})_ etiketini AYNEN ekle. Kaynakta olmayanı yazma.`,
+        }));
+        const fix = await runCoverageFixUp({
+          currentContent: coverageTarget,
+          missing: pseudo.map((p) => p.label),
+          uiElementsMissing: pseudo,
+          screenTitle,
+          ...(screen.screenshotBase64 ? { mainImageBase64: screen.screenshotBase64 } : {}),
+          ...(screen.screenshotPath ? { mainImagePath: screen.screenshotPath } : {}),
+        });
+        const after = computeReferenceCoverage(refChunks, fix.content + tabsSuffix);
+        umExtraTokens.input += fix.inputTokens; umExtraTokens.output += fix.outputTokens;
+        umExtraTokens.cacheRead += fix.cacheReadTokens ?? 0; umExtraTokens.cacheCreate += fix.cacheCreationTokens ?? 0;
+        if (after.cited > refCov.cited) {
+          coverageTarget = fix.content;
+          refCov = after;
+          console.log(`[docjob ${jobId}] Referans fix-up: ${after.pct}% (${after.cited}/${after.total} kaynak atıflı)`);
+        } else {
+          console.warn(`[docjob ${jobId}] Referans fix-up atıf eklemedi, reddedildi`);
+        }
+      } catch (e) {
+        console.warn(`[docjob ${jobId}] Referans fix-up başarısız: ${(e as Error).message}`);
+      }
+    }
+
     // Stil denetimi (opsiyonel, ucuz Haiku): genel bakış + her sekme bölümü
     // yalnız BİÇİMSEL olarak düzeltilir (UI adları kalın, adım numaraları,
     // jargon). Guardrail'li — şüpheli çıktı reddedilir, içerik kaybolamaz.
@@ -365,9 +408,11 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
 
     // Nihai içerik: çok-sekmede düzeltilmiş genel bakış + sekme bölümleri;
     // tek/sıfır sekmede düzeltilmiş tek doküman.
-    const umContent = isMultiTab && finalTabs
+    const umContentBody = isMultiTab && finalTabs
       ? finalOverview + SECTION_JOINER + finalTabs
       : finalOverview;
+    // Deterministik "Kaynaklar" bölümü: yalnız atıflanan referanslar, bağlantılı.
+    const umContent = umContentBody + buildSourcesSection(refChunks, umContentBody);
 
     if (umCoverage.missing.length > 0) {
       console.log(`[docjob ${jobId}] UM kalan eksikler: ${umCoverage.missing.join(", ")}`);
@@ -459,6 +504,7 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
           total: behaviorCov.total, covered: behaviorCov.covered, pct: behaviorCov.pct,
           missing: behaviorCov.missing.map((b) => b.statement.slice(0, 60)),
         } } : {}),
+        ...(refChunks.length > 0 ? { referenceCoverage: { total: refCov.total, cited: refCov.cited, pct: refCov.pct, byType: refCov.byType } } : {}),
       }),
       status: "draft",
       createdAt: new Date().toISOString(),

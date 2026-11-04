@@ -19,7 +19,8 @@ Node + TS. API **:3000**, Vite client **:5173**.
 - Üretim/prompt: `src/generator/userManualGenerator.ts`, `tabGrouping.ts`, `selectStates.ts`
 - Job orkestrasyon: `src/server/jobs/{documentationJob,screenProcessor,contextLoader,discoveryJob}.ts`
 - Claude backend: `src/llm/claudeClient.ts`
-- RAG: `src/retrieval/*`, `src/analysis/screenContextBuilder.ts`, `src/quality/*`
+- RAG: `src/retrieval/*` (hibrit BM25: `hybridRetrieval.ts`), `src/analysis/screenContextBuilder.ts`, `src/quality/*`
+- Referans atfı: `src/generator/referenceBlock.ts`, `src/quality/referenceCoverage.ts`
 - Route'lar: `src/server/routes/*` · Persistence: `src/server/store/*` (JSON)
 - Frontend: `client/src/pages/*`, `components/ProgressView.tsx`
 - Env/config: `src/config/env.ts` (lazy getter — restart gerekmez)
@@ -56,8 +57,10 @@ bkz. docs/ARCHITECTURE.md "Canlı Uygulama Kanıtı — MCP") ·
 biçimsel yazım denetimi, guardrail'li) · `HOST=127.0.0.1` (bind; 0.0.0.0 LAN
 açar — bkz. güvenlik) · `CLAUDE_MAX_CONCURRENCY=4` (tüm Claude çağrıları için
 global eşzamanlılık sınırı) · `FIX_UP_THRESHOLD=85` · `FIX_UP_MAX_PASSES=1` ·
-`CONTEXT_DOC_BUDGET=28000` / `CONTEXT_PARAGRAPHS=14` (RAG bağlam derinliği —
+`CONTEXT_DOC_BUDGET=48000` / `CONTEXT_PARAGRAPHS=14` (RAG bağlam derinliği —
 referanslardan yararlanma; büyüdükçe zengin anlatım, CLI'da token ↑) ·
+`CONTEXT_TYPE_CAPS=confluence:0.45,brd:0.35,process_analysis:0.2,jira_task:0.3,manual:0.15`
+(hibrit retrieval'da tür başına bütçe oranı — bkz. ARCHITECTURE 'Hibrit Retrieval') ·
 `BEHAVIOR_PROBES=true` / `BEHAVIOR_PROBES_MAX=6` (davranış deneyleri — filtre kuralları
 için kontrollü okuma-submit; 0 token; bkz. ARCHITECTURE 'Davranış Keşfi')
 

@@ -1046,6 +1046,50 @@ CLAUDE.md'yi okur, kuralı görür, uygular.
 
 ---
 
+## Hibrit Retrieval ve Kaynak Atfı (Faz 6d/6e — Analyst Studio tasarımı)
+Amaç: kılavuz, Jira + Confluence + yüklenen dokümanların TAMAMINDAN, ekranla
+gerçekten ilgili parçaları alıp **atıflı** kullansın. Eski yol (ham kelime
+sayımı + bölümün ilk 2.6KB'si, tür dengesi yok) doğrudan ilgili Confluence
+sayfalarını kaçırıp başka modülün Jira kayıtlarını dolduruyor, çıktıda atıf
+olmuyordu (ölçüm: canlı liste ekranında 27 ilgili sayfadan 0'ı prompt'ta).
+
+```
+retrieval/hybridRetrieval  chunkText 1200/200 (paragraf→satır→cümle sınırı) · tek BM25
+                           indeksi (k1 1.5, b 0.75; 7-karakter prefix stem; başlık 2×)
+                           · sorgu qtf boost (≤3) · ENTITY GATE: ekran başlığı/path
+                           token'ı başlıkta → ×1.6/×1.25; hiç geçmiyorsa Jira ×0.35,
+                           diğer ×0.5 · açgözlü seçim: tür kotası (CONTEXT_TYPE_CAPS ×
+                           bütçe) + global bütçe (CONTEXT_DOC_BUDGET) + bölüm başına ≤6
+                           parça; kotası dolan tür ATLANIR · aynı bölümün parçaları
+                           belge sırasıyla "[…]" ile birleşir · PreparedChunk.citeKey
+                           (Confluence: Başlık / Jira: KEY / BRD: Başlık / Doküman: dosya § başlık)
+                           + url (Confluence sayfa, Jira browse). İndeks job başına 1 kez
+                           (WeakMap on allSections).
+analysis/screenContextBuilder sorgu = başlık×3 + path + UI etiketleri + akışlar + amaç +
+                           davranış ifadeleri (genel API param'ları sortBy/page/size HARİÇ).
+                           relatedSections = prompt'a giren bölümler (entity-gated) →
+                           kural çıkarımı ve çapraz doğrulama da gated (alakasız Jira
+                           "referans" diye iliştirilmez). Paragraf eşleşmeleri gated.
+generator/referenceBlock   prompt: '# REFERANSLAR' → türe göre grup (Confluence > BRD >
+                           süreç > Jira > diğer), tür başına kullanım ipucu, her kaynak
+                           `#### [citeKey]`; '# KAYNAK KULLANIMI (ZORUNLU)': referanstan
+                           alınan cümle sonuna `_(Kaynak: citeKey)_`, görselden görülene
+                           gerekmez, çelişkiyi iki kaynakla ver, 'Kaynaklar' listesi
+                           yazma (sistem ekler). config.json 'KAYNAK ATFI' kuralı.
+quality/referenceCoverage  deterministik: `Kaynak: …` gövdeleri ↔ citeKey / Jira KEY /
+                           başlık → kaynak başına atıflandı mı; 0 atıf → screenProcessor
+                           tek hedefli fix-up (ilk 6 kaynak pseudo-öğe), artış yoksa ret;
+                           buildSourcesSection → kılavuz sonuna '### Kaynaklar' (yalnız
+                           atıflananlar, bağlantılı). Trace: 'Referans kullanımı: %'.
+jobs/contextLoader         Confluence/Jira bölümlerine url; kaynaklar ≥7 gün bayatsa uyarı.
+ingestion/sourceSync       htmlToText blok sınırlarını (p/li/tr/başlık/br) satır sonu olarak
+                           korur → parçalama paragraf sınırı bulur (yeniden sync gerekir).
+```
+Ölçüm (canlı liste ekranı, 2612 bölüm): prompt'a giren 22 kaynağın tamamı ekranla
+ilgili (3 doğrudan ilgili Confluence sayfası, 11 ekranı/detayını anlatan Jira kaydı);
+referans kural çıkarımı Confluence analiz sayfasından *"kimlik girildiğinde yalnız
+ilgili kayıt gösterilmeli"* türünde bir kuralı (filter-precedence/reference) buldu.
+
 ## Davranış Keşfi ve Kanıta Dayalı Kılavuz (Faz 0-6)
 Plan: `docs/PLAN-davranis-kesfi.md`. Amaç: ekranın DAVRANIŞ KURALLARINI (ör.
 *"Ticket ID doluyken diğer filtreler isteğe dahil edilmez"*) canlı gözlem +

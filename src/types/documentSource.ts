@@ -22,4 +22,6 @@ export interface DocumentSection {
   sourceFile: string;
   title: string;
   content: string;
+  /** Kaynağın web bağlantısı (Confluence sayfası / Jira issue) — kılavuz "Kaynaklar" bölümü. */
+  url?: string;
 }

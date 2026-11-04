@@ -24,10 +24,12 @@ export interface TraceInputs {
   stateCount: number;
   /** Faz 5: davranış kuralı kapsamı (deterministik). */
   behaviorCoverage?: { total: number; covered: number; pct: number; missing: string[] };
+  /** Faz 6e: prompt'a giren kaynaklardan kaçı kılavuzda atıflandı. */
+  referenceCoverage?: { total: number; cited: number; pct: number; byType: Record<string, { total: number; cited: number }> };
 }
 
 export function buildTrace(t: TraceInputs): string {
-  const { context, coverage, fixUpAdded, truncated, usedTemplates, stateCount, behaviorCoverage } = t;
+  const { context, coverage, fixUpAdded, truncated, usedTemplates, stateCount, behaviorCoverage, referenceCoverage } = t;
 
   const chunkTypeBreakdown = Object.entries(
     context.preparedChunks.reduce<Record<string, number>>((acc, c) => {
@@ -72,6 +74,15 @@ export function buildTrace(t: TraceInputs): string {
           : "")
       );
     }
+  }
+  if (referenceCoverage && referenceCoverage.total > 0) {
+    const byType = Object.entries(referenceCoverage.byType)
+      .map(([t, v]) => `${SOURCE_TYPE_LABELS[t] ?? t} ${v.cited}/${v.total}`)
+      .join(" · ");
+    lines.push(
+      `- **Referans kullanımı**: ${referenceCoverage.pct}% (${referenceCoverage.cited}/${referenceCoverage.total} kaynak atıflı${byType ? ` — ${byType}` : ""})` +
+      (referenceCoverage.cited === 0 ? ` · ⚠️ _kılavuz hiçbir referansa atıf yapmadı — içerik yalnız görsellerden yazılmış olabilir_` : "")
+    );
   }
   if (fixUpAdded > 0) {
     lines.push(`- **Kapsam fix-up**: ${fixUpAdded} eksik öğe için ikinci tur uygulandı`);

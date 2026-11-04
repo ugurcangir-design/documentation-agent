@@ -18,6 +18,12 @@ export interface PreparedChunk {
   sourceType: string;
   content: string;
   score: number;
+  /** Hibrit retrieval (hybridRetrieval.ts) ek alanları — atıf ve bağlantı. */
+  sourceId?: string;
+  sectionId?: string;
+  /** Prompt başlığı `[citeKey]` ve kılavuz atfı `_(Kaynak: citeKey)_`. */
+  citeKey?: string;
+  url?: string;
 }
 
 /**

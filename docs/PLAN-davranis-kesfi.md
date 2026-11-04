@@ -48,5 +48,6 @@ Uçtan uca: Ticket Explorer → yalnız ID vs ID+Retailer isteği diff'i → kur
 - ✅ Canlı doğrulama (2026-11-04, UAT liste ekranı): 12 keşif turu sonunda 7 kural / 0 yanlış
   pozitif — Apply bulucu (pasif dahil), tüm filtre temizliği, tablodan gerçek deney değeri,
   pozitif-kanıt ilkesi, her-origin XHR yakalama + denylist.
-- ⏳ Faz 6c — detay ekranı ayrı doküman  ⏳ Faz 6d — hybrid retrieval  ⏳ Faz 6e — genel atıf standardı
+- ✅ Faz 6d — hibrit retrieval (BM25 + 1200/200 parça + entity gate + tür kotası)  ✅ Faz 6e — atıf standardı (`_(Kaynak: …)_` + Kaynaklar bölümü + referans kapsamı/fix-up)
+- ⏳ Faz 6c — detay ekranı ayrı doküman
 - Canlı doğrulama: Chrome MCP ile UAT Ticket Explorer (oturum açıldığında).

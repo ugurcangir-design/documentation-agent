@@ -94,11 +94,16 @@ export async function loadJobContext(jobId: string): Promise<LoadedContext> {
         content,
         sourceType: "confluence",
         sourceFile: conf.title,
+        ...(conf.url ? { url: conf.url } : {}),
       });
     }
   }
 
   // 5b. Synced Jira issues — each issue becomes its own section
+  // Jira bağlantısı: site adresi Confluence sayfa URL'inden türetilir
+  // (<site>/wiki/…) → <site>/browse/<KEY>. Site bilinmiyorsa bağlantı yok.
+  const anyConfUrl = referenceStore.getAllConfluence().find((c) => c.url)?.url ?? "";
+  const siteUrl = anyConfUrl ? anyConfUrl.split("/wiki")[0] : "";
   for (const jira of referenceStore.getAllJira()) {
     if (!fs.existsSync(jira.contentFile)) continue;
     try {
@@ -129,6 +134,7 @@ export async function loadJobContext(jobId: string): Promise<LoadedContext> {
           content: body,
           sourceType: "jira_task",
           sourceFile: `${jira.projectKey} (Jira)`,
+          ...(siteUrl ? { url: `${siteUrl}/browse/${issue.key}` } : {}),
         });
       }
     } catch {
@@ -176,6 +182,27 @@ export async function loadJobContext(jobId: string): Promise<LoadedContext> {
     acc[s.sourceType] = (acc[s.sourceType] ?? 0) + 1;
     return acc;
   }, {});
+
+  // Bayat referans uyarısı: kaynaklar uzun süredir senkronize edilmediyse
+
+  // kılavuz eski Jira/Confluence içeriğiyle yazılır — kullanıcıya görünür kıl.
+
+  {
+
+    const syncs = referenceStore.getSources().map((src) => src.lastSync).filter((d): d is string => !!d);
+
+    if (syncs.length > 0) {
+
+      const newest = Math.max(...syncs.map((d) => new Date(d).getTime()));
+
+      const days = Math.floor((Date.now() - newest) / 86_400_000);
+
+      if (days >= 7) console.warn(`[docjob ${jobId}] ⚠️ Referanslar ${days} gün önce senkronize edildi — Ayarlar > Kaynaklar'dan 'Senkronize et' ile Jira/Confluence içeriğini güncelleyin.`);
+
+    }
+
+  }
+
 
   console.log(`[docjob ${jobId}] CONTEXT INVENTORY:`);
   console.log(`  - Endpoints: ${allEndpoints.length}`);

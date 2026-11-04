@@ -5,7 +5,8 @@ import { Endpoint } from "../types/endpoint";
 import { searchDocumentSections, type RankedDocumentSection } from "../retrieval/documentSearch";
 import { searchEndpoints } from "../retrieval/endpointSearch";
 import { searchParagraphs } from "../retrieval/paragraphSearch";
-import { prepareDocumentChunks } from "../retrieval/contextBudget";
+import { getChunkIndex, retrieveChunks } from "../retrieval/hybridRetrieval";
+import { tokenize } from "../quality/confidenceScorer";
 import { extractReferenceRules } from "../retrieval/ruleExtractor";
 import { crossCheckBehaviors } from "../quality/behaviorCrossCheck";
 import { env } from "../config/env";
@@ -73,13 +74,22 @@ export function buildScreenContext(
   // Faz 3: keşifte türetilen davranış kuralları (ör. "Ticket ID doluyken …")
   // sorguya eklenir → ilgili kural bölümleri (Jira/BRD) daha isabetli gelir;
   // istek parametre adları (ticketId → ticket id) da anahtar kelime olur.
+  // Genel API sözlüğü (sortBy/page/size…) sorguya GİRMEZ: her liste ekranında
+  // geçtiği için alakasız modüllerin sıralama/sayfalama kayıtlarını çekiyordu.
+  const GENERIC_PARAMS = new Set(["sortby", "sortdirection", "page", "size", "sort", "direction", "offset", "limit"]);
   const behaviorTerms = (screen.behaviors ?? []).flatMap((b) => [
     b.statement,
-    ...(b.evidence.requests ?? []).flatMap((r) => Object.keys(r.query).map((k) => k.replace(/([a-z])([A-Z])/g, "$1 $2"))),
+    ...(b.evidence.requests ?? []).flatMap((r) => Object.keys(r.query)
+      .filter((k) => !GENERIC_PARAMS.has(k.toLowerCase()))
+      .map((k) => k.replace(/([a-z])([A-Z])/g, "$1 $2"))),
   ]);
+  // Ekranın BİRİNCİL varlığı: başlık + path token'ları. Sorguda 3× (BM25 qtf
+  // boost) ve retrieval'da entity gate olarak kullanılır.
+  const pathTokens = screen.path.split(/[/\-_.]+/).filter((s) => s.length > 2);
+  const entityTokens = [...new Set([...tokenize(analysis.screenTitle), ...pathTokens.map((t) => t.toLowerCase())])];
   const queryParts = [
-    analysis.screenTitle,
-    analysis.screenTitle,
+    analysis.screenTitle, analysis.screenTitle, analysis.screenTitle,
+    ...pathTokens,
     ...analysis.uiElements.slice(0, 25).map((el) => el.label),
     ...analysis.workflows.map((wf) => wf.name),
     ...analysis.dataDisplayed,
@@ -95,7 +105,6 @@ export function buildScreenContext(
   // (risk-service/retailers) öne çıkarıyordu. Endpoint eşleşmesi için ekranın
   // BİRİNCİL varlığını (başlık + URL path segmentleri, ör. ticket-explorer →
   // "ticket","explorer") ağırlıklandır; kolon etiketleri gürültüsünü ele.
-  const pathTokens = screen.path.split(/[/\-_.]+/).filter((s) => s.length > 2);
   const endpointQuery = [
     analysis.screenTitle, analysis.screenTitle, analysis.screenTitle,
     ...pathTokens, ...pathTokens,
@@ -103,29 +112,43 @@ export function buildScreenContext(
     analysis.purpose,
   ].filter(Boolean).join(" ");
 
-  // Rank every relevant section (score > 0), then balance the ordering
-  // so BRD, Confluence, Jira and uploaded-doc references all surface.
-  const rankedSections = searchDocumentSections(allSections, keywords);
-  const balancedSections = balanceBySourceType(rankedSections);
-  const relatedSections = balancedSections.slice(0, 24);
   const relatedEndpoints = searchEndpoints(allEndpoints, endpointQuery).slice(0, 30);
 
-  // Section-level chunks — bütçe env.contextDocBudget (varsayılan ~28KB) ile,
-  // ~2.6KB/chunk. Balanced listeden beslenir → her kaynak tipinden ilgili
-  // bölüm prompt'a girer. Bütçe artırıldı: eskiden 16KB'de ~7 bölümde kesiliyor,
-  // ilgili Ticket Detail/History/Ön-Çalışma gibi kaynaklar prompt'a giremiyordu.
-  // Generator 'prompt too long' alırsa küçük prompt'a düşer, o yüzden burada
-  // ön-kesme yapmıyoruz.
-  const preparedChunks = prepareDocumentChunks(balancedSections, env.contextDocBudget, 2600);
+  // Hibrit retrieval (Analyst Studio tasarımı): 1200/200 parçalar, tek BM25
+  // indeksi, entity gate, tür başına kota + global bütçe (env.contextDocBudget).
+  // Eski yol (ham kelime sayımı + bölümün ilk 2.6KB'si) doğrudan ilgili
+  // Confluence sayfalarını kaçırıp alakasız Jira kayıtlarını dolduruyordu.
+  const index = getChunkIndex(allSections);
+  const preparedChunks = retrieveChunks(index, keywords, {
+    budget: env.contextDocBudget,
+    typeCaps: env.contextTypeCaps,
+    entityTokens,
+    titlePhrase: analysis.screenTitle,
+  });
+  // relatedSections: prompt'a giren kaynakların bölümleri (trace + kural
+  // çıkarımı). Eski keyword sıralaması yalnız yedek olarak (hiç parça yoksa).
+  const sectionById = new Map(allSections.map((s) => [s.id, s] as const));
+  const relatedSections: RankedDocumentSection[] = preparedChunks
+    .map((c) => ({ score: c.score, section: (c.sectionId ? sectionById.get(c.sectionId) : undefined)! }))
+    .filter((r) => !!r.section);
+  if (relatedSections.length === 0) {
+    relatedSections.push(...balanceBySourceType(searchDocumentSections(allSections, keywords)).slice(0, 24));
+  }
 
   // Paragraph-level matches — env.contextParagraphs (varsayılan 14) paragraf,
   // düşük-sıralı bölümlerde gömülü uzun-kuyruk BRD detayını yakalar.
   const usedSectionTitles = new Set(preparedChunks.map((c) => c.title));
+  // Entity gate: paragraf, ekranın varlığını (başlık/path token'ı) içermeli —
+  // eskiden başka ürünün kılavuz paragrafları doluyordu.
+  const entityRe = entityTokens.length > 0
+    ? new RegExp(entityTokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i")
+    : null;
   const paragraphMatches = searchParagraphs(allSections, keywords, {
     minHits: 2,
     maxPerSection: 2,
     maxTotal: env.contextParagraphs,
-  }).filter((m) => !usedSectionTitles.has(m.sectionTitle));
+  }).filter((m) => !usedSectionTitles.has(m.sectionTitle))
+    .filter((m) => !entityRe || entityRe.test(m.paragraph) || entityRe.test(m.sectionTitle));
 
   // Faz 3: referans kural çıkarımı (yalnız bu ekranın RAG'le seçilmiş
   // bölümlerinden — 2600+ bölümün tamamı değil) + gözlemle çapraz doğrulama.
@@ -134,6 +157,8 @@ export function buildScreenContext(
   const observed = screen.behaviors ?? [];
   // Paragraf eşleşmeleri yalnız başlık/dosya taşır → tür/id'yi kaynağından al.
   const byTitle = new Map(allSections.map((sec) => [sec.title, sec] as const));
+  // Kural kaynakları da entity-gated: prompt'a giren (ilgili) bölümler +
+  // gated paragraflar. Alakasız Jira kaydı artık "referans" olarak iliştirilmez.
   const ruleSections: DocumentSection[] = [
     ...relatedSections.map((r) => r.section),
     ...paragraphMatches.map((m) => {

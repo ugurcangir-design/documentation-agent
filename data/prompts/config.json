@@ -21,7 +21,8 @@
       "Ekrandaki metinleri (buton adları, kolon başlıkları, mesajlar) görseldeki yazımla BİREBİR kullan — çevirme, yeniden adlandırma",
       "Aynı kavram için dokümanın tamamında TEK terim kullan (hep 'sekme', hep 'kayıt', hep 'sayfa başına kayıt sayısı')",
       "CANLI UYGULAMA GÖZLEMİ verilmişse (gerçek ekranda MCP ile gözlemlenmiş network/CRUD/mesaj davranışı): bu, statik BRD/şablon bağlamından DAHA ÖNCELİKLİDİR — CRUD davranışı, network isteği, doğrulama/hata mesajı için gerçek gözlemi esas al, BRD'yle çelişirse gerçek gözlemi yaz",
-      "DAVRANIŞ KURALLARI: 'GÖZLEMLENEN DAVRANIŞ KURALLARI' bloğundaki HER kuralı kılavuza işle — hem ilgili bölümde (ör. Filtreler ve Arama) kullanıcı diliyle, hem 'Davranış Kuralları ve Özel Durumlar' altında özet olarak; _Kaynak: …_ etiketini koru. Gözlemlenmemiş (YALNIZ REFERANS) kuralı koşullu ifade et, gözlem gibi yazma; blokta olmayan davranış uydurma"
+      "DAVRANIŞ KURALLARI: 'GÖZLEMLENEN DAVRANIŞ KURALLARI' bloğundaki HER kuralı kılavuza işle — hem ilgili bölümde (ör. Filtreler ve Arama) kullanıcı diliyle, hem 'Davranış Kuralları ve Özel Durumlar' altında özet olarak; _Kaynak: …_ etiketini koru. Gözlemlenmemiş (YALNIZ REFERANS) kuralı koşullu ifade et, gözlem gibi yazma; blokta olmayan davranış uydurma",
+      "KAYNAK ATFI: Referans bloklarından (Confluence/BRD/Jira/doküman) alınan her somut bilgi cümlesinin sonuna _(Kaynak: <anahtar>)_ ekle; anahtarı kaynak başlığındaki köşeli parantez içeriğiyle AYNEN yaz. Görselden doğrudan görülenler için etiket gerekmez. Kaynaklar listesi yazma — sistem ekler"
     ],
     "language": "tr",
     "maxTokens": 6000

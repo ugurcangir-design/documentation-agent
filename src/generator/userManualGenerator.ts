@@ -5,6 +5,7 @@ import { callClaude, isPromptTooLong, isUsageLimitError, MODEL_QUALITY } from ".
 import { selectRepresentativeStates } from "./selectStates";
 import { isSidebarNav } from "../quality/sidebarNav";
 import { sanitizeReferenceText, wrapReferenceBlock } from "../quality/promptSanitizer";
+import { buildReferenceBlock, buildReferenceUsageRules } from "./referenceBlock";
 import { buildBehaviorBlock } from "./behaviorBlock";
 import type { ScreenState } from "../types/screen";
 import { groupStatesByTab } from "./tabGrouping";
@@ -119,9 +120,10 @@ function buildPrompt(
 
   // Referans içeriği (Confluence/Jira/BRD — başkası yazmış olabilir) prompt
   // injection'a karşı temizlenir; talimat değil VERİ olarak çerçevelenir.
-  const brdContext = ctx.preparedChunks
-    .map((c) => `### ${c.title} (${c.sourceType})\n${sanitizeReferenceText(c.content)}`)
-    .join("\n\n");
+  // Analyst Studio biçimi: türe göre gruplu, her kaynak `#### [atıf anahtarı]`
+  // başlıklı; model kılavuzda `_(Kaynak: anahtar)_` ile AYNEN atıf yapar.
+  const brdContext = buildReferenceBlock(ctx.preparedChunks, sanitizeReferenceText);
+  const referenceRules = tabFocus ? "" : buildReferenceUsageRules(ctx.preparedChunks);
 
   const paragraphContext = ctx.paragraphMatches.length > 0
     ? "\n\n### BRD'den İlave Paragraflar (uzun-kuyruk eşleşmeler)\n\n" +
@@ -254,7 +256,7 @@ function buildPrompt(
   // Referans blokları "yalnızca veri" çerçevesine alınır (enjeksiyon savunması).
   const contextBlock = lean
     ? (paragraphContext ? `\n\n# İLGİLİ NOTLAR\n${wrapReferenceBlock(paragraphContext)}` : "")
-    : `\n\n# BRD / CONFLUENCE BAĞLAMI\n\n${wrapReferenceBlock(`${brdContext || "_(yok)_"}${paragraphContext}`)}\n\n# API ENDPOINT'LERİ\n\n${apiContext || "_(yok)_"}${liveAppBlock}${behaviorBlock}`;
+    : `\n\n# REFERANSLAR — CONFLUENCE / BRD / JIRA / DOKÜMANLAR (${ctx.preparedChunks.length} kaynak)\n\n${wrapReferenceBlock(`${brdContext || "_(yok)_"}${paragraphContext}`)}${referenceRules}\n\n# API ENDPOINT'LERİ\n\n${apiContext || "_(yok)_"}${liveAppBlock}${behaviorBlock}`;
 
   const prompt = `**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}${tabFocus ? `\n**Aktif Sekme:** ${tabFocus.label}` : ""}
 **Amaç:** ${ctx.analysis.purpose}

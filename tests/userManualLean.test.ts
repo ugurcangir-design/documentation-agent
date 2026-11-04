@@ -60,7 +60,7 @@ describe("userManual yalın sekme modu (token tasarrufu)", () => {
     await generateUserManualSection(makeCtx(), ["STİL ŞABLONU ".repeat(100)]);
     expect(calls).toHaveLength(1);
     const c = calls[0]!;
-    expect(c.prompt).toContain("BRD / CONFLUENCE BAĞLAMI");
+    expect(c.prompt).toContain("REFERANSLAR — CONFLUENCE / BRD / JIRA / DOKÜMANLAR");
     expect(c.prompt).toContain("API ENDPOINT");
     expect(c.imageBase64).toBe("MAINIMG");
     expect((c.cachedPrefix || "")).toContain("ÖRNEK ŞABLON");
@@ -76,7 +76,7 @@ describe("userManual yalın sekme modu (token tasarrufu)", () => {
     });
     expect(calls).toHaveLength(1);
     const c = calls[0]!;
-    expect(c.prompt).not.toContain("BRD / CONFLUENCE BAĞLAMI"); // ağır RAG çıkarıldı
+    expect(c.prompt).not.toContain("REFERANSLAR — CONFLUENCE / BRD / JIRA / DOKÜMANLAR"); // ağır RAG çıkarıldı
     expect(c.prompt).not.toContain("API ENDPOINT");             // API çıkarıldı
     expect(c.imageBase64).toBeUndefined();           // ana görsel gönderilmedi
     expect((c.cachedPrefix || "")).toContain("ÖRNEK ŞABLON");   // stil şablonu KORUNUR (benzerlik)

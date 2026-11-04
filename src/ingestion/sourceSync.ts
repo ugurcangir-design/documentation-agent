@@ -45,9 +45,18 @@ interface V2Page {
   _links?: { webui?: string };
 }
 
+/** HTML → düz metin; BLOK sınırları (p, li, tr, başlık, br) satır sonu olarak
+ *  korunur. Eski sürüm tüm boşlukları tek boşluğa indirip sayfayı tek satır
+ *  yapıyordu → retrieval parçalama paragraf sınırı bulamıyordu. */
 function htmlToText(html: string): string {
-  return decodeHtmlEntities(html.replace(/<[^>]+>/g, " "))
-    .replace(/\s+/g, " ")
+  const withBreaks = html
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/(td|th)\s*>/gi, " | ")
+    .replace(/<\/(p|div|li|tr|h[1-6]|table|ul|ol|section|blockquote|pre|dd|dt)\s*>/gi, "\n");
+  return decodeHtmlEntities(withBreaks.replace(/<[^>]+>/g, " "))
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 

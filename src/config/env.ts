@@ -61,8 +61,18 @@ export const env = {
   // sayısı. Artırınca kılavuz kaynaklardan daha çok yararlanır ama CLI'da her
   // çağrıda daha çok token gider. Düşürünce token ↓, anlatım sığlaşır.
   get contextDocBudget(): number {
-    const n = parseInt(process.env.CONTEXT_DOC_BUDGET || "28000", 10);
-    return Number.isFinite(n) && n > 0 ? n : 28000;
+    const n = parseInt(process.env.CONTEXT_DOC_BUDGET || "48000", 10);
+    return Number.isFinite(n) && n > 0 ? n : 48000;
+  },
+  /** Tür başına bütçe oranı: "confluence:0.45,brd:0.35,process_analysis:0.35,jira_task:0.3,manual:0.2". */
+  get contextTypeCaps(): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const part of (process.env.CONTEXT_TYPE_CAPS || "").split(",")) {
+      const [k, v] = part.split(":").map((s) => s.trim());
+      const f = v ? parseFloat(v) : NaN;
+      if (k && Number.isFinite(f) && f > 0 && f <= 1) out[k] = f;
+    }
+    return out;
   },
   get contextParagraphs(): number {
     const n = parseInt(process.env.CONTEXT_PARAGRAPHS || "14", 10);
