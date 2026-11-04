@@ -144,16 +144,16 @@ async function findApplyButton(page: Page, anchor: Locator, log: (m: string) => 
     } catch { /* sonraki */ }
   }
   if (fallback) { log("  deney butonu (alanlardan önce): fallback"); return fallback; }
-  // Tanı: neden bulunamadı? apply/filter benzeri TÜM butonları bayraklarıyla dök.
+  // Tanı: neden bulunamadı? STRING evaluate — tsx/esbuild, fonksiyon argümanına
+  // `__name` sarmalayıcısı enjekte edip tarayıcıda ReferenceError veriyordu.
   try {
-    const dump = await page.evaluate(() => {
-      const vis = (el: Element) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none"; };
-      return Array.from(document.querySelectorAll('button,[role="button"],input[type="submit"]'))
-        .filter((el) => /apply|uygula|\bara\b|search|filtre|filter|sorgula|listele/i.test(((el.textContent || "") + " " + (el.getAttribute("aria-label") || ""))))
-        .slice(0, 12)
-        .map((el) => `${el.tagName}"${(el.textContent || "").trim().slice(0, 24)}" vis=${vis(el)} dis=${(el as HTMLButtonElement).disabled === true || el.getAttribute("aria-disabled") === "true"} exp=${el.getAttribute("aria-expanded")} role=${el.getAttribute("role")}`);
-    });
-    log(`  deney butonu BULUNAMADI (taranan: ${n}). Adaylar: ${dump.join(" | ") || "(yok)"}`);
+    const dump = await page.evaluate(`(() => {
+      const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none"; };
+      const all = Array.from(document.querySelectorAll('button,[role="button"],input[type="submit"]'));
+      const cand = all.filter((el) => /apply|uygula|\\bara\\b|search|filtre|filter|sorgula|listele/i.test(((el.textContent || "") + " " + (el.getAttribute("aria-label") || ""))));
+      return { total: all.length, cand: cand.slice(0, 12).map((el) => el.tagName + '"' + (el.textContent || "").trim().slice(0, 24) + '" vis=' + vis(el) + ' dis=' + (el.disabled === true || el.getAttribute("aria-disabled") === "true") + ' exp=' + el.getAttribute("aria-expanded") + ' role=' + el.getAttribute("role")) };
+    })()`) as { total: number; cand: string[] };
+    log(`  deney butonu BULUNAMADI (taranan: ${n}, DOM toplam: ${dump.total}). Adaylar: ${dump.cand.join(" | ") || "(yok)"}`);
   } catch (e) {
     log(`  deney butonu BULUNAMADI (taranan: ${n}); tanı alınamadı: ${(e as Error).message}`);
   }
@@ -205,6 +205,12 @@ export async function runBehaviorProbes(
   const A = fields[0]!, B = fields[1];
   log(`Davranış deneyleri başlıyor: ${fields.map((f) => f.label).join(", ")} (maks ${maxRuns} arama)`);
   const applyBtn = await findApplyButton(page, A.loc, log);
+  if (!applyBtn) {
+    // Apply yoksa clickSubmitButton(page) fallback'i panel BAŞLIĞINA basıp paneli
+    // kapatıyor ve sonraki deneyleri zehirliyordu → deneyleri güvenle atla.
+    log("  (arama/uygula butonu bulunamadı — davranış deneyleri atlandı; kural uydurulmaz)");
+    return [];
+  }
   // Her deney öncesi: panel kapanmışsa yeniden aç, alanları temizle.
   const prep = async () => {
     if (!(await A.loc.isVisible({ timeout: 300 }).catch(() => false))) await ensureFiltersOpen(page, log);
