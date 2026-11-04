@@ -99,14 +99,57 @@ async function visibleMessage(page: Page): Promise<string> {
   return "";
 }
 
+const APPLY_LABEL = /\b(apply|uygula|ara|arama|search|sorgula|listele|getir|filtrele|göster|bul)\b/i;
+/** Yalnız panel BAŞLIĞI olabilecek etiketler (toggle) — submit değildir. */
+const HEADER_ONLY = /^\s*(filters?|filtreler|filtre paneli|filter panel|gelişmiş filtre|advanced filters?)\s*$/i;
+
+/**
+ * Deneyler için "Apply/Ara" butonunu bulur: alan A'dan SONRA gelen, toggle
+ * olmayan (aria-expanded yok), APPLY_LABEL ile eşleşen ilk görünür buton.
+ * clickSubmitButton(page) sayfadaki İLK okuma-tipi butonu tıkladığından canlı
+ * uygulamada "Filters" panel başlığına basıp paneli KAPATIYORDU (istek yok).
+ */
+async function findApplyButton(page: Page, anchor: Locator, log: (m: string) => void): Promise<Locator | null> {
+  const btns = page.locator('button:not([disabled]), [role="button"]:not([aria-disabled="true"]), input[type="submit"]:not([disabled])');
+  const n = await btns.count().catch(() => 0);
+  const anchorHandle = await anchor.elementHandle().catch(() => null);
+  let fallback: Locator | null = null;
+  for (let i = 0; i < n; i++) {
+    const b = btns.nth(i);
+    try {
+      if (!(await b.isVisible({ timeout: 200 }).catch(() => false))) continue;
+      const label = (((await b.textContent().catch(() => "")) || (await b.getAttribute("value").catch(() => "")) ||
+        (await b.getAttribute("aria-label").catch(() => "")) || "")).trim().replace(/\s+/g, " ").slice(0, 40);
+      if (!label || HEADER_ONLY.test(label) || !APPLY_LABEL.test(label)) continue;
+      if ((await b.getAttribute("aria-expanded").catch(() => null)) !== null) continue;
+      let after = true;
+      if (anchorHandle) {
+        after = await b.evaluate((el, a) => !!((a as Element).compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING), anchorHandle).catch(() => true);
+      }
+      if (after) { log(`  deney butonu: "${label}"`); return b; }
+      if (!fallback) fallback = b;
+    } catch { /* sonraki */ }
+  }
+  if (fallback) log("  deney butonu (alanlardan önce): fallback");
+  return fallback;
+}
+
 /** Okuma-submit'e basıp bu etkileşimin tetiklediği "arama" isteğini döndürür. */
 /** Okuma-submit'e basıp bu etkileşimin tetiklediği "arama" isteğini döndürür.
  *  `clicked:false` → okuma-submit butonu YOK (deneyler anlamsız → çağıran atlar);
  *  `clicked:true, request:undefined` → tıklandı ama istek gitmedi (kanıt!). */
-async function submitAndCapture(page: Page, scope: Page | Locator, recorder: RequestRecorder, log: (m: string) => void): Promise<{ clicked: boolean; request?: NetRequest }> {
+async function submitAndCapture(page: Page, scope: Page | Locator, recorder: RequestRecorder, log: (m: string) => void, applyBtn?: Locator | null): Promise<{ clicked: boolean; request?: NetRequest }> {
   recorder.reset();
-  const r = await clickSubmitButton(page, scope, "read", log);
-  if (!r.clicked) return { clicked: false };
+  let clicked = false;
+  if (applyBtn) {
+    clicked = await applyBtn.click({ timeout: 2000 }).then(() => true).catch(async () =>
+      applyBtn.click({ timeout: 2000, force: true }).then(() => true).catch(() => false));
+  }
+  if (!clicked) {
+    const r = await clickSubmitButton(page, scope, "read", log);
+    clicked = r.clicked;
+  }
+  if (!clicked) return { clicked: false };
   await page.waitForTimeout(1500);
   try { await page.waitForLoadState("networkidle", { timeout: 3000 }); } catch { /* noop */ }
   const reqs = recorder.drain().filter((q) => q.resourceType === "xhr" || q.resourceType === "fetch" || q.resourceType === "other");
@@ -135,11 +178,17 @@ export async function runBehaviorProbes(
   const can = () => used < maxRuns;
   const A = fields[0]!, B = fields[1];
   log(`Davranış deneyleri başlıyor: ${fields.map((f) => f.label).join(", ")} (maks ${maxRuns} arama)`);
+  const applyBtn = await findApplyButton(page, A.loc, log);
+  // Her deney öncesi: panel kapanmışsa yeniden aç, alanları temizle.
+  const prep = async () => {
+    if (!(await A.loc.isVisible({ timeout: 300 }).catch(() => false))) await ensureFiltersOpen(page, log);
+    await clearAll(fields);
+  };
 
   try {
     // empty
     if (can()) {
-      await clearAll(fields);
+      await prep();
       // Alanlar boşken okuma-submit PASİF mi? (zorunlu-filtre için POZİTİF kanıt)
       const root = "locator" in scope ? (scope as Locator) : (scope as Page);
       let applyDisabled = false;
@@ -151,7 +200,7 @@ export async function runBehaviorProbes(
           if (/\b(ara|arama|filtrele|uygula|apply|search|filter)\b/i.test(t)) { applyDisabled = true; break; }
         }
       } catch { /* noop */ }
-      const { clicked, request } = await submitAndCapture(page, scope, recorder, log); used++;
+      const { clicked, request } = await submitAndCapture(page, scope, recorder, log, applyBtn); used++;
       if (!clicked && !applyDisabled) {
         log("  (okuma-submit butonu yok — davranış deneyleri atlandı; kural uydurulmaz)");
         return [];
@@ -161,21 +210,21 @@ export async function runBehaviorProbes(
     }
     // single A
     if (can()) {
-      await clearAll(fields); await A.loc.fill(A.value, { timeout: 1500 }).catch(() => {});
-      const { request } = await submitAndCapture(page, scope, recorder, log); used++;
+      await prep(); await A.loc.fill(A.value, { timeout: 1500 }).catch(() => {});
+      const { request } = await submitAndCapture(page, scope, recorder, log, applyBtn); used++;
       runs.push({ id: `single:${A.label}`, filled: { [A.label]: maskValue(A.label, A.value) }, ...(request ? { request } : {}) });
     }
     // single B + combo
     if (B && can()) {
-      await clearAll(fields); await B.loc.fill(B.value, { timeout: 1500 }).catch(() => {});
-      const { request } = await submitAndCapture(page, scope, recorder, log); used++;
+      await prep(); await B.loc.fill(B.value, { timeout: 1500 }).catch(() => {});
+      const { request } = await submitAndCapture(page, scope, recorder, log, applyBtn); used++;
       runs.push({ id: `single:${B.label}`, filled: { [B.label]: maskValue(B.label, B.value) }, ...(request ? { request } : {}) });
     }
     if (B && can()) {
-      await clearAll(fields);
+      await prep();
       await A.loc.fill(A.value, { timeout: 1500 }).catch(() => {});
       await B.loc.fill(B.value, { timeout: 1500 }).catch(() => {});
-      const { request } = await submitAndCapture(page, scope, recorder, log); used++;
+      const { request } = await submitAndCapture(page, scope, recorder, log, applyBtn); used++;
       const filled = { [A.label]: maskValue(A.label, A.value), [B.label]: maskValue(B.label, B.value) };
       const stateLabel = `Davranış deneyi: "${A.label}" + "${B.label}" ile arama`;
       if (pushState) {
@@ -196,18 +245,18 @@ export async function runBehaviorProbes(
         await A.loc.fill(A.value, { timeout: 1500 }).catch(() => {});
         await b.click({ timeout: 2000 }).catch(() => {});
         await page.waitForTimeout(400);
-        const { request } = await submitAndCapture(page, scope, recorder, log); used++;
+        const { request } = await submitAndCapture(page, scope, recorder, log, applyBtn); used++;
         runs.push({ id: "reset", filled: {}, ...(request ? { request } : {}) });
         break;
       }
     }
     // validation: A'ya geçersiz değer → uyarı mesajı var mı / istek gidiyor mu?
     if (can()) {
-      await clearAll(fields);
+      await prep();
       const atype = (await A.loc.getAttribute("type").catch(() => "")) || "";
       const bad = /number/i.test(atype) || ID_LIKE.test(A.label) ? "abc!" : "x".repeat(300);
       await A.loc.fill(bad, { timeout: 1500 }).catch(() => {});
-      const { request } = await submitAndCapture(page, scope, recorder, log); used++;
+      const { request } = await submitAndCapture(page, scope, recorder, log, applyBtn); used++;
       const message = await visibleMessage(page);
       runs.push({ id: `validation:${A.label}`, filled: { [A.label]: bad.slice(0, 12) }, ...(request ? { request } : {}), ...(message ? { message } : {}) });
     }
