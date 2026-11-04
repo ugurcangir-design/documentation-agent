@@ -1,3 +1,4 @@
+import type { BehaviorFact } from "../../types/behavior";
 import { BrowserSession } from "../../browser/browserSession";
 import { discoverScreens } from "../../browser/screenDiscovery";
 import { captureScreenshot } from "../../browser/screenshotCapture";
@@ -93,11 +94,13 @@ export async function runDiscoveryJob(
 
           // Test user simulation for this manual URL
           let states;
+          const probeOut: { behaviors?: BehaviorFact[] } = {};
           try {
             states = await exploreInteractiveStates(
               page,
               parsed.pathname,
-              (m) => emitJobEvent(jobId, { type: "progress", message: m })
+              (m) => emitJobEvent(jobId, { type: "progress", message: m }),
+              probeOut
             );
           } catch (err) {
             console.warn("exploreInteractiveStates manual URL error:", (err as Error).message);
@@ -117,6 +120,7 @@ export async function runDiscoveryJob(
             screenshotBase64,
             depth: 0,
             ...(states && states.length > 0 ? { states } : {}),
+            ...(probeOut.behaviors && probeOut.behaviors.length > 0 ? { behaviors: probeOut.behaviors } : {}),
           });
         } catch (err) {
           emitJobEvent(jobId, {

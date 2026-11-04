@@ -159,7 +159,7 @@ export function classifySubmitButton(label: string): SubmitKind {
 
 /** Bir alanın anlamlı etiketini DOM'dan türetir (aria-label / label[for] /
  *  placeholder / name). En iyi-çaba; başarısızsa boş döner. */
-async function fieldMetaOf(loc: Locator): Promise<FieldMeta> {
+export async function fieldMetaOf(loc: Locator): Promise<FieldMeta> {
   try {
     return await loc.evaluate((el: Element) => {
       const e = el as HTMLInputElement & HTMLTextAreaElement & HTMLSelectElement;

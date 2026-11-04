@@ -14,9 +14,10 @@ import { captureScreenshot, type CaptureOptions } from "./screenshotCapture";
 import { fillTestData, triggerValidation, clickSubmitButton } from "./formFiller";
 import { captureStepHighlight } from "./stepHighlight";
 import { attachRequestRecorder } from "./requestRecorder";
+import { runBehaviorProbes } from "./behaviorProbes";
 import { env } from "../config/env";
 import type { ScreenState } from "../types/screen";
-import type { StateEvidence } from "../types/behavior";
+import type { StateEvidence, BehaviorFact } from "../types/behavior";
 
 const DESTRUCTIVE_PATTERNS = [
   /\bsil\b/i, /\bkald[ıi]r/i, /delete/i, /remove/i,
@@ -923,7 +924,10 @@ async function exploreTabs(
 export async function exploreInteractiveStates(
   page: Page,
   basePath: string,
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string) => void,
+  /** Faz 2: keşif sonunda türetilen davranış kuralları buraya yazılır
+   *  (dönüş tipi geriye uyumlu kalsın diye out-param). */
+  out?: { behaviors?: BehaviorFact[] }
 ): Promise<ScreenState[]> {
   const states: ScreenState[] = [];
   const log = (m: string) => { onProgress?.(m); console.log(`    [explore] ${m}`); };
@@ -1105,6 +1109,19 @@ export async function exploreInteractiveStates(
   }
 
   log(`Toplam ${states.length} ek state yakalandı.`);
+  // ── Faz 2: DAVRANIŞ DENEYLERİ — kontrollü okuma-submit probe'ları ────
+  // Filtre formu varsa (ID doluyken diğer filtre gönderiliyor mu? boş arama
+  // serbest mi? temizle sıfırlıyor mu?) istek diff'inden kural türetir.
+  if (env.fillTestData && env.behaviorProbes) {
+    try {
+      const facts = await runBehaviorProbes(page, page, basePath.replace(/^_+/, "/"), basePath, log, recorder, pushState);
+      if (facts.length > 0 && out) out.behaviors = facts;
+      if (facts.length > 0) log(`Davranış deneyleri: ${facts.length} kural türetildi.`);
+    } catch (e) {
+      log(`  davranış deneyi uyarısı: ${(e as Error).message}`);
+    }
+  }
+
   recorder.detach();
   return states;
 }

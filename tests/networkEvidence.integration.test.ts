@@ -75,7 +75,8 @@ describe("Faz 1 — network kanıtı (entegrasyon)", () => {
       await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
 
       const { exploreInteractiveStates } = await import("../src/browser/interactiveExplorer");
-      const states = await exploreInteractiveStates(page, "netev_screen");
+      const out: { behaviors?: import("../src/types/behavior").BehaviorFact[] } = {};
+      const states = await exploreInteractiveStates(page, "netev_screen", undefined, out);
 
       // Tanı: hangi state hangi isteği taşıyor?
       for (const s of states) {
@@ -95,6 +96,15 @@ describe("Faz 1 — network kanıtı (entegrasyon)", () => {
       // Dolu-form state'i formValues taşımalı (etiket → değer).
       const filled = states.find((s) => s.evidence?.formValues && Object.keys(s.evidence.formValues).length > 0);
       expect(filled).toBeTruthy();
+
+      // Faz 2: deneyler fikstür kuralını türetmeli — "Ticket ID doluyken Retailer/Player gönderilmez".
+      const facts = out.behaviors ?? [];
+      for (const f of facts) console.log(`   [kural] ${f.kind}/${f.confidence}: ${f.statement}`);
+      const prec = facts.find((f) => f.kind === "filter-precedence");
+      expect(prec, "filter-precedence kuralı türetilmeli").toBeTruthy();
+      expect(prec!.confidence).toBe("high");
+      expect(prec!.statement).toMatch(/Ticket ID/);
+      expect(facts.some((f) => f.kind === "pagination")).toBe(true);
     } finally {
       await browser.close();
     }

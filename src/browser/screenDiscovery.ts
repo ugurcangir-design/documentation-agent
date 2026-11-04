@@ -1,3 +1,4 @@
+import type { BehaviorFact } from "../types/behavior";
 import { Page } from "playwright";
 
 import { env } from "../config/env";
@@ -124,10 +125,15 @@ async function discoverAtDepth(
     if (options.interactive && depth === 0) {
       try {
         options.onProgress?.(`"${title}" üzerinde test user simülasyonu başlıyor…`);
-        const states = await exploreInteractiveStates(page, path, options.onProgress);
+        const probeOut: { behaviors?: BehaviorFact[] } = {};
+        const states = await exploreInteractiveStates(page, path, options.onProgress, probeOut);
         if (states.length > 0) {
           screen.states = states;
           options.onProgress?.(`✓ ${states.length} ek state yakalandı`);
+        }
+        if (probeOut.behaviors && probeOut.behaviors.length > 0) {
+          screen.behaviors = probeOut.behaviors;
+          options.onProgress?.(`✓ ${probeOut.behaviors.length} davranış kuralı türetildi (deneylerle)`);
         }
       } catch (err) {
         console.warn(`    Interactive exploration error: ${(err as Error).message}`);

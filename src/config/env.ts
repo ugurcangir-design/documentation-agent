@@ -45,6 +45,17 @@ export const env = {
     return (process.env.COVERAGE_LLM_JUDGE || "true").toLowerCase() !== "false";
   },
 
+  // Davranış deneyleri (Faz 2): filtre formlarında kontrollü okuma-submit
+  // probe'larıyla kural türetme (ID doluyken diğer filtre yok sayılır vb.).
+  // Yazma/kayıt YOK; ekran başına en fazla behaviorProbesMax ek GET.
+  get behaviorProbes(): boolean {
+    return (process.env.BEHAVIOR_PROBES || "true").toLowerCase() !== "false";
+  },
+  get behaviorProbesMax(): number {
+    const n = parseInt(process.env.BEHAVIOR_PROBES_MAX || "6", 10);
+    return Number.isFinite(n) && n >= 0 ? Math.min(12, n) : 6;
+  },
+
   // RAG bağlam derinliği (kılavuz zenginliği). Genel-bakış prompt'una giren
   // referans (BRD/Confluence/Jira/doküman) bölüm bütçesi (byte) ve paragraf
   // sayısı. Artırınca kılavuz kaynaklardan daha çok yararlanır ama CLI'da her
