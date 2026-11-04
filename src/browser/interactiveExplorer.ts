@@ -14,7 +14,8 @@ import { captureScreenshot, type CaptureOptions } from "./screenshotCapture";
 import { fillTestData, triggerValidation, clickSubmitButton } from "./formFiller";
 import { captureStepHighlight } from "./stepHighlight";
 import { attachRequestRecorder } from "./requestRecorder";
-import { runBehaviorProbes } from "./behaviorProbes";
+import { runBehaviorProbes, ensureFiltersOpen } from "./behaviorProbes";
+import { inferFromStateEvidence } from "../quality/behaviorInference";
 import { env } from "../config/env";
 import type { ScreenState } from "../types/screen";
 import type { StateEvidence, BehaviorFact } from "../types/behavior";
@@ -784,6 +785,7 @@ async function exploreContentArea(
     try {
       const scopeLoc = page.locator("main, [role=main], form").first();
       const scope = (await scopeLoc.count().catch(() => 0)) > 0 ? scopeLoc : page;
+      await ensureFiltersOpen(page, log); // panel daraltılmışsa aç (alan semantiği + dolu form için)
       const { filledCount, labels, values, domFacts } = await fillTestData(page, scope, log);
       if (filledCount >= 2) {
         await page.waitForTimeout(400);
@@ -1114,9 +1116,15 @@ export async function exploreInteractiveStates(
   // serbest mi? temizle sıfırlıyor mu?) istek diff'inden kural türetir.
   if (env.fillTestData && env.behaviorProbes) {
     try {
-      const facts = await runBehaviorProbes(page, page, basePath.replace(/^_+/, "/"), basePath, log, recorder, pushState);
+      const probeFacts = await runBehaviorProbes(page, page, basePath.replace(/^_+/, "/"), basePath, log, recorder, pushState);
+      // Deney çalışmasa bile yakalanan state kanıtından (sıralama/sayfalama/
+      // detay/modal) güvenli kurallar; deney kuralları öncelikli, tür bazında birleşir.
+      const evidenceFacts = inferFromStateEvidence(basePath.replace(/^_+/, "/"), states)
+        .filter((f) => !probeFacts.some((p) => p.kind === f.kind));
+      for (const f of evidenceFacts) log(`  ✓ Davranış kuralı [${f.kind}/${f.confidence}] (state kanıtı): ${f.statement}`);
+      const facts = [...probeFacts, ...evidenceFacts];
       if (facts.length > 0 && out) out.behaviors = facts;
-      if (facts.length > 0) log(`Davranış deneyleri: ${facts.length} kural türetildi.`);
+      if (facts.length > 0) log(`Davranış kuralları: ${facts.length} (deney ${probeFacts.length} · kanıt ${evidenceFacts.length}).`);
     } catch (e) {
       log(`  davranış deneyi uyarısı: ${(e as Error).message}`);
     }

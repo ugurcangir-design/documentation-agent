@@ -10,6 +10,9 @@
 /** Keşifte yakalanan tek bir aynı-origin XHR/fetch isteği (değerler maskeli). */
 export interface NetRequest {
   method: string;
+  /** API host'u (ör. api.example.com / app-bff.example.com). Sayfa origin'inden farklı
+   *  olabilir — BFF/API genelde ayrı alt alan adındadır. */
+  host?: string;
   /** Yalnız path (origin yok). */
   path: string;
   /** Query parametreleri — anahtar KORUNUR, hassas değer maskelenir. */

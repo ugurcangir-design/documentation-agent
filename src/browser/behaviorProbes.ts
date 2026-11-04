@@ -32,6 +32,32 @@ const MAX_FIELDS = 3;
 
 interface Field { loc: Locator; label: string; value: string }
 
+const FILTER_OPENERS = [
+  'button:has-text("Filtreler")', 'button:has-text("Filtre")', 'button:has-text("Filters")', 'button:has-text("Filter")',
+  '[role="button"]:has-text("Filtre")', '[role="button"]:has-text("Filter")',
+  '[aria-label*="filter" i]', '[aria-label*="filtre" i]', '[class*="filter-header" i]', '[class*="FilterHeader"]',
+  'div:has-text("Filters"):not(:has(div))',
+];
+
+/** Filtre alanları görünmüyorsa (panel daraltılmış) paneli AÇAR. Alan zaten
+ *  görünüyorsa dokunmaz (toggle'ı yanlışlıkla kapatmamak için). */
+export async function ensureFiltersOpen(page: Page, log: (m: string) => void): Promise<boolean> {
+  try {
+    if (await page.locator(TEXT_SEL).first().isVisible({ timeout: 400 }).catch(() => false)) return true;
+    for (const sel of FILTER_OPENERS) {
+      const ctrl = page.locator(sel).first();
+      if (!(await ctrl.isVisible({ timeout: 300 }).catch(() => false))) continue;
+      await ctrl.click({ timeout: 2000 }).catch(async () => { await ctrl.click({ timeout: 2000, force: true }).catch(() => {}); });
+      await page.waitForTimeout(900);
+      if (await page.locator(TEXT_SEL).first().isVisible({ timeout: 600 }).catch(() => false)) {
+        log(`  ↳ Filtre paneli yeniden açıldı (${sel})`);
+        return true;
+      }
+    }
+  } catch { /* en-iyi-çaba */ }
+  return false;
+}
+
 async function collectFields(scope: Page | Locator): Promise<Field[]> {
   const root = "locator" in scope ? (scope as Locator) : (scope as Page);
   const inputs = root.locator(TEXT_SEL);
@@ -100,7 +126,8 @@ export async function runBehaviorProbes(
   pushState?: PushFn
 ): Promise<BehaviorFact[]> {
   if (!env.behaviorProbes) return [];
-  const fields = await collectFields(scope);
+  let fields = await collectFields(scope);
+  if (fields.length === 0 && (await ensureFiltersOpen(page, log))) fields = await collectFields(scope);
   if (fields.length === 0) { log("  (davranış deneyi: filtre alanı yok — atlandı)"); return []; }
   const maxRuns = env.behaviorProbesMax;
   const runs: ProbeRun[] = [];

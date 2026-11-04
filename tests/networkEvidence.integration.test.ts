@@ -87,7 +87,7 @@ describe("Faz 1 — network kanıtı (entegrasyon)", () => {
       // En az bir state'te /api/tickets isteği kanıt olarak bulunmalı (herhangi bir pass).
       const allReqs = states.flatMap((s) => s.evidence?.requests ?? []).filter((r) => r.path === "/api/tickets");
       expect(allReqs.length).toBeGreaterThan(0);
-      expect(allReqs.every((r) => r.method === "GET" && r.status === 200)).toBe(true);
+      expect(allReqs.every((r) => r.method === "GET" && r.status === 200 && /^localhost:\d+$/.test(r.host ?? ""))).toBe(true);
       // DOLU formla yapılan arama: ticketId var, diğer filtreler YOK (fikstür kuralı).
       const filledReq = allReqs.find((r) => "ticketId" in r.query);
       expect(filledReq, "dolu-form aramasının isteği yakalanmalı").toBeTruthy();

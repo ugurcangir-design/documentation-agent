@@ -12,6 +12,7 @@
  */
 
 import type { BehaviorFact, NetRequest } from "../types/behavior";
+import type { ScreenState } from "../types/screen";
 
 export interface ProbeRun {
   /** "empty" | "single:<alan>" | "combo:<A>+<B>" | "reset" | serbest */
@@ -150,5 +151,52 @@ export function inferBehaviors(screenPath: string, runs: ProbeRun[]): BehaviorFa
       { requests: [anyReq] }, "medium"));
   }
 
+  return out;
+}
+
+
+/**
+ * Deneyler çalışamasa bile (filtre yok / buton yok) keşifte yakalanan state
+ * kanıtından güvenli kurallar türetir: sıralama, sayfalama, satır→detay
+ * navigasyonu, satır "View" modalı. Yalnız KANIT varsa; uydurma yok.
+ */
+export function inferFromStateEvidence(screenPath: string, states: ScreenState[]): BehaviorFact[] {
+  const out: BehaviorFact[] = [];
+  const reqsOf = (s: ScreenState) => s.evidence?.requests ?? [];
+
+  const sortStates = states.filter((s) => /^S[ıi]ralama:/i.test(s.label) && reqsOf(s).some((r) => Object.keys(r.query).some((k) => SORT_KEYS.test(k))));
+  if (sortStates.length > 0) {
+    const r = reqsOf(sortStates[0]!).find((q) => Object.keys(q.query).some((k) => SORT_KEYS.test(k)))!;
+    const keys = Object.keys(r.query).filter((k) => SORT_KEYS.test(k));
+    out.push(fact(screenPath, "sort",
+      `Sütun başlığına tıklamak listeyi sunucudan yeniden getirir; sıralama ölçütü ve yönü isteğe parametre olarak eklenir (${keys.join(", ")}). Sıralanabilir sütunlar: ${sortStates.map((s) => s.label.replace(/^S[ıi]ralama:\s*"?|"?$/g, "")).slice(0, 6).join(", ")}.`,
+      { stateLabels: sortStates.map((s) => s.label).slice(0, 6), requests: [r] }, "high"));
+  }
+
+  const pageReq = states.flatMap(reqsOf).find((r) => Object.keys(r.query).some((k) => PAGINATION_KEYS.test(k)));
+  if (pageReq && !out.some((f) => f.kind === "pagination")) {
+    const keys = Object.keys(pageReq.query).filter((k) => PAGINATION_KEYS.test(k));
+    const size = pageReq.query["size"] ?? pageReq.query["pageSize"] ?? pageReq.query["limit"];
+    out.push(fact(screenPath, "pagination",
+      `Liste sayfalama ile gelir${size ? ` (sayfa başına ${size} kayıt)` : ""}; sayfa/boyut parametreleri isteğe eklenir (${keys.join(", ")}).`,
+      { requests: [pageReq] }, "medium"));
+  }
+
+  const detail = states.find((s) => /^Kay[ıi]t detay ekran[ıi]/i.test(s.label) && reqsOf(s).some((r) => /\/[A-Za-z0-9-]{1,40}\/?$/.test(r.path)));
+  if (detail) {
+    const r = reqsOf(detail).find((q) => /\/[A-Za-z0-9-]{1,40}\/?$/.test(q.path))!;
+    const tmpl = r.path.replace(/\/[A-Za-z0-9-]{1,40}\/?$/, "/{id}");
+    out.push(fact(screenPath, "navigation",
+      `Satırdaki kayıt kimliğine tıklamak o kaydın detay ekranını açar; detay verisi kayıt bazında sunucudan getirilir (${r.method} ${tmpl}).`,
+      { stateLabels: [detail.label], requests: [r] }, "high"));
+  }
+
+  const view = states.find((s) => /^Modal:\s*"?(View|Görüntüle|Önizle|Detay)/i.test(s.label) && reqsOf(s).length > 0);
+  if (view) {
+    const r = reqsOf(view)[0]!;
+    out.push(fact(screenPath, "navigation",
+      `Satırdaki "${view.label.replace(/^Modal:\s*"?|"?\s*\(satır\)$/g, "")}" işlemi kaydın detayını modal pencerede açar (sunucudan ${r.method} ${r.path.replace(/\/[A-Za-z0-9-]{1,40}\/?$/, "/{id}")}).`,
+      { stateLabels: [view.label], requests: [r] }, "high"));
+  }
   return out;
 }

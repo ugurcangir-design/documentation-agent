@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { inferBehaviors, type ProbeRun } from "../src/quality/behaviorInference";
+import { inferBehaviors, inferFromStateEvidence, type ProbeRun } from "../src/quality/behaviorInference";
 import type { NetRequest } from "../src/types/behavior";
 
 const req = (query: Record<string, string>): NetRequest => ({ method: "GET", path: "/api/tickets", query, status: 200 });
@@ -57,5 +57,19 @@ describe("inferBehaviors (Faz 2 saf çıkarım)", () => {
     expect(noReq.find((f) => f.kind === "validation")?.confidence).toBe("medium");
     const fired = inferBehaviors("/v", [{ id: "validation:ID", filled: { ID: "abc!" }, request: req({ id: "abc!" }) }]);
     expect(fired.some((f) => f.kind === "validation")).toBe(false);
+  });
+
+  it("state kanıtından sıralama / sayfalama / detay / modal kuralları türetir", () => {
+    const st = (label: string, path: string, query: Record<string, string>) =>
+      ({ label, triggeredBy: "", screenshotPath: "", screenshotBase64: "", evidence: { requests: [{ method: "GET", path, query, status: 200 }] } });
+    const facts = inferFromStateEvidence("/t", [
+      st('Sıralama: "Ticket ID"', "/bff/ticket", { page: "0", size: "50", sortBy: "ticketId", sortDirection: "asc" }),
+      st('Kayıt detay ekranı: "518"', "/bff/ticket/518", {}),
+      st('Modal: "View" (satır)', "/bff/ticket/518", {}),
+    ] as any);
+    expect(facts.find((f) => f.kind === "sort")?.statement).toMatch(/sortBy, sortDirection/);
+    expect(facts.find((f) => f.kind === "pagination")?.statement).toMatch(/sayfa başına 50/);
+    expect(facts.filter((f) => f.kind === "navigation").length).toBe(2);
+    expect(facts.find((f) => /detay ekranını açar/.test(f.statement))?.statement).toMatch(/\/bff\/ticket\/\{id\}/);
   });
 });

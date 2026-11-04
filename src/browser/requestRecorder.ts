@@ -18,6 +18,12 @@ import { env } from "../config/env";
 import type { NetRequest } from "../types/behavior";
 
 const SKIP_RESOURCE = new Set(["stylesheet", "image", "font", "media", "script", "manifest", "texttrack", "eventsource", "websocket"]);
+/** Üçüncü-taraf telemetri/izleme — ekran davranışı değil, kanıt olarak alınmaz. */
+/** Arka plan polling/akış uçları — etkileşimin sonucu değildir, kanıt olmaz. */
+const DENY_PATH = /(notification|\/stream\b|heartbeat|\/ping\b|\/health\b|\/poll\b|\/events\b|\/ws\b|\/socket|\/_next\/)/i;
+/** Framework iç fetch'leri (Next.js RSC gezinmesi vb.). */
+const DENY_QUERY_KEYS = new Set(["_rsc", "_next"]);
+const DENY_HOST = /(google-analytics|googletagmanager|gstatic|doubleclick|facebook|hotjar|segment\.io|sentry\.io|intercom|mixpanel|clarity\.ms|newrelic|datadog)/i;
 const MAX_BUFFER = 60;
 const MAX_QUERY_KEYS = 40;
 
@@ -63,6 +69,7 @@ function toNetRequest(req: Request, status?: number): NetRequest | null {
     }
     return {
       method: req.method().toUpperCase(),
+      host: u.host,
       path: u.pathname,
       query,
       ...(bodyKeys && bodyKeys.length > 0 ? { bodyKeys } : {}),
@@ -96,11 +103,18 @@ export function attachRequestRecorder(page: Page): RequestRecorder {
   // response olayı requestfinished'den ÖNCE gelir, istek henüz tamponda olmaz.)
   const onFinished = async (req: Request) => {
     try {
-      if (SKIP_RESOURCE.has(req.resourceType())) return;
-      const reqOrigin = new URL(req.url()).origin;
+      const rt = req.resourceType();
+      if (SKIP_RESOURCE.has(rt)) return;
+      const u = new URL(req.url());
+      if (DENY_HOST.test(u.host) || DENY_PATH.test(u.pathname)) return;
+      for (const k of u.searchParams.keys()) if (DENY_QUERY_KEYS.has(k)) return;
       // Sayfa origin'i navigasyonla değişebilir (login→app) → güncel origin.
       try { origin = new URL(page.url()).origin; } catch { /* noop */ }
-      if (origin && reqOrigin !== origin) return;
+      // API/BFF çoğunlukla AYRI alt alan adındadır (ör. uat-app.x.dev → uat-app-bff
+      // -service.x.dev). xhr/fetch her origin'den alınır (telemetri hariç); diğer
+      // kaynak türlerinde (document vb.) yalnız aynı-origin.
+      const isApi = rt === "xhr" || rt === "fetch";
+      if (!isApi && origin && u.origin !== origin) return;
       let status: number | undefined;
       try { status = (await req.response())?.status(); } catch { /* yanıt yok (failed) */ }
       const nr = toNetRequest(req, status);
