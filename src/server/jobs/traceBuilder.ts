@@ -54,6 +54,15 @@ export function buildTrace(t: TraceInputs): string {
           : ""),
   ];
 
+  const bh = context.behaviors ?? [];
+  if (bh.length > 0) {
+    const n = (src: string) => bh.filter((b) => b.source === src).length;
+    const conflicts = bh.filter((b) => b.conflict).length;
+    lines.push(
+      `- **Davranış kuralları** (${bh.length}): gözlem ${n("observed")} · gözlem+referans ${n("both")} · yalnız referans ${n("reference")}` +
+      (conflicts > 0 ? ` · ⚠️ çelişki ${conflicts}` : "")
+    );
+  }
   if (fixUpAdded > 0) {
     lines.push(`- **Kapsam fix-up**: ${fixUpAdded} eksik öğe için ikinci tur uygulandı`);
   }

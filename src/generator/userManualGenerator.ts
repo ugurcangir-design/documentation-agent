@@ -5,6 +5,7 @@ import { callClaude, isPromptTooLong, isUsageLimitError, MODEL_QUALITY } from ".
 import { selectRepresentativeStates } from "./selectStates";
 import { isSidebarNav } from "../quality/sidebarNav";
 import { sanitizeReferenceText, wrapReferenceBlock } from "../quality/promptSanitizer";
+import { buildBehaviorBlock } from "./behaviorBlock";
 import type { ScreenState } from "../types/screen";
 import { groupStatesByTab } from "./tabGrouping";
 
@@ -236,12 +237,17 @@ function buildPrompt(
     ? `\n\n# CANLI UYGULAMA GÖZLEMİ (MCP — gerçek ekran/network, EN GÜVENİLİR KAYNAK)\n\n${liveAppEvidence}`
     : "";
 
+  // Faz 4 — keşif deneyleri + referans çapraz doğrulamasından gelen davranış
+  // kuralları (ScreenContext.behaviors). Yalnız genel bakışa girer (sekmeler
+  // yalın); kural yoksa boş. Kaynak etiketleri korunarak kılavuza işlenir.
+  const behaviorBlock = !lean ? buildBehaviorBlock(ctx.behaviors ?? []) : "";
+
   // Sekme bölümlerinde ağır iş-bağlamı yok; yalnız hedefli paragraf
   // eşleşmeleri (küçük, doğruluğu artıran) korunur.
   // Referans blokları "yalnızca veri" çerçevesine alınır (enjeksiyon savunması).
   const contextBlock = lean
     ? (paragraphContext ? `\n\n# İLGİLİ NOTLAR\n${wrapReferenceBlock(paragraphContext)}` : "")
-    : `\n\n# BRD / CONFLUENCE BAĞLAMI\n\n${wrapReferenceBlock(`${brdContext || "_(yok)_"}${paragraphContext}`)}\n\n# API ENDPOINT'LERİ\n\n${apiContext || "_(yok)_"}${liveAppBlock}`;
+    : `\n\n# BRD / CONFLUENCE BAĞLAMI\n\n${wrapReferenceBlock(`${brdContext || "_(yok)_"}${paragraphContext}`)}\n\n# API ENDPOINT'LERİ\n\n${apiContext || "_(yok)_"}${liveAppBlock}${behaviorBlock}`;
 
   const prompt = `**Ekran:** ${ctx.analysis.screenTitle} · ${ctx.screen.path}${tabFocus ? `\n**Aktif Sekme:** ${tabFocus.label}` : ""}
 **Amaç:** ${ctx.analysis.purpose}
