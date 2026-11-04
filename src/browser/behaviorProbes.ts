@@ -118,12 +118,14 @@ async function findApplyButton(page: Page, anchor: Locator, log: (m: string) => 
       const b = byRole.nth(i);
       if (!(await b.isVisible().catch(() => false))) continue;
       if ((await b.getAttribute("aria-expanded").catch(() => null)) !== null) continue;
-      if (await b.isDisabled().catch(() => false)) continue;
-      log(`  deney butonu (role): "${((await b.textContent().catch(() => "")) || "").trim().slice(0, 30)}"`);
+      // Pasif olsa da DÖNDÜR: canlı uygulamalarda Apply filtre girilmeden pasiftir;
+      // tıklama anında isDisabled kontrol edilir (boş deneyde zorunlu-filtre kanıtı).
+      const dis = await b.isDisabled().catch(() => false);
+      log(`  deney butonu (role): "${((await b.textContent().catch(() => "")) || "").trim().slice(0, 30)}"${dis ? " (şu an pasif)" : ""}`);
       return b;
     }
   } catch { /* yol 1'e düş */ }
-  const btns = page.locator('button:not([disabled]), [role="button"]:not([aria-disabled="true"]), input[type="submit"]:not([disabled])');
+  const btns = page.locator('button, [role="button"], input[type="submit"]');
   const n = await btns.count().catch(() => 0);
   const anchorHandle = await anchor.elementHandle().catch(() => null);
   let fallback: Locator | null = null;
@@ -164,10 +166,11 @@ async function findApplyButton(page: Page, anchor: Locator, log: (m: string) => 
 /** Okuma-submit'e basıp bu etkileşimin tetiklediği "arama" isteğini döndürür.
  *  `clicked:false` → okuma-submit butonu YOK (deneyler anlamsız → çağıran atlar);
  *  `clicked:true, request:undefined` → tıklandı ama istek gitmedi (kanıt!). */
-async function submitAndCapture(page: Page, scope: Page | Locator, recorder: RequestRecorder, log: (m: string) => void, applyBtn?: Locator | null): Promise<{ clicked: boolean; request?: NetRequest }> {
+async function submitAndCapture(page: Page, scope: Page | Locator, recorder: RequestRecorder, log: (m: string) => void, applyBtn?: Locator | null): Promise<{ clicked: boolean; disabled?: boolean; request?: NetRequest }> {
   recorder.reset();
   let clicked = false;
   if (applyBtn) {
+    if (await applyBtn.isDisabled().catch(() => false)) return { clicked: false, disabled: true };
     clicked = await applyBtn.click({ timeout: 2000 }).then(() => true).catch(async () =>
       applyBtn.click({ timeout: 2000, force: true }).then(() => true).catch(() => false));
   }
@@ -232,7 +235,9 @@ export async function runBehaviorProbes(
           if (/\b(ara|arama|filtrele|uygula|apply|search|filter)\b/i.test(t)) { applyDisabled = true; break; }
         }
       } catch { /* noop */ }
-      const { clicked, request } = await submitAndCapture(page, scope, recorder, log, applyBtn); used++;
+      const res = await submitAndCapture(page, scope, recorder, log, applyBtn); used++;
+      const { clicked, request } = res;
+      if (res.disabled) applyDisabled = true;
       if (!clicked && !applyDisabled) {
         log("  (okuma-submit butonu yok — davranış deneyleri atlandı; kural uydurulmaz)");
         return [];
