@@ -47,6 +47,10 @@ describe("inferBehaviors (Faz 2 saf çıkarım)", () => {
     const reqd = facts.find((f) => f.kind === "required-field");
     expect(reqd?.statement).toContain("en az bir filtre");
     expect(reqd?.statement).toContain("En az bir filtre giriniz");
+    // mesajsız + butonsuz "istek yok" → zorunlu kuralı UYDURULMAZ (no-op olabilir)
+    expect(inferBehaviors("/z", [{ id: "empty", filled: {} }]).some((f) => f.kind === "required-field")).toBe(false);
+    // Apply pasif → pozitif kanıt → high
+    expect(inferBehaviors("/z", [{ id: "empty", filled: {}, applyDisabled: true }]).find((f) => f.kind === "required-field")?.confidence).toBe("high");
     expect(facts.some((f) => f.kind === "filter-precedence")).toBe(false);
   });
 
@@ -54,7 +58,9 @@ describe("inferBehaviors (Faz 2 saf çıkarım)", () => {
     const withMsg = inferBehaviors("/v", [{ id: "validation:ID", filled: { ID: "abc!" }, message: "Sayısal değer giriniz" }]);
     expect(withMsg.find((f) => f.kind === "validation")?.confidence).toBe("high");
     const noReq = inferBehaviors("/v", [{ id: "validation:ID", filled: { ID: "abc!" } }]);
-    expect(noReq.find((f) => f.kind === "validation")?.confidence).toBe("medium");
+    expect(noReq.some((f) => f.kind === "validation")).toBe(false); // istek yok + mesaj yok → kanıt değil
+    const rej = inferBehaviors("/v", [{ id: "validation:ID", filled: { ID: "abc!" }, request: { ...req({ id: "abc!" }), status: 400 } }]);
+    expect(rej.find((f) => f.kind === "validation")?.statement).toMatch(/HTTP 400/);
     const fired = inferBehaviors("/v", [{ id: "validation:ID", filled: { ID: "abc!" }, request: req({ id: "abc!" }) }]);
     expect(fired.some((f) => f.kind === "validation")).toBe(false);
   });

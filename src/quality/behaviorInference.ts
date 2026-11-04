@@ -23,6 +23,8 @@ export interface ProbeRun {
   request?: NetRequest;
   /** Ekranda görülen uyarı/doğrulama mesajı (varsa). */
   message?: string;
+  /** Boş deneyde okuma-submit butonu pasifti (zorunlu filtre için pozitif kanıt). */
+  applyDisabled?: boolean;
   /** Bu deneyin görsel state etiketi (varsa). */
   stateLabel?: string;
 }
@@ -72,15 +74,18 @@ export function inferBehaviors(screenPath: string, runs: ProbeRun[]): BehaviorFa
   }
 
   // ── Boş arama: zorunlu filtre var mı? ──
+  // NOT: "istek yok" tek başına kanıt DEĞİLDİR — filtreler zaten boşken
+  // Apply çoğu uygulamada no-op'tur (refetch yok). Zorunlu-filtre kuralı için
+  // POZİTİF kanıt gerekir: uyarı mesajı veya pasif buton. Aksi halde kural yok.
   if (empty) {
     if (empty.request) {
       out.push(fact(screenPath, "required-field",
         "Hiçbir filtre girilmeden arama yapılabilir; sistem tüm kayıtları listeler.",
         { requests: [empty.request], ...(empty.stateLabel ? { stateLabels: [empty.stateLabel] } : {}), note: "boş arama isteği gönderildi" }, "high"));
-    } else {
+    } else if (empty.message || empty.applyDisabled) {
       out.push(fact(screenPath, "required-field",
-        `Arama için en az bir filtre girilmesi gerekir; boş aramada istek gönderilmez${empty.message ? ` (uygulama mesajı: "${empty.message}")` : ""}.`,
-        { ...(empty.stateLabel ? { stateLabels: [empty.stateLabel] } : {}), note: "boş aramada istek yok" }, empty.message ? "high" : "medium"));
+        `Arama için en az bir filtre girilmesi gerekir${empty.applyDisabled ? "; filtre girilmeden arama butonu pasiftir" : ""}${empty.message ? ` (uygulama mesajı: "${empty.message}")` : ""}.`,
+        { ...(empty.stateLabel ? { stateLabels: [empty.stateLabel] } : {}), note: empty.applyDisabled ? "boş formda arama butonu pasif" : "boş aramada uyarı mesajı" }, "high"));
     }
   }
 
@@ -122,11 +127,12 @@ export function inferBehaviors(screenPath: string, runs: ProbeRun[]): BehaviorFa
       out.push(fact(screenPath, "validation",
         `"${field}" alanına geçersiz değer girildiğinde uygulama "${r.message}" uyarısı gösterir.`,
         { ...(r.stateLabel ? { stateLabels: [r.stateLabel] } : {}), note: "geçersiz değerle arama denendi, uyarı görüldü" }, "high"));
-    } else if (!r.request) {
+    } else if (r.request && (r.request.status ?? 0) >= 400) {
       out.push(fact(screenPath, "validation",
-        `"${field}" alanına geçersiz değer girildiğinde arama gönderilmez (istemci tarafı doğrulama).`,
-        { note: "geçersiz değerle arama denendi, istek gitmedi" }, "medium"));
+        `"${field}" alanına geçersiz değer girildiğinde sunucu aramayı reddeder (HTTP ${r.request.status}); liste güncellenmez.`,
+        { requests: [r.request], note: "geçersiz değerle arama gönderildi, sunucu 4xx döndü" }, "high"));
     }
+    // "istek yok + mesaj yok" → kanıt değil (no-op olabilir) → kural yok.
   }
 
   // ── Temizle/Reset ──
@@ -189,6 +195,14 @@ export function inferFromStateEvidence(screenPath: string, states: ScreenState[]
     out.push(fact(screenPath, "navigation",
       `Satırdaki kayıt kimliğine tıklamak o kaydın detay ekranını açar; detay verisi kayıt bazında sunucudan getirilir (${r.method} ${tmpl}).`,
       { stateLabels: [detail.label], requests: [r] }, "high"));
+  }
+
+  const rejected = states.find((s) => reqsOf(s).some((r) => (r.status ?? 0) >= 400 && (r.status ?? 0) < 500 && Object.keys(r.query).length > 0));
+  if (rejected && !out.some((f) => f.kind === "validation")) {
+    const r = reqsOf(rejected).find((q) => (q.status ?? 0) >= 400)!;
+    out.push(fact(screenPath, "validation",
+      `Arama, geçersiz/uyumsuz bir filtre değeri içerdiğinde sunucu isteği reddeder (HTTP ${r.status}) ve liste güncellenmez; alan formatlarına uyun.`,
+      { stateLabels: [rejected.label], requests: [r], note: `parametreler: ${Object.keys(r.query).join(",")}` }, "medium"));
   }
 
   const view = states.find((s) => /^Modal:\s*"?(View|Görüntüle|Önizle|Detay)/i.test(s.label) && reqsOf(s).length > 0);

@@ -107,7 +107,7 @@ async function submitAndCapture(page: Page, scope: Page | Locator, recorder: Req
   recorder.reset();
   const r = await clickSubmitButton(page, scope, "read", log);
   if (!r.clicked) return { clicked: false };
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(1500);
   try { await page.waitForLoadState("networkidle", { timeout: 3000 }); } catch { /* noop */ }
   const reqs = recorder.drain().filter((q) => q.resourceType === "xhr" || q.resourceType === "fetch" || q.resourceType === "other");
   // Parametre taşıyan son istek tercih edilir (arama isteği); yoksa sonuncusu.
@@ -140,13 +140,24 @@ export async function runBehaviorProbes(
     // empty
     if (can()) {
       await clearAll(fields);
+      // Alanlar boşken okuma-submit PASİF mi? (zorunlu-filtre için POZİTİF kanıt)
+      const root = "locator" in scope ? (scope as Locator) : (scope as Page);
+      let applyDisabled = false;
+      try {
+        const dis = root.locator('button[disabled], [role="button"][aria-disabled="true"]');
+        const n = await dis.count().catch(() => 0);
+        for (let i = 0; i < n; i++) {
+          const t = ((await dis.nth(i).textContent().catch(() => "")) || "").trim();
+          if (/\b(ara|arama|filtrele|uygula|apply|search|filter)\b/i.test(t)) { applyDisabled = true; break; }
+        }
+      } catch { /* noop */ }
       const { clicked, request } = await submitAndCapture(page, scope, recorder, log); used++;
-      if (!clicked) {
+      if (!clicked && !applyDisabled) {
         log("  (okuma-submit butonu yok — davranış deneyleri atlandı; kural uydurulmaz)");
         return [];
       }
       const message = request ? "" : await visibleMessage(page);
-      runs.push({ id: "empty", filled: {}, ...(request ? { request } : {}), ...(message ? { message } : {}) });
+      runs.push({ id: "empty", filled: {}, ...(request ? { request } : {}), ...(message ? { message } : {}), ...(applyDisabled ? { applyDisabled: true } : {}) });
     }
     // single A
     if (can()) {
@@ -205,6 +216,10 @@ export async function runBehaviorProbes(
     recorder.reset();
   }
 
+  for (const r of runs) {
+    const keys = r.request ? `${r.request.method} ${r.request.path}?${Object.keys(r.request.query).join(",")} → ${r.request.status ?? "?"}` : "istek yok";
+    log(`  deney ${r.id}: ${keys}${r.message ? ` | mesaj: "${r.message}"` : ""}${r.applyDisabled ? " | buton pasif" : ""}`);
+  }
   const facts = inferBehaviors(screenPath, runs);
   for (const f of facts) log(`  ✓ Davranış kuralı [${f.kind}/${f.confidence}]: ${f.statement}`);
   if (facts.length === 0) log("  (davranış deneylerinden kural türetilemedi)");
