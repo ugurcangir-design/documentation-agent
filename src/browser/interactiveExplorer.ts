@@ -13,8 +13,10 @@ import type { Page, Locator } from "playwright";
 import { captureScreenshot, type CaptureOptions } from "./screenshotCapture";
 import { fillTestData, triggerValidation, clickSubmitButton } from "./formFiller";
 import { captureStepHighlight } from "./stepHighlight";
+import { attachRequestRecorder } from "./requestRecorder";
 import { env } from "../config/env";
 import type { ScreenState } from "../types/screen";
+import type { StateEvidence } from "../types/behavior";
 
 const DESTRUCTIVE_PATTERNS = [
   /\bsil\b/i, /\bkald[ıi]r/i, /delete/i, /remove/i,
@@ -444,7 +446,15 @@ async function runActionButtonPass(
   }
 }
 
-type PushStateFn = (label: string, triggeredBy: string, filename: string, capture?: CaptureOptions) => Promise<void>;
+type PushStateFn = (
+  label: string,
+  triggeredBy: string,
+  filename: string,
+  capture?: CaptureOptions,
+  /** Faz 1: görselle birlikte kaydedilecek ek yapısal kanıt (ör. formValues).
+   *  Network istekleri kaydediciden otomatik eklenir. */
+  extra?: Partial<StateEvidence>
+) => Promise<void>;
 
 /** Tablo kolon başlıklarına tıklayıp sıralama state'lerini yakalar. */
 async function runColumnHeaderPass(
@@ -773,10 +783,10 @@ async function exploreContentArea(
     try {
       const scopeLoc = page.locator("main, [role=main], form").first();
       const scope = (await scopeLoc.count().catch(() => 0)) > 0 ? scopeLoc : page;
-      const { filledCount, labels } = await fillTestData(page, scope, log);
+      const { filledCount, labels, values } = await fillTestData(page, scope, log);
       if (filledCount >= 2) {
         await page.waitForTimeout(400);
-        await pushState(`Form dolu`, `form test verisiyle dolduruldu: ${labels.slice(0, 4).join(", ")}`, `${basePath}_form_filled`, { fullPage: true });
+        await pushState(`Form dolu`, `form test verisiyle dolduruldu: ${labels.slice(0, 4).join(", ")}`, `${basePath}_form_filled`, { fullPage: true }, { formValues: values });
         log(`  ✓ Dolu form state'i yakalandı (${filledCount} alan)`);
         try {
           const r = await clickSubmitButton(page, scope, "read", log);
@@ -938,9 +948,16 @@ export async function exploreInteractiveStates(
   // (ama içerik/sekme olarak farklı) "create" modalleri "yinelenen" sayılıp
   // siliniyor ve o sekmelerde ekran "yok" oluyordu. Scope içinde ise aynı
   // butonun aynı modali tekrar tekrar yakalaması engellenir.
+  // Faz 1 — deterministik network kaydedici: her etkileşimin tetiklediği
+  // aynı-origin XHR/fetch istekleri, o etkileşimi temsil eden state'e kanıt
+  // olarak bağlanır (0 token; PII/sır maskeli, header/gövde değeri tutulmaz).
+  const recorder = attachRequestRecorder(page);
   const makePushState = (seen: Set<string>) =>
-    async (label: string, triggeredBy: string, filename: string, capture?: CaptureOptions) => {
+    async (label: string, triggeredBy: string, filename: string, capture?: CaptureOptions, extra?: Partial<StateEvidence>) => {
       const shot = await captureScreenshot(page, filename, capture);
+      // Görsel yinelense bile istekleri tamponda bırakma (sonraki state'e
+      // yanlış atanmasın) — drain ve yinelenen görselde kanıtı düşür.
+      const requests = recorder.drain();
       const hash = crypto.createHash("md5").update(shot.screenshotBase64).digest("hex");
       if (seen.has(hash)) {
         log(`  ⊘ yinelenen görsel atlandı: ${label}`);
@@ -948,11 +965,16 @@ export async function exploreInteractiveStates(
         return;
       }
       seen.add(hash);
+      const evidence: StateEvidence = {
+        ...(requests.length > 0 ? { requests } : {}),
+        ...(extra ?? {}),
+      };
       states.push({
         label,
         triggeredBy,
         screenshotPath: shot.screenshotPath,
         screenshotBase64: shot.screenshotBase64,
+        ...(Object.keys(evidence).length > 0 ? { evidence } : {}),
       });
     };
 
@@ -1083,5 +1105,6 @@ export async function exploreInteractiveStates(
   }
 
   log(`Toplam ${states.length} ek state yakalandı.`);
+  recorder.detach();
   return states;
 }

@@ -14,6 +14,7 @@
  */
 
 import type { Page, Locator } from "playwright";
+import { maskValue } from "./requestRecorder";
 
 export interface FieldMeta {
   /** input type attribute (lower-case), ya da 'textarea' / 'select'. */
@@ -123,6 +124,9 @@ export interface FillResult {
   filledCount: number;
   /** Doldurulan alanların kısa etiketleri (log + state açıklaması için). */
   labels: string[];
+  /** Faz 1: etiket → girilen değer (hassas değer maskeli). Kılavuzda "örnek
+   *  değer" ve davranış deneylerinde "hangi alan doluydu" kanıtı. */
+  values: Record<string, string>;
 }
 
 const FILL_TIMEOUT = 2000;
@@ -195,6 +199,7 @@ export async function fillTestData(
   maxFields = 15
 ): Promise<FillResult> {
   const labels: string[] = [];
+  const values: Record<string, string> = {};
   let filled = 0;
 
   const root = "locator" in scope ? (scope as Locator) : (scope as Page);
@@ -227,7 +232,9 @@ export async function fillTestData(
       if (value === null) continue; // parola/file → atla
       await loc.fill(value, { timeout: FILL_TIMEOUT });
       filled++;
-      labels.push(meta.label || meta.placeholder || meta.name || meta.type);
+      const key = meta.label || meta.placeholder || meta.name || meta.type;
+      labels.push(key);
+      values[key] = maskValue(key, value);
     } catch {
       /* alanı atla */
     }
@@ -251,7 +258,9 @@ export async function fillTestData(
       await loc.selectOption(picked, { timeout: FILL_TIMEOUT });
       filled++;
       const meta = await fieldMetaOf(loc);
-      labels.push(meta.label || meta.name || "seçim");
+      const key = meta.label || meta.name || "seçim";
+      labels.push(key);
+      values[key] = maskValue(key, picked);
     } catch {
       /* atla */
     }
@@ -276,7 +285,9 @@ export async function fillTestData(
       if (await loc.isChecked().catch(() => false)) continue;
       await loc.check({ timeout: FILL_TIMEOUT, force: true });
       filled++;
-      labels.push(meta.label || meta.name || meta.type);
+      const key = meta.label || meta.name || meta.type;
+      labels.push(key);
+      values[key] = "✓";
     } catch {
       /* atla */
     }
@@ -285,7 +296,7 @@ export async function fillTestData(
   if (filled > 0) {
     log(`  ↳ ${filled} alan test verisiyle dolduruldu: ${labels.slice(0, 6).join(", ")}${labels.length > 6 ? "…" : ""}`);
   }
-  return { filledCount: filled, labels };
+  return { filledCount: filled, labels, values };
 }
 
 /**

@@ -2,6 +2,8 @@ export interface StoredScreenState {
   label: string;
   triggeredBy: string;
   screenshotPath: string;
+  /** Keşif kanıtı (network/form) — opsiyonel. */
+  evidence?: { requests?: unknown[]; formValues?: Record<string, string>; domFacts?: string[] };
 }
 
 export interface StoredScreen {
@@ -13,6 +15,8 @@ export interface StoredScreen {
   parentPath?: string;
   discoveredAt: string;
   states?: StoredScreenState[];
+  /** Davranış kuralları — opsiyonel. */
+  behaviors?: Array<{ id: string; kind: string; statement: string; source: string; confidence: string }>;
 }
 
 export type DocumentStatus = "draft" | "approved" | "published";

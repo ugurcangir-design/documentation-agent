@@ -140,9 +140,11 @@ export async function runDiscoveryJob(
               label: st.label,
               triggeredBy: st.triggeredBy,
               screenshotPath: st.screenshotPath,
+              ...(st.evidence ? { evidence: st.evidence } : {}),
             })),
           }
         : {}),
+      ...(s.behaviors && s.behaviors.length > 0 ? { behaviors: s.behaviors } : {}),
       discoveredAt: new Date().toISOString(),
     }));
 

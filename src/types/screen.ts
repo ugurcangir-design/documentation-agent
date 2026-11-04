@@ -1,8 +1,12 @@
+import type { StateEvidence, BehaviorFact } from "./behavior";
+
 export interface ScreenState {
   label: string;
   triggeredBy: string;
   screenshotPath: string;
   screenshotBase64: string;
+  /** Faz 1: bu state'i üreten etkileşimin network/form/DOM kanıtı (opsiyonel). */
+  evidence?: StateEvidence;
 }
 
 export interface DiscoveredScreen {
@@ -14,6 +18,8 @@ export interface DiscoveredScreen {
   depth: number;
   parentPath?: string;
   states?: ScreenState[];
+  /** Faz 2/3: keşifte türetilen + referansla doğrulanan davranış kuralları. */
+  behaviors?: BehaviorFact[];
 }
 
 export type UIElementType =

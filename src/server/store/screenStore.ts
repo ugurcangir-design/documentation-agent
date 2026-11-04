@@ -1,11 +1,14 @@
 import fs from "fs";
 import path from "path";
 import { writeJsonAtomic, readJsonSafe } from "./atomicJson";
+import type { StateEvidence, BehaviorFact } from "../../types/behavior";
 
 export interface StoredScreenState {
   label: string;
   triggeredBy: string;
   screenshotPath: string;
+  /** Faz 1 kanıtı (opsiyonel — eski kayıtlarda yok). */
+  evidence?: StateEvidence;
 }
 
 export interface StoredScreen {
@@ -17,6 +20,8 @@ export interface StoredScreen {
   parentPath?: string;
   discoveredAt: string;
   states?: StoredScreenState[];
+  /** Faz 2/3 davranış kuralları (opsiyonel). */
+  behaviors?: BehaviorFact[];
 }
 
 const DB_PATH = path.join(
@@ -77,6 +82,7 @@ export const screenStore = {
       screenshotBase64: fs.existsSync(st.screenshotPath)
         ? fs.readFileSync(st.screenshotPath).toString("base64")
         : "",
+      ...(st.evidence ? { evidence: st.evidence } : {}),
     }));
 
     return {
@@ -88,6 +94,7 @@ export const screenStore = {
       depth: s.depth,
       ...(s.parentPath !== undefined ? { parentPath: s.parentPath } : {}),
       ...(states && states.length > 0 ? { states } : {}),
+      ...(s.behaviors && s.behaviors.length > 0 ? { behaviors: s.behaviors } : {}),
     };
   },
 };
