@@ -80,7 +80,7 @@ export interface ClaudeCallOptions {
    *  sessizce reddedilir. `--allowedTools <virgüllü liste>` olarak geçilir. */
   allowedTools?: string[];
   /** Bu çağrı için CLI zaman aşımını override eder (ms). Verilmezse
-   *  `CLAUDE_CLI_TIMEOUT_MS` (varsayılan 360s) kullanılır — MCP tarayıcı
+   *  `CLAUDE_CLI_TIMEOUT_MS` (varsayılan 900s) kullanılır — MCP tarayıcı
    *  gezintisi daha uzun sürebileceği için liveAppMcp.ts bunu geçer. */
   timeoutMs?: number;
   /** Spawn edilen `claude` sürecinin PATH'ine PREPEND edilecek ek dizinler.
@@ -504,7 +504,7 @@ async function callCli(opts: ClaudeCallOptions): Promise<ClaudeResult> {
     // ZAMAN AŞIMI: CLI çağrısı (özellikle büyük prompt + çok görsel) takılırsa
     // exit olayı hiç gelmez → promise sonsuza dek askıda kalır, job %0'da donar.
     // Süre dolunca süreci öldür ve reject et. CLAUDE_CLI_TIMEOUT_MS ile ayar.
-    const timeoutMs = opts.timeoutMs || Number(process.env.CLAUDE_CLI_TIMEOUT_MS) || 360_000; // 6 dk
+    const timeoutMs = opts.timeoutMs || Number(process.env.CLAUDE_CLI_TIMEOUT_MS) || 900_000; // 15 dk — uzun kılavuz çıktısı + görselli prompt CLI'da 6 dk'yı aşabiliyor
     let settled = false;
     const timer = setTimeout(() => {
       if (settled) return;
