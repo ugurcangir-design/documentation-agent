@@ -22,10 +22,12 @@ export interface TraceInputs {
   truncated: boolean;
   usedTemplates: string[];
   stateCount: number;
+  /** Faz 5: davranış kuralı kapsamı (deterministik). */
+  behaviorCoverage?: { total: number; covered: number; pct: number; missing: string[] };
 }
 
 export function buildTrace(t: TraceInputs): string {
-  const { context, coverage, fixUpAdded, truncated, usedTemplates, stateCount } = t;
+  const { context, coverage, fixUpAdded, truncated, usedTemplates, stateCount, behaviorCoverage } = t;
 
   const chunkTypeBreakdown = Object.entries(
     context.preparedChunks.reduce<Record<string, number>>((acc, c) => {
@@ -62,6 +64,14 @@ export function buildTrace(t: TraceInputs): string {
       `- **Davranış kuralları** (${bh.length}): gözlem ${n("observed")} · gözlem+referans ${n("both")} · yalnız referans ${n("reference")}` +
       (conflicts > 0 ? ` · ⚠️ çelişki ${conflicts}` : "")
     );
+    if (behaviorCoverage && behaviorCoverage.total > 0) {
+      lines.push(
+        `- **Davranış kapsamı**: ${behaviorCoverage.pct}% (${behaviorCoverage.covered}/${behaviorCoverage.total})` +
+        (behaviorCoverage.missing.length > 0
+          ? ` · _Anlatılmayan: ${behaviorCoverage.missing.slice(0, 3).join(" | ")}${behaviorCoverage.missing.length > 3 ? "…" : ""}_`
+          : "")
+      );
+    }
   }
   if (fixUpAdded > 0) {
     lines.push(`- **Kapsam fix-up**: ${fixUpAdded} eksik öğe için ikinci tur uygulandı`);

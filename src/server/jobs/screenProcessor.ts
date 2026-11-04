@@ -12,6 +12,8 @@ import { analyzeScreen } from "../../analysis/screenAnalyzer";
 import { buildScreenContext } from "../../analysis/screenContextBuilder";
 import { generateUserManualComplete, SECTION_JOINER } from "../../generator/userManualGenerator";
 import { computeCoverage, type CoverageReport } from "../../quality/coverageCheck";
+import { computeBehaviorCoverage } from "../../quality/behaviorCoverage";
+import type { UIElement } from "../../types/screen";
 import { computeVerifiedCoverage } from "../../quality/verifiedCoverage";
 import { runCoverageFixUp } from "../../generator/coverageFixUp";
 import { isSidebarNav } from "../../quality/sidebarNav";
@@ -302,6 +304,49 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
       umExtraTokens = { input: r.tokensIn, output: r.tokensOut, cacheRead: r.cacheRead, cacheCreate: r.cacheCreate };
     }
 
+    // ── Faz 5: DAVRANIŞ KAPSAMI — kurallar kılavuzda gerçekten anlatıldı mı? ──
+    // Deterministik (etiket + tür sinyali). Eksik kural varsa, mevcut fix-up
+    // makinesine pseudo-UI-öğesi olarak verip (açıklama = kural + kaynak) tek bir
+    // hedefli tur çalıştırılır; gerileme reddedilir. Görsel judge YOK.
+    const screenBehaviors = context.behaviors ?? [];
+    let behaviorCov = computeBehaviorCoverage(screenBehaviors, coverageTarget + tabsSuffix);
+    if (screenBehaviors.length > 0) {
+      console.log(`[docjob ${jobId}] Davranış kapsamı: ${behaviorCov.pct}% (${behaviorCov.covered}/${behaviorCov.total})`);
+    }
+    if (behaviorCov.missing.length > 0 && env.fixUpMaxPasses > 0) {
+      setProgress(`Davranış kuralları kılavuza işleniyor: ${screenTitle} (${behaviorCov.missing.length} eksik)`);
+      try {
+        const pseudo: UIElement[] = behaviorCov.missing.map((b) => ({
+          type: "other",
+          label: b.statement.length > 70 ? b.statement.slice(0, 67) + "…" : b.statement,
+          description: `DAVRANIŞ KURALI (${b.source === "reference" ? "yalnız referans — koşullu yaz" : "canlı gözlem"}): ${b.statement}` +
+            (b.refs && b.refs.length > 0 ? ` — Kaynak: ${b.refs.map((r) => `${r.type} ${r.id}`).join(", ")}` : " — Kaynak: canlı gözlem (keşif deneyi)"),
+          action: "ilgili bölümde (Filtreler ve Arama / Davranış Kuralları ve Özel Durumlar) kullanıcı diliyle anlat, Kaynak etiketini koru",
+        }));
+        const fix = await runCoverageFixUp({
+          currentContent: coverageTarget,
+          missing: pseudo.map((p) => `${p.label} (kural)`),
+          uiElementsMissing: pseudo,
+          screenTitle,
+          ...(screen.screenshotBase64 ? { mainImageBase64: screen.screenshotBase64 } : {}),
+          ...(screen.screenshotPath ? { mainImagePath: screen.screenshotPath } : {}),
+        });
+        const after = computeBehaviorCoverage(screenBehaviors, fix.content + tabsSuffix);
+        umExtraTokens.input += fix.inputTokens; umExtraTokens.output += fix.outputTokens;
+        umExtraTokens.cacheRead += fix.cacheReadTokens ?? 0; umExtraTokens.cacheCreate += fix.cacheCreationTokens ?? 0;
+        if (after.covered >= behaviorCov.covered) {
+          coverageTarget = fix.content;
+          umFixUpAdded += after.covered - behaviorCov.covered;
+          behaviorCov = after;
+          console.log(`[docjob ${jobId}] Davranış fix-up: kapsam ${after.pct}% (${after.covered}/${after.total})`);
+        } else {
+          console.warn(`[docjob ${jobId}] Davranış fix-up gerileme verdi, reddedildi`);
+        }
+      } catch (e) {
+        console.warn(`[docjob ${jobId}] Davranış fix-up başarısız: ${(e as Error).message}`);
+      }
+    }
+
     // Stil denetimi (opsiyonel, ucuz Haiku): genel bakış + her sekme bölümü
     // yalnız BİÇİMSEL olarak düzeltilir (UI adları kalın, adım numaraları,
     // jargon). Guardrail'li — şüpheli çıktı reddedilir, içerik kaybolamaz.
@@ -410,6 +455,10 @@ export async function processScreen(args: ProcessArgs): Promise<ProcessResult> {
       screenshotPath: storedScreen.screenshotPath,
       userManualContent: docHeadWarning + umContent + buildTrace({
         ...traceArgs, coverage: umCoverage, fixUpAdded: umFixUpAdded, truncated: !!userManual.truncated,
+        ...(screenBehaviors.length > 0 ? { behaviorCoverage: {
+          total: behaviorCov.total, covered: behaviorCov.covered, pct: behaviorCov.pct,
+          missing: behaviorCov.missing.map((b) => b.statement.slice(0, 60)),
+        } } : {}),
       }),
       status: "draft",
       createdAt: new Date().toISOString(),
