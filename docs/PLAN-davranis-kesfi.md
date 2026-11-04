@@ -45,5 +45,8 @@ Uçtan uca: Ticket Explorer → yalnız ID vs ID+Retailer isteği diff'i → kur
 - ✅ Faz 4 — generator bloğu + '### Davranış Kuralları ve Özel Durumlar' + trace
 - ✅ Faz 5 — davranış kapsamı + hedefli fix-up + trace
 - ✅ Faz 6a — alan semantiği (domFacts → 'ALAN ÖZELLİKLERİ')  ✅ Faz 6b — geçersiz-değer doğrulama probe'u
+- ✅ Canlı doğrulama (2026-11-04, UAT liste ekranı): 12 keşif turu sonunda 7 kural / 0 yanlış
+  pozitif — Apply bulucu (pasif dahil), tüm filtre temizliği, tablodan gerçek deney değeri,
+  pozitif-kanıt ilkesi, her-origin XHR yakalama + denylist.
 - ⏳ Faz 6c — detay ekranı ayrı doküman  ⏳ Faz 6d — hybrid retrieval  ⏳ Faz 6e — genel atıf standardı
 - Canlı doğrulama: Chrome MCP ile UAT Ticket Explorer (oturum açıldığında).

@@ -1054,7 +1054,9 @@ deterministik (0 token); uydurma yasak korunur.
 
 ```
 types/behavior.ts         NetRequest / StateEvidence / BehaviorFact (opsiyonel alanlar)
-browser/requestRecorder   page.on(requestfinished) → aynı-origin XHR/fetch; query ANAHTAR
+browser/requestRecorder   page.on(requestfinished) → XHR/fetch (her origin; BFF ayrı hostta
+                          olabilir), diğer türler aynı-origin; telemetri/stream/_rsc denylist;
+                          query ANAHTAR
                           + maskeli değer, JSON gövde anahtarları, status. Header/gövde
                           değeri tutulmaz; PII/sır maskelenir. Her pushState "son
                           etkileşimden bu yana" istekleri state.evidence.requests yapar.
@@ -1062,12 +1064,22 @@ formFiller.fillTestData   → values (etiket→maskeli değer) + domFacts (zorun
                           pattern/min-max/select seçenekleri) → "Form dolu" state kanıtı.
 browser/behaviorProbes    keşif sonunda (FILL_TEST_DATA && BEHAVIOR_PROBES): okuma-submit
                           deneyleri empty / single:A / single:B / combo:A+B / reset /
-                          validation. Okuma-submit butonu YOKSA tamamen atlanır (yanlış
-                          kural yok). ID-benzeri alan A adayı. A+B deneyi görsel state.
+                          validation. Sıra: filtre panelini aç (ensureFiltersOpen) →
+                          Apply/Ara butonunu bul (findApplyButton: rol+ad, PASİF olsa da;
+                          header/aria-expanded öğeleri hariç) → her deney öncesi kapsamdaki
+                          TÜM metin alanları temizlenir (clearAll; keşifte dolu kalan filtre
+                          'boş' isteği kirletmesin) → empty → tek-alan değerleri TABLONUN
+                          ilk satırından (sütun başlığı eşlemesi, valueFromTable) alınır;
+                          gerçek değer → 200 → kesin alan→param eşlemesi. Apply başta
+                          pasifse empty run applyDisabled (zorunlu-filtre POZİTİF kanıtı).
+                          Buton YOKSA tamamen atlanır (yanlış kural yok). A+B görsel state.
+                          page.evaluate → string (tsx __name enjeksiyonu).
 quality/behaviorInference tek-alan deneylerinden alan→param eşlemesi; A+B diff →
-                          filter-precedence / filter-combine; empty → required-field;
-                          validation → mesaj(high)/istek-yok(medium); reset; pagination/sort.
-                          Eşleme bilinmiyorsa kural ÜRETMEZ.
+                          filter-precedence / filter-combine; empty → required-field (istek
+                          / mesaj / pasif buton ile); validation → mesaj veya status≥400;
+                          reset; pagination/sort. YALNIZ POZİTİF KANIT: "istek yok" tek
+                          başına kural değildir. Eşleme bilinmiyorsa kural ÜRETMEZ.
+                          inferFromStateEvidence: sort/pagination/detay-navigasyon/View modal/4xx.
 retrieval/ruleExtractor   seçilmiş RAG bölüm+paragraflarından kural cümleleri (-malı/-meli,
                           dikkate alınmaz, zorunlu, yalnızca, öncelik, kabul kriteri…); Jira refId.
 quality/behaviorCrossCheck gözlem×referans TÜR-FARKINDA eşleşme (konu + tür sinyali/zıt
@@ -1081,6 +1093,10 @@ generator/behaviorBlock   prompt'a 'GÖZLEMLENEN DAVRANIŞ KURALLARI' (kaynak/g�
 quality/behaviorCoverage  deterministik davranış kapsamı (etiket + tür sinyali); eksik kural
                           → pseudo-UI-öğesi ile 1 tur fix-up; trace 'Davranış kapsamı'.
 ```
+Canlı doğrulama (UAT liste ekranı, 7 kural / 0 yanlış pozitif): required-field
+(Apply pasif + filtresiz liste), filter-combine (Barcode+Retailer ID AND), validation
+(400), pagination, sort, navigation×2 (detay sayfası + View modal).
+
 Akış: keşif (recorder + probes → screen.behaviors, states.evidence) → üretim
 (contextBuilder: kural çıkarımı + çapraz doğrulama → behaviorBlock + domFactsBlock
 → generator → behaviorCoverage → fix-up → trace). Ertelenen (Faz 6c/6d): detay
